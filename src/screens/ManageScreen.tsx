@@ -29,6 +29,7 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
   const [description, setDescription] = useState("");
   const [runSchedule, setRunSchedule] = useState<Record<string, string>>({ Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" });
   const [expectedKm, setExpectedKm] = useState("");
+  const [minDurationMin, setMinDurationMin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +56,7 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
         createdBy: currentUser.uid,
         deadlineByDay: runSchedule,
         ...(expectedKm ? { expectedKm: parseFloat(expectedKm) } : {}),
+        ...(minDurationMin ? { minDurationMin: parseInt(minDurationMin) } : {}),
       };
       await createTaskTemplate(challengeId, template, currentUser.uid);
       onDone();
@@ -100,13 +102,25 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
         })}
       </Card>
 
-      <Card className="!p-4">
-        <SecLabel>Expected distance (km, optional)</SecLabel>
-        <div className="flex items-center gap-2 mt-1.5">
-          <input type="number" step="0.1" min="0" value={expectedKm} onChange={e => setExpectedKm(e.target.value)}
-            placeholder="e.g. 5"
-            className="w-28 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none text-center" />
-          <span className="text-sm text-muted-foreground font-semibold">km</span>
+      <Card className="!p-4 space-y-3">
+        <div>
+          <SecLabel>Min. run duration (auto-validate)</SecLabel>
+          <div className="flex items-center gap-2 mt-1.5">
+            <input type="number" min="1" value={minDurationMin} onChange={e => setMinDurationMin(e.target.value)}
+              placeholder="e.g. 15"
+              className="w-28 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none text-center" />
+            <span className="text-sm text-muted-foreground font-semibold">min</span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">Submissions under this duration are auto-rejected.</p>
+        </div>
+        <div>
+          <SecLabel>Expected distance (optional)</SecLabel>
+          <div className="flex items-center gap-2 mt-1.5">
+            <input type="number" step="0.1" min="0" value={expectedKm} onChange={e => setExpectedKm(e.target.value)}
+              placeholder="e.g. 5"
+              className="w-28 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none text-center" />
+            <span className="text-sm text-muted-foreground font-semibold">km</span>
+          </div>
         </div>
       </Card>
 

@@ -171,9 +171,10 @@ export function snapToTaskTemplate(snap: QueryDocumentSnapshot<DocumentData>): T
     repeatDays:     (d.repeatDays    ?? []) as string[],
     active:         d.active         ?? true,
     createdBy:      d.createdBy      ?? "",
-    checklistItems: d.checklistItems,
-    expectedKm:     d.expectedKm,
-    deadlineByDay:  d.deadlineByDay,
+    checklistItems:  d.checklistItems,
+    expectedKm:      d.expectedKm,
+    minDurationMin:  d.minDurationMin,
+    deadlineByDay:   d.deadlineByDay,
   };
 }
 
@@ -552,9 +553,10 @@ export async function createTaskTemplate(
     createdBy:   creatorUid,
     createdAt:   serverTimestamp(),
   };
-  if (template.checklistItems != null) data.checklistItems = template.checklistItems;
-  if (template.expectedKm     != null) data.expectedKm     = template.expectedKm;
-  if (template.deadlineByDay  != null) data.deadlineByDay  = template.deadlineByDay;
+  if (template.checklistItems  != null) data.checklistItems  = template.checklistItems;
+  if (template.expectedKm      != null) data.expectedKm      = template.expectedKm;
+  if (template.minDurationMin  != null) data.minDurationMin  = template.minDurationMin;
+  if (template.deadlineByDay   != null) data.deadlineByDay   = template.deadlineByDay;
   const ref = await addDoc(taskTemplatesCol(challengeId), data);
   return ref.id;
 }

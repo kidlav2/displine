@@ -83,6 +83,7 @@ export interface Task {
   templateId?: string;    // present when auto-generated from a recurring template
   checklistItems?: string[];           // checklist type: ordered list of step labels
   expectedKm?: number;                 // running type: optional target distance
+  minDurationMin?: number;             // running type: minimum duration in minutes for auto-validation
 }
 
 /** Recurring task template — Cloud Function reads these to generate daily Task docs. */
@@ -97,6 +98,7 @@ export interface TaskTemplate {
   createdBy: string;
   checklistItems?: string[];                // checklist type: ordered step labels
   expectedKm?: number;                     // running type: optional target distance
+  minDurationMin?: number;                 // running type: minimum run duration in minutes for auto-validation
   deadlineByDay?: Record<string, string>;  // running type: per-day deadlines e.g. { Tue: "06:00" }
 }
 

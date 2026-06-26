@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import {
-  Heart, Camera, ExternalLink, Clock, Activity,
+  Camera, ExternalLink, Clock, Activity,
   Wallet, TrendingUp, MapPin, CheckCircle2, Zap, CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -54,6 +54,9 @@ export function HomeScreen() {
         <div className="text-right">
           <p className="text-[10px] font-bold text-muted-foreground">Score</p>
           <p style={{ ...bc, color: BRAND_COLOR, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{myScore}</p>
+          <div className="flex justify-end mt-0.5">
+            <Hearts n={meParticipant?.lives ?? 0} sz={16} />
+          </div>
         </div>
       </div>
 
@@ -65,14 +68,6 @@ export function HomeScreen() {
         <div className="h-2 bg-muted rounded-full overflow-hidden">
           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: BRAND_COLOR }} />
         </div>
-      </Card>
-
-      <Card className="!px-4 !py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Heart size={16} className="fill-red-500 text-red-500" />
-          <span className="font-extrabold text-sm">Lives remaining</span>
-        </div>
-        <Hearts n={meParticipant?.lives ?? 0} sz={22} />
       </Card>
 
       {todayTask ? (
