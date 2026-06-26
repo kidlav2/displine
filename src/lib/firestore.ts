@@ -1,0 +1,508 @@
+/**
+ * Firestore collection references, document converters, and write actions.
+ * All raw Firestore interaction goes through this file — screens call these
+ * functions instead of importing firebase/firestore directly.
+ */
+
+import {
+  collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
+  addDoc, arrayUnion, arrayRemove, increment,
+  Timestamp, runTransaction, serverTimestamp,
+  type DocumentData,
+  type QueryDocumentSnapshot,
+} from "firebase/firestore";
+import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+import { db, storage } from "./firebase";
+import type {
+  ChallengeData, ChallengeSettings, DayResult,
+  FeedItem, Participant, Penalty, ReviewItem,
+  SocialComment, TeamMember, UserProfile, UserRole,
+} from "../types";
+
+/** Minimal public data stored in invites/{code} — readable without auth. */
+export interface InviteData {
+  challengeId: string;
+  name: string;
+  emoji: string;
+  description: string;
+  inviteCode: string;
+  startingLives: number;
+}
+
+// ── Collection helpers ────────────────────────────────────────────────────────
+
+export const userRef       = (uid: string)                          => doc(db, "users", uid);
+export const challengeRef  = (cid: string)                          => doc(db, "challenges", cid);
+export const participantsCol = (cid: string)                        => collection(db, "challenges", cid, "participants");
+export const participantRef  = (cid: string, uid: string)           => doc(db, "challenges", cid, "participants", uid);
+export const feedCol         = (cid: string)                        => collection(db, "challenges", cid, "feed");
+export const feedDocRef      = (cid: string, postId: string)        => doc(db, "challenges", cid, "feed", postId);
+export const submissionsCol  = (cid: string)                        => collection(db, "challenges", cid, "submissions");
+export const submissionRef   = (cid: string, sid: string)           => doc(db, "challenges", cid, "submissions", sid);
+export const teamCol         = (cid: string)                        => collection(db, "challenges", cid, "team");
+export const teamMemberRef   = (cid: string, mid: string)           => doc(db, "challenges", cid, "team", mid);
+export const penaltiesCol    = (cid: string)                        => collection(db, "challenges", cid, "penalties");
+export const achievementsCol = (cid: string)                        => collection(db, "challenges", cid, "achievements");
+export const inviteRef       = (code: string)                       => doc(db, "invites", code);
+
+// ── Converters: Firestore → UI types ─────────────────────────────────────────
+
+function tsToString(ts: Timestamp | string | undefined): string {
+  if (!ts) return "";
+  if (typeof ts === "string") return ts;
+  return ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Participant {
+  const d = snap.data();
+  return {
+    uid:      snap.id,
+    ini:      d.ini      ?? "??",
+    name:     d.name     ?? "Unknown",
+    role:     d.role     ?? "participant",
+    lives:    d.lives    ?? 0,
+    km:       d.km       ?? 0,
+    active:   d.active   ?? true,
+    isAdmin:  d.isAdmin  ?? false,
+    joinDate: tsToString(d.joinDate),
+    tz:       d.tz       ?? "UTC",
+    results:  (d.results ?? []) as DayResult[],
+    penalties: (d.penalties ?? []).map((p: DocumentData) => ({
+      date:      tsToString(p.date),
+      reason:    p.reason    ?? "",
+      livesLost: p.livesLost ?? 0,
+      amount:    p.amount    ?? 0,
+    })) as Penalty[],
+  };
+}
+
+export function snapToFeedItem(snap: QueryDocumentSnapshot<DocumentData>): FeedItem {
+  const d = snap.data();
+  const timeRaw = d.time;
+  const timeStr = timeRaw instanceof Timestamp
+    ? timeRaw.toDate().toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    : (timeRaw ?? "");
+  return {
+    id:                snap.id,
+    participantId:     d.participantId     ?? "",
+    ini:               d.ini               ?? "??",
+    name:              d.name              ?? "",
+    isAdmin:           d.isAdmin           ?? false,
+    type:              d.type              ?? "checklist",
+    taskTitle:         d.taskTitle         ?? "",
+    text:              d.text              ?? "",
+    time:              timeStr,
+    photoUrl:          d.photoUrl          ?? null,
+    submissionStatus:  d.submissionStatus  ?? null,
+    organizerComment:  d.organizerComment  ?? null,
+    km:                d.km,
+    isLate:            d.isLate,
+    pointsEarned:      d.pointsEarned      ?? 0,
+    likes:             (d.likes ?? []) as string[],
+    socialComments:    (d.socialComments ?? []) as SocialComment[],
+  };
+}
+
+export function snapToReviewItem(snap: QueryDocumentSnapshot<DocumentData>): ReviewItem {
+  const d = snap.data();
+  const checkInRaw = d.checkIn;
+  const checkIn = checkInRaw instanceof Timestamp
+    ? checkInRaw.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : (checkInRaw ?? "—");
+  const resultTRaw = d.resultT ?? d.submittedAt;
+  const resultT = resultTRaw instanceof Timestamp
+    ? resultTRaw.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
+    : (resultTRaw ?? "—");
+  return {
+    id:              snap.id,
+    participantId:   d.participantUid   ?? d.participantId ?? "",
+    ini:             d.ini              ?? "??",
+    name:            d.name             ?? "",
+    isAdmin:         d.isAdmin          ?? false,
+    type:            d.type             ?? "checklist",
+    task:            d.taskTitle        ?? d.task ?? "",
+    checkIn,
+    resultT,
+    participantTz:   d.participantTz    ?? "UTC",
+    status:          d.status           ?? "pending",
+    km:              d.km               ?? null,
+    organizerComment:d.organizerComment ?? null,
+  };
+}
+
+export function snapToTeamMember(snap: QueryDocumentSnapshot<DocumentData>): TeamMember {
+  const d = snap.data();
+  return {
+    id:     snap.id,
+    email:  d.email  ?? "",
+    name:   d.name   ?? "",
+    role:   d.role   ?? "helper",
+    status: d.status ?? "invited",
+    since:  tsToString(d.since),
+  };
+}
+
+// ── Write actions ─────────────────────────────────────────────────────────────
+
+/** Create or update the user's profile document after onboarding. */
+export async function writeUserProfile(
+  uid: string,
+  profile: Omit<UserProfile, "uid">
+): Promise<void> {
+  // Firestore rejects undefined field values outright. Strip them here so
+  // callers can safely spread Auth user fields without checking each one
+  // (e.g. email is null for phone-auth users, phone is null for email users).
+  const data = Object.fromEntries(
+    Object.entries({ ...profile, uid }).filter(([, v]) => v !== undefined)
+  );
+  await setDoc(userRef(uid), data, { merge: true });
+}
+
+/** Add this challenge to the user's challengeRoles map. */
+export async function addChallengeRole(
+  uid: string,
+  challengeId: string,
+  role: UserRole
+): Promise<void> {
+  await updateDoc(userRef(uid), {
+    [`challengeRoles.${challengeId}`]: role,
+  });
+}
+
+/** Create a new challenge document and add the creator as owner-participant. */
+export async function createChallenge(
+  ownerUid: string,
+  ownerProfile: Pick<UserProfile, "name" | "ini" | "timezone">,
+  data: Omit<ChallengeData, "id" | "participants" | "feed" | "queue" | "team" | "totalTreasury">
+): Promise<string> {
+  const challengeDocRef = doc(collection(db, "challenges"));
+  const challengeId = challengeDocRef.id;
+
+  await setDoc(challengeDocRef, {
+    ...data,
+    ownerUid,
+    totalTreasury: 0,
+    createdAt: serverTimestamp(),
+  });
+
+  // Write the public invite doc (readable without auth)
+  await setDoc(inviteRef(data.inviteCode), {
+    challengeId,
+    name:          data.name,
+    emoji:         data.emoji,
+    description:   data.description,
+    inviteCode:    data.inviteCode,
+    startingLives: data.settings.startingLives,
+  });
+
+  // Add owner as a participant with owner role
+  await setDoc(participantRef(challengeId, ownerUid), {
+    uid: ownerUid,
+    ini: ownerProfile.ini,
+    name: ownerProfile.name,
+    role: "owner",
+    lives: data.settings.startingLives,
+    km: 0,
+    active: true,
+    isAdmin: true,
+    joinDate: serverTimestamp(),
+    tz: ownerProfile.timezone,
+    results: [],
+    penalties: [],
+  });
+
+  // Register in user profile
+  await addChallengeRole(ownerUid, challengeId, "owner");
+
+  return challengeId;
+}
+
+/** Submit a proof (photo + optional distance). Writes to submissions + feed. */
+export async function submitProof(
+  challengeId: string,
+  participant: Pick<Participant, "uid" | "ini" | "name" | "isAdmin" | "tz">,
+  payload: {
+    type: "running" | "checklist" | "freeform";
+    taskTitle: string;
+    text: string;
+    photoFile: File | null;
+    km?: number;
+    isLate?: boolean;
+    pointsEarned: number;
+  },
+  onProgress?: (pct: number) => void
+): Promise<string> {
+  let photoUrl: string | null = null;
+
+  if (payload.photoFile) {
+    const storageRef = ref(storage, `challenges/${challengeId}/submissions/${Date.now()}_${payload.photoFile.name}`);
+    await new Promise<void>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, payload.photoFile!);
+      task.on(
+        "state_changed",
+        (snap) => onProgress?.(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+        reject,
+        async () => { photoUrl = await getDownloadURL(task.snapshot.ref); resolve(); }
+      );
+    });
+  }
+
+  const now = serverTimestamp();
+  const submissionDocRef = await addDoc(submissionsCol(challengeId), {
+    participantUid: participant.uid,
+    ini:            participant.ini,
+    name:           participant.name,
+    isAdmin:        participant.isAdmin,
+    participantTz:  participant.tz,
+    type:           payload.type,
+    taskTitle:      payload.taskTitle,
+    text:           payload.text,
+    photoUrl,
+    km:             payload.km ?? null,
+    isLate:         payload.isLate ?? false,
+    submittedAt:    now,
+    checkIn:        now,
+    status:         "pending",
+    organizerComment: null,
+    pointsEarned:   0,  // set to actual value after approval
+  });
+
+  // Mirror to feed immediately (shows as pending)
+  await setDoc(feedDocRef(challengeId, submissionDocRef.id), {
+    participantId:     participant.uid,
+    ini:               participant.ini,
+    name:              participant.name,
+    isAdmin:           participant.isAdmin,
+    type:              payload.type,
+    taskTitle:         payload.taskTitle,
+    text:              payload.text,
+    time:              now,
+    photoUrl,
+    km:                payload.km ?? null,
+    isLate:            payload.isLate ?? false,
+    pointsEarned:      0,
+    submissionStatus:  "pending",
+    organizerComment:  null,
+    likes:             [],
+    socialComments:    [],
+  });
+
+  return submissionDocRef.id;
+}
+
+/** Organizer approve or reject a submission. Uses a transaction to atomically:
+ *  1. Update the submission status
+ *  2. Update the feed entry
+ *  3. Append a DayResult to the participant's results array (approve only)
+ */
+export async function reviewSubmission(
+  challengeId: string,
+  submissionId: string,
+  participantUid: string,
+  decision: "approved" | "rejected",
+  comment: string,
+  scoreKey: import("../types").ScoreKey
+): Promise<void> {
+  const subRef  = submissionRef(challengeId, submissionId);
+  const feedRef = feedDocRef(challengeId, submissionId);
+  const pRef    = participantRef(challengeId, participantUid);
+
+  const pointsMap: Record<string, number> = {
+    running_on_time: 2, running_late: 1, task_completed: 5, missed: 0,
+  };
+  const pts = decision === "approved" ? (pointsMap[scoreKey] ?? 0) : 0;
+
+  await runTransaction(db, async (tx) => {
+    const subSnap = await tx.get(subRef);
+    if (!subSnap.exists()) throw new Error("Submission not found");
+    const subData = subSnap.data();
+
+    tx.update(subRef, { status: decision, organizerComment: comment || null, pointsEarned: pts });
+    tx.update(feedRef, { submissionStatus: decision, organizerComment: comment || null, pointsEarned: pts });
+
+    if (decision === "approved") {
+      tx.update(pRef, {
+        results: arrayUnion({ type: subData.type, scoreKey }),
+        km: subData.km ? increment(subData.km) : increment(0),
+      });
+    }
+  });
+}
+
+/** Toggle like on a feed post. */
+export async function toggleLike(
+  challengeId: string,
+  postId: string,
+  uid: string,
+  currentlyLiked: boolean
+): Promise<void> {
+  await updateDoc(feedDocRef(challengeId, postId), {
+    likes: currentlyLiked ? arrayRemove(uid) : arrayUnion(uid),
+  });
+}
+
+/** Add a comment to a feed post. */
+export async function addComment(
+  challengeId: string,
+  postId: string,
+  comment: SocialComment
+): Promise<void> {
+  await updateDoc(feedDocRef(challengeId, postId), {
+    socialComments: arrayUnion(comment),
+  });
+}
+
+/** Remove a life from a participant. Owner only. */
+export async function removeLife(
+  challengeId: string,
+  participantUid: string
+): Promise<void> {
+  const pRef = participantRef(challengeId, participantUid);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(pRef);
+    if (!snap.exists()) return;
+    const lives = Math.max(0, (snap.data().lives ?? 1) - 1);
+    tx.update(pRef, { lives, active: lives > 0 });
+  });
+}
+
+/** Log a manual penalty. Writes to penalties subcollection + deducts life. */
+export async function logPenalty(
+  challengeId: string,
+  participantUid: string,
+  penalty: Omit<Penalty, "date"> & { loggedBy: string }
+): Promise<void> {
+  const pRef = participantRef(challengeId, participantUid);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(pRef);
+    if (!snap.exists()) return;
+    const current = snap.data();
+
+    const newLives = Math.max(0, (current.lives ?? 1) - (penalty.livesLost ?? 0));
+    tx.update(pRef, {
+      lives:    newLives,
+      active:   newLives > 0,
+      penalties: arrayUnion({
+        date:      Timestamp.now(),
+        reason:    penalty.reason,
+        livesLost: penalty.livesLost,
+        amount:    penalty.amount,
+      }),
+    });
+    tx.update(challengeRef(challengeId), {
+      totalTreasury: increment(penalty.amount),
+    });
+  });
+
+  // Also write to penalties subcollection for querying
+  await addDoc(penaltiesCol(challengeId), {
+    participantUid,
+    reason:    penalty.reason,
+    livesLost: penalty.livesLost,
+    amount:    penalty.amount,
+    loggedBy:  penalty.loggedBy,
+    date:      serverTimestamp(),
+  });
+}
+
+/** Update top-level challenge fields (settings, name, emoji, etc.). */
+export async function updateChallengeDoc(
+  challengeId: string,
+  patch: Partial<Pick<ChallengeData, "name" | "emoji" | "description" | "settings" | "currentDay" | "status" | "totalTreasury">>
+): Promise<void> {
+  await updateDoc(challengeRef(challengeId), patch as DocumentData);
+}
+
+/** Update a participant's lives directly (e.g., from ManageParticipants). */
+export async function setParticipantLives(
+  challengeId: string,
+  participantUid: string,
+  lives: number
+): Promise<void> {
+  await updateDoc(participantRef(challengeId, participantUid), {
+    lives: Math.max(0, Math.min(5, lives)),
+    active: lives > 0,
+  });
+}
+
+/** Invite a team member. Writes to challenges/{id}/team subcollection. */
+export async function inviteTeamMember(
+  challengeId: string,
+  email: string,
+  name: string,
+  role: import("../types").OrgRole
+): Promise<void> {
+  await addDoc(teamCol(challengeId), {
+    email,
+    name,
+    role,
+    status:    "invited",
+    since:     serverTimestamp(),
+    invitedAt: serverTimestamp(),
+  });
+}
+
+/** Update team member role. */
+export async function updateTeamMemberRole(
+  challengeId: string,
+  memberId: string,
+  role: import("../types").OrgRole
+): Promise<void> {
+  await updateDoc(teamMemberRef(challengeId, memberId), { role });
+}
+
+/** Remove a team member. */
+export async function removeTeamMember(
+  challengeId: string,
+  memberId: string
+): Promise<void> {
+  await deleteDoc(teamMemberRef(challengeId, memberId));
+}
+
+/**
+ * Resolve a human-readable invite code to the minimal challenge data needed
+ * for the onboarding screen. Reads from invites/{code} which is publicly
+ * readable without auth.
+ */
+export async function resolveInviteCode(code: string): Promise<InviteData | null> {
+  const snap = await getDoc(inviteRef(code));
+  if (!snap.exists()) return null;
+  const d = snap.data();
+  return {
+    challengeId:   d.challengeId   ?? "",
+    name:          d.name          ?? "",
+    emoji:         d.emoji         ?? "🏃",
+    description:   d.description   ?? "",
+    inviteCode:    d.inviteCode    ?? code,
+    startingLives: d.startingLives ?? 3,
+  };
+}
+
+/**
+ * Add a participant to a challenge after they complete onboarding.
+ * Also updates their user profile's challengeRoles map.
+ */
+export async function joinChallengeAsParticipant(
+  challengeId: string,
+  uid: string,
+  profile: { name: string; ini: string; tz: string },
+  startingLives: number
+): Promise<void> {
+  await setDoc(participantRef(challengeId, uid), {
+    uid,
+    ini:      profile.ini,
+    name:     profile.name,
+    role:     "participant",
+    lives:    startingLives,
+    km:       0,
+    active:   true,
+    isAdmin:  false,
+    joinDate: serverTimestamp(),
+    tz:       profile.tz,
+    results:  [],
+    penalties: [],
+  });
+  // Register the challenge role in the user's profile
+  await addChallengeRole(uid, challengeId, "participant");
+}

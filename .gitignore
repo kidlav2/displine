@@ -1,0 +1,22 @@
+# Environment variables — never commit these
+.env
+.env.local
+.env.*.local
+
+# Build output
+dist
+dist-ssr
+
+# Firebase CLI cache
+.firebase/
+
+# Dependencies
+node_modules
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.DS_Store
+.vscode/settings.json
