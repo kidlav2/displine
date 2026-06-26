@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import {
   Heart, Camera, ExternalLink, Clock, Activity,
-  Wallet, TrendingUp, MapPin, CheckCircle2, Zap,
+  Wallet, TrendingUp, MapPin, CheckCircle2, Zap, CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -9,11 +9,10 @@ import { BRAND_COLOR, bc } from "../constants/design";
 import { SCORE } from "../constants/scoring";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
-import { ME, ME_SCORE } from "../data/mock";
 import type { SortKey } from "../types";
 
 export function HomeScreen() {
-  const { challenge, isRunDay } = useAppContext();
+  const { challenge, isRunDay, meParticipant, todayTask, todayDeadline } = useAppContext();
   const navigate = useNavigate();
 
   const [checkedIn, setCheckedIn] = useState(false);
@@ -21,6 +20,8 @@ export function HomeScreen() {
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const cameraRef = useRef<HTMLInputElement>(null);
   const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
+
+  const myScore = calcScore(meParticipant?.results ?? []);
 
   const top3 = [...challenge.participants]
     .filter(p => p.active)
@@ -34,7 +35,9 @@ export function HomeScreen() {
   }, []);
 
   const goSubmit = (t: "task" | "run") => navigate(`/app/tasks?type=${t}`);
-  const onViewParticipant = (id: number) => navigate(`/participants/${id}`);
+  const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
+
+  const runDayLabels = Object.keys(challenge.settings.runSchedule).join(" / ") || "—";
 
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-4">
@@ -42,7 +45,7 @@ export function HomeScreen() {
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Av ini={ME.ini} sz="md" accent />
+          <Av ini={meParticipant?.ini ?? "?"} sz="md" accent />
           <div>
             <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">{challenge.emoji} {challenge.name}</p>
             <p className="font-extrabold text-xl leading-tight">Day {challenge.currentDay}</p>
@@ -50,7 +53,7 @@ export function HomeScreen() {
         </div>
         <div className="text-right">
           <p className="text-[10px] font-bold text-muted-foreground">Score</p>
-          <p style={{ ...bc, color: BRAND_COLOR, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{ME_SCORE}</p>
+          <p style={{ ...bc, color: BRAND_COLOR, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{myScore}</p>
         </div>
       </div>
 
@@ -69,36 +72,50 @@ export function HomeScreen() {
           <Heart size={16} className="fill-red-500 text-red-500" />
           <span className="font-extrabold text-sm">Lives remaining</span>
         </div>
-        <Hearts n={ME.lives} sz={22} />
+        <Hearts n={meParticipant?.lives ?? 0} sz={22} />
       </Card>
 
-      <Card className="!p-5" accent>
-        <div className="flex items-center gap-2 mb-3">
-          <SecLabel>Today&apos;s mission</SecLabel>
-          <span className="ml-auto text-[11px] font-semibold text-muted-foreground flex items-center gap-1"><Clock size={11} /> Due 23:59</span>
-        </div>
-        <p className="font-extrabold text-xl mb-1">Read for 30 Minutes</p>
-        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">Read any book or long-form article. Photo proof required.</p>
-        <div className="flex items-center gap-2 mb-4">
-          <Zap size={13} style={{ color: BRAND_COLOR }} />
-          <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} pts on completion</span>
-        </div>
-        <button onClick={() => goSubmit("task")} className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
-          Submit Proof
-        </button>
-      </Card>
+      {todayTask ? (
+        <Card className="!p-5" accent>
+          <div className="flex items-center gap-2 mb-3">
+            <SecLabel>Today&apos;s mission</SecLabel>
+            <span className="ml-auto text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
+              <Clock size={11} /> Due {todayTask.deadline}
+            </span>
+          </div>
+          <p className="font-extrabold text-xl mb-1">{todayTask.title}</p>
+          <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{todayTask.description}</p>
+          <div className="flex items-center gap-2 mb-4">
+            <Zap size={13} style={{ color: BRAND_COLOR }} />
+            <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} pts on completion</span>
+          </div>
+          <button onClick={() => goSubmit("task")} className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
+            Submit Proof
+          </button>
+        </Card>
+      ) : (
+        <Card className="!p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarDays size={15} className="text-muted-foreground" />
+            <SecLabel>Today&apos;s mission</SecLabel>
+          </div>
+          <p className="text-sm text-muted-foreground">No task scheduled for today. Check back later or contact your organizer.</p>
+        </Card>
+      )}
 
       {isRunDay && (
         <Card className="!p-4">
           <div className="flex items-center gap-2 mb-3">
             <Activity size={14} style={{ color: BRAND_COLOR }} />
             <SecLabel>Morning run</SecLabel>
-            <span className="ml-auto text-[11px] text-muted-foreground">{challenge.settings.runDays.join(" / ")}</span>
+            <span className="ml-auto text-[11px] text-muted-foreground">{runDayLabels}</span>
           </div>
           <div className="flex items-center gap-3 mb-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Zap size={10} style={{ color: BRAND_COLOR }} /><span style={{ color: BRAND_COLOR }} className="font-bold">+{SCORE.running_on_time} pts</span> on time</span>
             <span className="text-border">·</span>
             <span className="flex items-center gap-1">+{SCORE.running_late} pt late</span>
+            <span className="text-border">·</span>
+            <span className="flex items-center gap-1"><Clock size={10} /> by {todayDeadline}</span>
           </div>
           {!checkedIn ? (
             <>
@@ -144,12 +161,12 @@ export function HomeScreen() {
       <div className="grid grid-cols-2 gap-3">
         <Card className="!p-4">
           <div className="flex items-center gap-1.5 mb-2"><Wallet size={13} className="text-muted-foreground" /><SecLabel>Treasury</SecLabel></div>
-          <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{ME.treasury.toLocaleString("ru")}</p>
+          <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{challenge.totalTreasury.toLocaleString("ru")}</p>
           <p className="text-xs text-muted-foreground mt-1">{challenge.settings.currency}</p>
         </Card>
         <Card className="!p-4">
           <div className="flex items-center gap-1.5 mb-2"><TrendingUp size={13} className="text-muted-foreground" /><SecLabel>My score</SecLabel></div>
-          <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{ME_SCORE}</p>
+          <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{myScore}</p>
           <p className="text-xs text-muted-foreground mt-1">pts total</p>
         </Card>
       </div>
@@ -169,10 +186,10 @@ export function HomeScreen() {
         </div>
         <div className="space-y-3">
           {top3.map((p, i) => (
-            <div key={p.id} className="flex items-center gap-3">
+            <div key={p.uid} className="flex items-center gap-3">
               <span className="text-base w-5 text-center shrink-0">{["🥇", "🥈", "🥉"][i]}</span>
-              <Av ini={p.ini} sz="sm" admin={p.isAdmin} onClick={() => onViewParticipant(p.id)} />
-              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.id)}>
+              <Av ini={p.ini} sz="sm" admin={p.isAdmin} onClick={() => onViewParticipant(p.uid)} />
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-bold leading-none truncate">{p.name}</p>
                   {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}

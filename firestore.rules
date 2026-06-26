@@ -104,6 +104,18 @@ service cloud.firestore {
         allow read: if isOrganizer(challengeId);
         allow write: if isOwner(challengeId);
       }
+
+      // ── Tasks subcollection ──────────────────────────────────────────────
+      match /tasks/{taskId} {
+        allow read: if isParticipant(challengeId);
+        allow write: if isOrganizer(challengeId);
+      }
+
+      // ── Task templates subcollection ─────────────────────────────────────
+      match /taskTemplates/{templateId} {
+        allow read: if isParticipant(challengeId);
+        allow write: if isOrganizer(challengeId);
+      }
     }
   }
 }

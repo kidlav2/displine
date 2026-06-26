@@ -1,8 +1,10 @@
 import * as crypto from "crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 
 initializeApp();
 
@@ -92,3 +94,81 @@ export const verifyTelegramLogin = onCall(
     };
   }
 );
+
+// ── Daily task generation ─────────────────────────────────────────────────────
+
+function todayUTCString(): string {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function utcWeekdayShort(): string {
+  return new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+}
+
+export const generateDailyTasks = onSchedule("every day 00:05", async () => {
+  const db = getFirestore();
+  const today = todayUTCString();
+  const todayDay = utcWeekdayShort();
+
+  const challengesSnap = await db.collection("challenges")
+    .where("status", "==", "active")
+    .get();
+
+  const writes: Promise<unknown>[] = [];
+
+  for (const challengeDoc of challengesSnap.docs) {
+    const challengeId = challengeDoc.id;
+
+    const templatesSnap = await db
+      .collection("challenges").doc(challengeId)
+      .collection("taskTemplates")
+      .where("active", "==", true)
+      .get();
+
+    for (const tpl of templatesSnap.docs) {
+      const t = tpl.data();
+      if (!Array.isArray(t.repeatDays) || !t.repeatDays.includes(todayDay)) continue;
+
+      // Idempotency check: skip if a task with this templateId + date already exists
+      const existing = await db
+        .collection("challenges").doc(challengeId)
+        .collection("tasks")
+        .where("templateId", "==", tpl.id)
+        .where("date", "==", today)
+        .limit(1)
+        .get();
+
+      if (!existing.empty) continue;
+
+      // For running templates, prefer per-day deadline if available
+      const deadline = (t.deadlineByDay && t.deadlineByDay[todayDay])
+        ?? t.deadline
+        ?? "23:59";
+
+      const taskData: Record<string, unknown> = {
+        date:        today,
+        title:       t.title       ?? "",
+        description: t.description ?? "",
+        deadline,
+        type:        t.type        ?? "checklist",
+        createdBy:   t.createdBy   ?? "",
+        templateId:  tpl.id,
+        createdAt:   FieldValue.serverTimestamp(),
+      };
+      if (t.checklistItems) taskData.checklistItems = t.checklistItems;
+      if (t.expectedKm)     taskData.expectedKm     = t.expectedKm;
+
+      writes.push(
+        db.collection("challenges").doc(challengeId)
+          .collection("tasks")
+          .add(taskData)
+      );
+    }
+  }
+
+  await Promise.all(writes);
+});

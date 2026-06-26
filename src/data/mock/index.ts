@@ -28,9 +28,9 @@ export const ACHIEVEMENTS = [
 
 // ── Default challenge settings ──
 export const DEFAULT_SETTINGS: ChallengeSettings = {
-  runDays: ["Tue", "Thu", "Sat", "Sun"],
+  runSchedule: { Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" },
   penaltyAmount: 5000, currency: "₸", burpees: 20,
-  startingLives: 5, runDeadline: "06:00",
+  startingLives: 5,
 };
 
 // ── Participant activity histories ──
@@ -172,7 +172,7 @@ export const INIT_CHALLENGES: ChallengeData[] = [
       { uid: "u12", ini: "МТ", name: "Мади Т.",  role: "participant", lives: 5, km: 31.2, active: true,  isAdmin: false, joinDate: "Jan 1", tz: "Asia/Almaty",   penalties: [], results: [] },
     ],
     feed: [], queue: [],
-    settings: { ...DEFAULT_SETTINGS, runDays: ["Mon", "Wed", "Fri"], penaltyAmount: 3000 },
+    settings: { ...DEFAULT_SETTINGS, runSchedule: { Mon: "06:00", Wed: "06:00", Fri: "06:00" }, penaltyAmount: 3000 },
     team: [{ id: "t1", email: "nurlan@example.com", name: "Нурлан А.", role: "owner", status: "active", since: "Jan 1, 2026" }],
     totalTreasury: 12000,
   },
@@ -183,7 +183,7 @@ export const INIT_CHALLENGES: ChallengeData[] = [
     status: "upcoming", inviteCode: "ARST-5H1Q",
     participants: [],
     feed: [], queue: [],
-    settings: { ...DEFAULT_SETTINGS, runDays: ["Mon", "Wed", "Sat"], burpees: 30 },
+    settings: { ...DEFAULT_SETTINGS, runSchedule: { Mon: "06:00", Wed: "06:00", Sat: "06:00" }, burpees: 30 },
     team: [{ id: "t1", email: "nurlan@example.com", name: "Нурлан А.", role: "owner", status: "active", since: "Jun 25, 2026" }],
     totalTreasury: 0,
   },

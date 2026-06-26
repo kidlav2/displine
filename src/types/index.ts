@@ -65,9 +65,39 @@ export interface ReviewItem {
 }
 
 export interface ChallengeSettings {
-  runDays: string[];
+  /** Map of weekday abbreviation → local deadline time. e.g. { Tue: "06:00", Sun: "07:00" } */
+  runSchedule: Record<string, string>;
   penaltyAmount: number; currency: string; burpees: number;
-  startingLives: number; runDeadline: string;
+  startingLives: number;
+}
+
+/** A single task instance for a specific date, shown to participants. */
+export interface Task {
+  id: string;
+  date: string;           // "YYYY-MM-DD" UTC
+  title: string;
+  description: string;
+  deadline: string;       // "HH:MM" in participant's local timezone
+  type: "running" | "checklist" | "freeform";
+  createdBy: string;
+  templateId?: string;    // present when auto-generated from a recurring template
+  checklistItems?: string[];           // checklist type: ordered list of step labels
+  expectedKm?: number;                 // running type: optional target distance
+}
+
+/** Recurring task template — Cloud Function reads these to generate daily Task docs. */
+export interface TaskTemplate {
+  id: string;
+  title: string;
+  description: string;
+  deadline: string;       // "HH:MM" fallback deadline
+  type: "running" | "checklist" | "freeform";
+  repeatDays: string[];   // ["Tue", "Thu", "Sat"]
+  active: boolean;
+  createdBy: string;
+  checklistItems?: string[];                // checklist type: ordered step labels
+  expectedKm?: number;                     // running type: optional target distance
+  deadlineByDay?: Record<string, string>;  // running type: per-day deadlines e.g. { Tue: "06:00" }
 }
 
 export interface ChallengeData {

@@ -3,38 +3,41 @@ import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
 import { SCORE } from "../constants/scoring";
 import { TimezoneSettings } from "../components/atoms";
+import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
-import { ME, ME_RESULTS, ME_SCORE } from "../data/mock";
 
 export function ProfileScreen() {
-  const { challenge, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto } = useAppContext();
-  const pct = Math.round((ME.day / ME.total) * 100);
+  const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto } = useAppContext();
+
+  const results = meParticipant?.results ?? [];
+  const myScore = calcScore(results);
+  const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
 
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-6">
       <div className="flex flex-col items-center text-center pt-2">
-        <Av ini={ME.ini} sz="lg" accent />
-        <p className="font-extrabold text-2xl mt-3">{ME.name}</p>
+        <Av ini={meParticipant?.ini ?? "?"} sz="lg" accent />
+        <p className="font-extrabold text-2xl mt-3">{meParticipant?.name ?? "—"}</p>
         <p className="text-sm text-muted-foreground">{challenge.emoji} {challenge.name}</p>
       </div>
 
       <Card className="!p-4">
         <div className="flex justify-between items-baseline mb-2.5">
           <SecLabel>Progress</SecLabel>
-          <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>Day {ME.day} / {ME.total}</span>
+          <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>Day {challenge.currentDay} / {challenge.duration}</span>
         </div>
         <div className="h-2.5 bg-muted rounded-full overflow-hidden">
           <div className="h-full rounded-full" style={{ width: `${pct}%`, background: BRAND_COLOR }} />
         </div>
-        <p className="text-xs text-muted-foreground mt-2">{ME.total - ME.day} days remaining</p>
+        <p className="text-xs text-muted-foreground mt-2">{challenge.duration - challenge.currentDay} days remaining</p>
       </Card>
 
       <div className="grid grid-cols-2 gap-3">
         {[
-          { label: "Challenge score", value: ME_SCORE, unit: "pts total" },
-          { label: "Breakdown", value: `${ME_RESULTS.filter(r => r.scoreKey !== "missed").length}/${ME_RESULTS.length}`, unit: "tasks done" },
-          { label: "Run pts", value: ME_RESULTS.filter(r => r.type === "running").reduce((a, r) => a + SCORE[r.scoreKey], 0), unit: `+${SCORE.running_on_time} on time / +${SCORE.running_late} late` },
-          { label: "Task pts", value: ME_RESULTS.filter(r => r.type === "task").reduce((a, r) => a + SCORE[r.scoreKey], 0), unit: `+${SCORE.task_completed} per task` },
+          { label: "Challenge score", value: myScore, unit: "pts total" },
+          { label: "Breakdown", value: `${results.filter(r => r.scoreKey !== "missed").length}/${results.length}`, unit: "tasks done" },
+          { label: "Run pts", value: results.filter(r => r.type === "running").reduce((a, r) => a + SCORE[r.scoreKey], 0), unit: `+${SCORE.running_on_time} on time / +${SCORE.running_late} late` },
+          { label: "Task pts", value: results.filter(r => r.type === "task").reduce((a, r) => a + SCORE[r.scoreKey], 0), unit: `+${SCORE.task_completed} per task` },
         ].map(s => (
           <Card key={s.label} className="!p-4">
             <SecLabel>{s.label}</SecLabel>
@@ -47,7 +50,7 @@ export function ProfileScreen() {
       <Card className="!p-4">
         <SecLabel>Lives remaining</SecLabel>
         <div className="flex gap-3 justify-center py-3">
-          <Hearts n={ME.lives} sz={28} />
+          <Hearts n={meParticipant?.lives ?? 0} sz={28} />
         </div>
       </Card>
 

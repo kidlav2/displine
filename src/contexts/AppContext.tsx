@@ -2,14 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import type React from "react";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import type { ChallengeData, Participant, UserRole } from "../types";
+import type { ChallengeData, Participant, Task, UserRole } from "../types";
 import { INIT_CHALLENGES } from "../data/mock";
 import { detectTz } from "../lib/timezone";
-import { getTodayRunDay } from "../lib/dates";
+import { getTodayRunDay, todayISO } from "../lib/dates";
 import { useAuthContext } from "./AuthContext";
 import {
-  challengeRef, feedCol, participantsCol, submissionsCol, teamCol,
-  snapToParticipant, snapToFeedItem, snapToReviewItem, snapToTeamMember,
+  challengeRef, feedCol, participantsCol, tasksCol, teamCol,
+  snapToParticipant, snapToFeedItem, snapToReviewItem, snapToTask, snapToTeamMember,
 } from "../lib/firestore";
 
 interface AppContextType {
@@ -26,6 +26,8 @@ interface AppContextType {
   isRunDay: boolean;
   setIsRunDay: React.Dispatch<React.SetStateAction<boolean>>;
   loading: boolean;
+  todayTask: Task | null;
+  todayDeadline: string;
   // Derived helpers
   challenge: ChallengeData;
   meParticipant: Participant | null;
@@ -48,6 +50,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [adminTzAuto, setAdminTzAuto] = useState(true);
   const [isRunDayState, setIsRunDay] = useState(false);
   const [loading, setLoading]       = useState(false);
+  const [todayTask, setTodayTask]   = useState<Task | null>(null);
 
   // DEV-only role override; in production role comes from meParticipant.
   const [demoRole, setDemoRole] = useState<UserRole | null>(null);
@@ -81,8 +84,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             inviteCode:  d.inviteCode  ?? "",
             totalTreasury: d.totalTreasury ?? 0,
             settings: d.settings ?? {
-              runDays: [], penaltyAmount: 0, currency: "KZT",
-              burpees: 0, startingLives: 3, runDeadline: "23:59",
+              runSchedule: {}, penaltyAmount: 0, currency: "KZT",
+              burpees: 0, startingLives: 3,
             },
             // Preserve any subcollection data already loaded
             participants: existing?.participants ?? [],
@@ -146,11 +149,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    const taskUnsub = onSnapshot(
+      query(tasksCol(selectedId), where("date", "==", todayISO())),
+      (snap) => {
+        setTodayTask(snap.docs.length > 0 ? snapToTask(snap.docs[0]) : null);
+      }
+    );
+
     return () => {
       participantsUnsub();
       feedUnsub();
       queueUnsub();
       teamUnsub();
+      taskUnsub();
     };
   }, [selectedId, currentUser]);
 
@@ -161,10 +172,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ? (challenge?.participants.find(p => p.uid === currentUser.uid) ?? null)
     : null;
 
-  // isRunDay: derived from the challenge's runDays setting in production.
+  // isRunDay: derived from the challenge's runSchedule setting in production.
   // In DEV, setIsRunDay from DemoControls can override this.
-  const derivedIsRunDay = challenge?.settings.runDays.includes(getTodayRunDay()) ?? false;
+  const derivedIsRunDay = !!(challenge?.settings.runSchedule?.[getTodayRunDay()]);
   const isRunDay = import.meta.env.DEV ? isRunDayState : derivedIsRunDay;
+  const todayDeadline = challenge?.settings.runSchedule?.[getTodayRunDay()] ?? "06:00";
 
   // In production, role comes from Firestore (meParticipant.role).
   // In DEV, allow DemoControls to override via setUserRole.
@@ -194,6 +206,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       adminTzAuto, setAdminTzAuto,
       isRunDay, setIsRunDay,
       loading,
+      todayTask, todayDeadline,
       challenge, meParticipant, isAdmin, isOwner,
       updateChallenge,
     }}>

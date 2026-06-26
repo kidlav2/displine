@@ -192,8 +192,8 @@ function OnboardingLayout() {
 function ErrorLayout() {
   return (
     <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
-      <div className="flex-1 lg:flex lg:items-center lg:justify-center lg:p-8">
-        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
+      <div className="flex-1 flex flex-col lg:flex-row lg:items-center lg:justify-center lg:p-8">
+        <div className="flex flex-col flex-1 lg:flex-none lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
           style={{ minHeight: "min(600px, 100vh)" }}>
           <ErrorScreen />
         </div>

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Hearts, Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, ALL_DAYS, bc } from "../constants/design";
+import { BRAND_COLOR, ALL_DAYS, CURRENCIES, bc } from "../constants/design";
 import { SCORE } from "../constants/scoring";
 import { useAuthContext } from "../contexts/AuthContext";
 import { createChallenge } from "../lib/firestore";
@@ -19,16 +19,27 @@ export function CreateChallengeScreen() {
   const [desc, setDesc] = useState("");
   const [startDate, setStartDate] = useState("Jul 1, 2026");
   const [duration, setDuration] = useState("50");
-  const [runDays, setRunDays] = useState(["Tue", "Thu", "Sat", "Sun"]);
+  const [runSchedule, setRunSchedule] = useState<Record<string, string>>({ Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" });
   const [penaltyAmount, setPenaltyAmount] = useState("5000");
-  const [currency, setCurrency] = useState("₸");
+  const [currency, setCurrency] = useState("KZT");
   const [burpees, setBurpees] = useState("20");
   const [startingLives, setStartingLives] = useState(5);
-  const [runDeadline, setRunDeadline] = useState("06:00");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const toggleDay = (d: string) => setRunDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
+  const toggleDay = (d: string) => setRunSchedule(p => {
+    if (d in p) {
+      const next = { ...p };
+      delete next[d];
+      return next;
+    }
+    return { ...p, [d]: "06:00" };
+  });
+
+  const setDayTime = (d: string, time: string) =>
+    setRunSchedule(p => ({ ...p, [d]: time }));
+
+  const currencySymbol = CURRENCIES.find(c => c.code === currency)?.symbol ?? currency;
 
   const submit = async () => {
     if (!name.trim() || !currentUser || !userProfile || loading) return;
@@ -44,9 +55,11 @@ export function CreateChallengeScreen() {
           startDate, duration: parseInt(duration) || 50, currentDay: 0,
           status: "upcoming", inviteCode,
           settings: {
-            runDays, penaltyAmount: parseInt(penaltyAmount) || 5000,
-            currency, burpees: parseInt(burpees) || 20,
-            startingLives, runDeadline,
+            runSchedule,
+            penaltyAmount: parseInt(penaltyAmount) || 5000,
+            currency: currencySymbol,
+            burpees: parseInt(burpees) || 20,
+            startingLives,
           },
         }
       );
@@ -111,22 +124,30 @@ export function CreateChallengeScreen() {
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Running days</SecLabel>
-          <div className="flex gap-2 flex-wrap mt-2">
-            {ALL_DAYS.map(d => (
-              <button key={d} onClick={() => toggleDay(d)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-colors"
-                style={runDays.includes(d) ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                {d}
-              </button>
-            ))}
+          <SecLabel>Running days &amp; deadlines</SecLabel>
+          <div className="mt-2 space-y-2">
+            {ALL_DAYS.map(d => {
+              const selected = d in runSchedule;
+              return (
+                <div key={d} className="flex items-center gap-2">
+                  <button onClick={() => toggleDay(d)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 w-14 shrink-0 transition-colors"
+                    style={selected ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
+                    {d}
+                  </button>
+                  {selected && (
+                    <input
+                      type="time"
+                      value={runSchedule[d]}
+                      onChange={e => setDayTime(d, e.target.value)}
+                      className="bg-muted rounded-xl px-3 py-1.5 text-sm font-extrabold outline-none text-center"
+                      style={{ ...bc, fontSize: 15 }}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
-        </div>
-        <div>
-          <SecLabel>Run deadline</SecLabel>
-          <input value={runDeadline} onChange={e => setRunDeadline(e.target.value)}
-            className="w-28 mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-extrabold outline-none text-center"
-            style={{ ...bc, fontSize: 18 }} />
         </div>
       </Card>
 
@@ -135,11 +156,13 @@ export function CreateChallengeScreen() {
         <div>
           <SecLabel>Financial penalty</SecLabel>
           <div className="flex gap-2 mt-1.5">
-            <div className="flex gap-1 bg-muted rounded-xl p-0.5">
-              {["₸", "$", "€"].map(cur => (
-                <button key={cur} onClick={() => setCurrency(cur)}
+            <div className="flex gap-1 bg-muted rounded-xl p-0.5 flex-wrap">
+              {CURRENCIES.map(cur => (
+                <button key={cur.code} onClick={() => setCurrency(cur.code)}
                   className="px-2.5 py-1 rounded-lg text-xs font-bold"
-                  style={currency === cur ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>{cur}</button>
+                  style={currency === cur.code ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>
+                  {cur.symbol}
+                </button>
               ))}
             </div>
             <input type="number" value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)}

@@ -16,7 +16,7 @@ import { db, storage } from "./firebase";
 import type {
   ChallengeData, ChallengeSettings, DayResult,
   FeedItem, Participant, Penalty, ReviewItem,
-  SocialComment, TeamMember, UserProfile, UserRole,
+  SocialComment, Task, TaskTemplate, TeamMember, UserProfile, UserRole,
 } from "../types";
 
 /** Minimal public data stored in invites/{code} — readable without auth. */
@@ -42,8 +42,10 @@ export const submissionRef   = (cid: string, sid: string)           => doc(db, "
 export const teamCol         = (cid: string)                        => collection(db, "challenges", cid, "team");
 export const teamMemberRef   = (cid: string, mid: string)           => doc(db, "challenges", cid, "team", mid);
 export const penaltiesCol    = (cid: string)                        => collection(db, "challenges", cid, "penalties");
-export const achievementsCol = (cid: string)                        => collection(db, "challenges", cid, "achievements");
-export const inviteRef       = (code: string)                       => doc(db, "invites", code);
+export const achievementsCol   = (cid: string)                      => collection(db, "challenges", cid, "achievements");
+export const tasksCol          = (cid: string)                      => collection(db, "challenges", cid, "tasks");
+export const taskTemplatesCol  = (cid: string)                      => collection(db, "challenges", cid, "taskTemplates");
+export const inviteRef         = (code: string)                     => doc(db, "invites", code);
 
 // ── Converters: Firestore → UI types ─────────────────────────────────────────
 
@@ -80,7 +82,7 @@ export function snapToFeedItem(snap: QueryDocumentSnapshot<DocumentData>): FeedI
   const d = snap.data();
   const timeRaw = d.time;
   const timeStr = timeRaw instanceof Timestamp
-    ? timeRaw.toDate().toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+    ? timeRaw.toDate().toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
     : (timeRaw ?? "");
   return {
     id:                snap.id,
@@ -139,6 +141,39 @@ export function snapToTeamMember(snap: QueryDocumentSnapshot<DocumentData>): Tea
     role:   d.role   ?? "helper",
     status: d.status ?? "invited",
     since:  tsToString(d.since),
+  };
+}
+
+export function snapToTask(snap: QueryDocumentSnapshot<DocumentData>): Task {
+  const d = snap.data();
+  return {
+    id:             snap.id,
+    date:           d.date           ?? "",
+    title:          d.title          ?? "",
+    description:    d.description    ?? "",
+    deadline:       d.deadline       ?? "23:59",
+    type:           d.type           ?? "checklist",
+    createdBy:      d.createdBy      ?? "",
+    templateId:     d.templateId,
+    checklistItems: d.checklistItems,
+    expectedKm:     d.expectedKm,
+  };
+}
+
+export function snapToTaskTemplate(snap: QueryDocumentSnapshot<DocumentData>): TaskTemplate {
+  const d = snap.data();
+  return {
+    id:             snap.id,
+    title:          d.title          ?? "",
+    description:    d.description    ?? "",
+    deadline:       d.deadline       ?? "23:59",
+    type:           d.type           ?? "checklist",
+    repeatDays:     (d.repeatDays    ?? []) as string[],
+    active:         d.active         ?? true,
+    createdBy:      d.createdBy      ?? "",
+    checklistItems: d.checklistItems,
+    expectedKm:     d.expectedKm,
+    deadlineByDay:  d.deadlineByDay,
   };
 }
 
@@ -477,6 +512,51 @@ export async function resolveInviteCode(code: string): Promise<InviteData | null
     inviteCode:    d.inviteCode    ?? code,
     startingLives: d.startingLives ?? 3,
   };
+}
+
+/** Create a one-off task for a specific date. */
+export async function createTask(
+  challengeId: string,
+  task: Omit<Task, "id">,
+  creatorUid: string
+): Promise<string> {
+  const data: Record<string, unknown> = {
+    date:        task.date,
+    title:       task.title,
+    description: task.description,
+    deadline:    task.deadline,
+    type:        task.type,
+    createdBy:   creatorUid,
+    createdAt:   serverTimestamp(),
+  };
+  if (task.templateId != null)     data.templateId     = task.templateId;
+  if (task.checklistItems != null) data.checklistItems = task.checklistItems;
+  if (task.expectedKm != null)     data.expectedKm     = task.expectedKm;
+  const ref = await addDoc(tasksCol(challengeId), data);
+  return ref.id;
+}
+
+/** Create a recurring task template. Daily Cloud Function will generate Task docs from it. */
+export async function createTaskTemplate(
+  challengeId: string,
+  template: Omit<TaskTemplate, "id">,
+  creatorUid: string
+): Promise<string> {
+  const data: Record<string, unknown> = {
+    title:       template.title,
+    description: template.description,
+    deadline:    template.deadline,
+    type:        template.type,
+    repeatDays:  template.repeatDays,
+    active:      true,
+    createdBy:   creatorUid,
+    createdAt:   serverTimestamp(),
+  };
+  if (template.checklistItems != null) data.checklistItems = template.checklistItems;
+  if (template.expectedKm     != null) data.expectedKm     = template.expectedKm;
+  if (template.deadlineByDay  != null) data.deadlineByDay  = template.deadlineByDay;
+  const ref = await addDoc(taskTemplatesCol(challengeId), data);
+  return ref.id;
 }
 
 /**

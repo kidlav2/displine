@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, CheckCircle2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, ALL_DAYS, bc } from "../constants/design";
+import { BRAND_COLOR, ALL_DAYS, CURRENCIES, bc } from "../constants/design";
 import { SCORE } from "../constants/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { updateChallengeDoc } from "../lib/firestore";
@@ -16,8 +16,21 @@ export function ChallengeSettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const toggleDay = (d: string) =>
-    setS(p => ({ ...p, runDays: p.runDays.includes(d) ? p.runDays.filter(x => x !== d) : [...p.runDays, d] }));
+  const toggleDay = (d: string) => setS(p => {
+    const next = { ...p, runSchedule: { ...p.runSchedule } };
+    if (d in next.runSchedule) {
+      delete next.runSchedule[d];
+    } else {
+      next.runSchedule[d] = "06:00";
+    }
+    return next;
+  });
+
+  const setDayTime = (d: string, time: string) =>
+    setS(p => ({ ...p, runSchedule: { ...p.runSchedule, [d]: time } }));
+
+  // Find the currency code from the stored symbol
+  const currentCode = CURRENCIES.find(c => c.symbol === s.currency)?.code ?? "KZT";
 
   const handleSave = async () => {
     setLoading(true);
@@ -41,34 +54,50 @@ export function ChallengeSettingsScreen() {
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 space-y-4 lg:space-y-0">
         <Card className="!p-4 space-y-3">
-          <p className="font-bold text-sm">Running days</p>
-          <div className="flex gap-2 flex-wrap">
-            {ALL_DAYS.map(d => (
-              <button key={d} onClick={() => toggleDay(d)}
-                className="px-3 py-1.5 rounded-xl text-xs font-bold border-2"
-                style={s.runDays.includes(d) ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>{d}</button>
-            ))}
-          </div>
-          <div>
-            <SecLabel>Run deadline</SecLabel>
-            <input value={s.runDeadline} onChange={e => setS(p => ({ ...p, runDeadline: e.target.value }))}
-              className="w-28 mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-extrabold outline-none text-center"
-              style={{ ...bc, fontSize: 18 }} />
+          <p className="font-bold text-sm">Running days &amp; deadlines</p>
+          <div className="space-y-2">
+            {ALL_DAYS.map(d => {
+              const selected = d in s.runSchedule;
+              return (
+                <div key={d} className="flex items-center gap-2">
+                  <button onClick={() => toggleDay(d)}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 w-14 shrink-0"
+                    style={selected ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
+                    {d}
+                  </button>
+                  {selected && (
+                    <input
+                      type="time"
+                      value={s.runSchedule[d]}
+                      onChange={e => setDayTime(d, e.target.value)}
+                      className="bg-muted rounded-xl px-3 py-1.5 text-sm font-extrabold outline-none text-center"
+                      style={{ ...bc, fontSize: 15 }}
+                    />
+                  )}
+                </div>
+              );
+            })}
           </div>
         </Card>
 
         <Card className="!p-4 space-y-3">
           <p className="font-bold text-sm">Penalties</p>
-          <div className="flex gap-2">
-            <div className="flex gap-1 bg-muted rounded-xl p-0.5">
-              {["₸", "$", "€"].map(cur => (
-                <button key={cur} onClick={() => setS(p => ({ ...p, currency: cur }))}
+          <div>
+            <SecLabel>Currency</SecLabel>
+            <div className="flex gap-1 bg-muted rounded-xl p-0.5 mt-1.5 flex-wrap">
+              {CURRENCIES.map(cur => (
+                <button key={cur.code} onClick={() => setS(p => ({ ...p, currency: cur.symbol }))}
                   className="px-2.5 py-1 rounded-lg text-xs font-bold"
-                  style={s.currency === cur ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>{cur}</button>
+                  style={currentCode === cur.code ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>
+                  {cur.symbol}
+                </button>
               ))}
             </div>
+          </div>
+          <div className="flex items-center gap-2">
             <input type="number" value={s.penaltyAmount} onChange={e => setS(p => ({ ...p, penaltyAmount: parseInt(e.target.value) || 0 }))}
               className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none" />
+            <span className="text-sm text-muted-foreground font-semibold">{s.currency}</span>
           </div>
           <div className="flex items-center gap-2">
             <input type="number" value={s.burpees} onChange={e => setS(p => ({ ...p, burpees: parseInt(e.target.value) || 0 }))}
