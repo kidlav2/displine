@@ -23,7 +23,13 @@ interface VerifyTelegramPayload {
   nonce?: string;
 }
 
-export const verifyTelegramLogin = onCall(async (request) => {
+const ALLOWED_ORIGINS = [
+  "https://displine.vercel.app",
+  "http://localhost:5173",
+  "http://localhost:5174",
+];
+
+export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
   const { id_token, nonce } = (request.data ?? {}) as VerifyTelegramPayload;
 
   if (typeof id_token !== "string" || !id_token) {
