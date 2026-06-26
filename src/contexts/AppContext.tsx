@@ -3,7 +3,6 @@ import type React from "react";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import type { ChallengeData, Participant, Task, UserRole } from "../types";
-import { INIT_CHALLENGES } from "../data/mock";
 import { detectTz } from "../lib/timezone";
 import { getTodayRunDay, todayISO } from "../lib/dates";
 import { useAuthContext } from "./AuthContext";
@@ -41,10 +40,7 @@ const AppContext = createContext<AppContextType | null>(null);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, userProfile } = useAuthContext();
 
-  // FLAG: When currentUser is null, we fall back to INIT_CHALLENGES so the
-  // unauthenticated demo still works. In production there is no unauthenticated
-  // app state — the router should redirect to /join first.
-  const [challenges, setChallenges] = useState<ChallengeData[]>(INIT_CHALLENGES);
+  const [challenges, setChallenges] = useState<ChallengeData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminTz, setAdminTz]       = useState<string>(detectTz);
   const [adminTzAuto, setAdminTzAuto] = useState(true);
