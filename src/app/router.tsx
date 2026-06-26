@@ -114,7 +114,10 @@ function RootLayout() {
       return (
         <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
           style={{ minHeight: "min(600px, 100vh)" }}>
-          <TelegramLoginScreen onAuth={handleTelegramAuth} />
+          <TelegramLoginScreen
+            onAuth={handleTelegramAuth}
+            onInviteCode={code => navigate(`/join?code=${encodeURIComponent(code)}`)}
+          />
         </div>
       );
     }

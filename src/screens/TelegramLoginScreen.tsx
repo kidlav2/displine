@@ -7,6 +7,7 @@ interface ChallengePreview { name: string; emoji: string; description: string; i
 interface TelegramLoginScreenProps {
   challenge?: ChallengePreview;
   onAuth: (payload: { id_token: string; nonce: string }) => Promise<void>;
+  onInviteCode?: (code: string) => void;
 }
 
 // Minimal type for the new Telegram.Login SDK (telegram-login.js)
@@ -39,11 +40,12 @@ type TelegramLoginCallback = (result: {
 // Numeric Client ID from BotFather → Bot Settings → Web Login
 const CLIENT_ID = parseInt(import.meta.env.VITE_TELEGRAM_CLIENT_ID ?? "0", 10);
 
-export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenProps) {
+export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: TelegramLoginScreenProps) {
   const nonceRef = useRef<string>("");
   const [scriptReady, setScriptReady] = useState(false);
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState<string | null>(null);
+  const [inviteInput, setInviteInput] = useState("");
 
   useEffect(() => {
     if (!CLIENT_ID) {
@@ -174,6 +176,33 @@ export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenPr
               Joining via invite code{" "}
               <span className="font-bold text-foreground">{challenge.inviteCode}</span>
             </p>
+          </div>
+        )}
+
+        {!challenge && onInviteCode && (
+          <div className="mt-8">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs font-semibold text-muted-foreground">or join as participant</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <div className="flex gap-2">
+              <input
+                value={inviteInput}
+                onChange={e => setInviteInput(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === "Enter" && inviteInput.trim() && onInviteCode(inviteInput.trim())}
+                placeholder="Enter invite code"
+                className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none placeholder-muted-foreground tracking-wider"
+              />
+              <button
+                onClick={() => inviteInput.trim() && onInviteCode(inviteInput.trim())}
+                disabled={!inviteInput.trim()}
+                className="px-4 py-2.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-40"
+                style={{ background: "#2AABEE" }}
+              >
+                Join
+              </button>
+            </div>
           </div>
         )}
       </div>
