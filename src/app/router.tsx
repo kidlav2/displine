@@ -29,7 +29,7 @@ import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
 import { DemoControls } from "../components/nav/DemoControls";
 import { useAppContext } from "../contexts/AppContext";
 import { jk } from "../constants/design";
-import type { TelegramAuthData } from "../types";
+import type { TelegramProfile } from "../types";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
@@ -52,13 +52,10 @@ const DEMO_PREVIEW: ChallengePreview = {
 };
 
 // Cloud Function callable ref — created once outside the component
-const verifyTelegramLoginFn = httpsCallable<TelegramAuthData, {
-  customToken: string;
-  telegramId: number;
-  telegramUsername: string | null;
-  displayName: string;
-  photoUrl: string | null;
-}>(functions, "verifyTelegramLogin");
+const verifyTelegramLoginFn = httpsCallable<
+  { id_token: string; nonce: string },
+  { customToken: string; telegramId: number; telegramUsername: string | null; displayName: string; photoUrl: string | null }
+>(functions, "verifyTelegramLogin");
 
 function OnboardingLayout() {
   const { setSelectedId } = useAppContext();
@@ -69,7 +66,7 @@ function OnboardingLayout() {
 
   // "telegram" is the primary step; phone/verify are kept but not active
   const [step, setStep] = useState<"telegram" | "phone" | "verify" | "profile">("telegram");
-  const [telegramData, setTelegramData] = useState<TelegramAuthData | undefined>(undefined);
+  const [telegramData, setTelegramData] = useState<TelegramProfile | undefined>(undefined);
 
   // Kept for potential phone-auth fallback — not used in the active flow
   const [phone, setPhone] = useState("");
@@ -94,12 +91,17 @@ function OnboardingLayout() {
 
   const preview: ChallengePreview = invite ?? DEMO_PREVIEW;
 
-  // Called by TelegramLoginScreen after the widget fires its callback
-  const handleTelegramAuth = async (data: TelegramAuthData) => {
-    const result = await verifyTelegramLoginFn(data);
+  // Called by TelegramLoginScreen after the OIDC popup completes
+  const handleTelegramAuth = async (payload: { id_token: string; nonce: string }) => {
+    const result = await verifyTelegramLoginFn(payload);
     await signInWithCustomToken(auth, result.data.customToken);
-    // Stash raw Telegram data so ProfileSetupScreen can pre-populate name + photo
-    setTelegramData(data);
+    // Store profile from Cloud Function so ProfileSetupScreen can pre-populate name + photo
+    setTelegramData({
+      telegramId:       result.data.telegramId,
+      telegramUsername: result.data.telegramUsername,
+      displayName:      result.data.displayName,
+      photoUrl:         result.data.photoUrl,
+    });
     setStep("profile");
   };
 

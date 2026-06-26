@@ -4,11 +4,11 @@ import { BRAND_COLOR } from "../constants/design";
 import { useAuthContext } from "../contexts/AuthContext";
 import { writeUserProfile } from "../lib/firestore";
 import { detectTz } from "../lib/timezone";
-import type { TelegramAuthData } from "../types";
+import type { TelegramProfile } from "../types";
 
 interface ProfileSetupScreenProps {
   onDone: (data: { name: string; ini: string }) => void;
-  telegramData?: TelegramAuthData;
+  telegramData?: TelegramProfile;
 }
 
 function toIni(name: string): string {
@@ -20,13 +20,9 @@ function toIni(name: string): string {
 export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenProps) {
   const { currentUser } = useAuthContext();
   // Pre-populate name from Telegram if available; user can still edit it
-  const [name, setName]       = useState(
-    telegramData
-      ? [telegramData.first_name, telegramData.last_name].filter(Boolean).join(" ")
-      : ""
-  );
+  const [name, setName]       = useState(telegramData?.displayName ?? "");
   // Pre-populate photo thumbnail from Telegram
-  const [thumb, setThumb]     = useState<string | null>(telegramData?.photo_url ?? null);
+  const [thumb, setThumb]     = useState<string | null>(telegramData?.photoUrl ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -58,13 +54,13 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
         ...(currentUser.phoneNumber != null && { phone: currentUser.phoneNumber }),
         ...(currentUser.email       != null && { email: currentUser.email }),
         // Prefer Telegram photo over OAuth photo; fall back to currentUser.photoURL
-        ...(telegramData?.photo_url != null
-          ? { photoUrl: telegramData.photo_url }
+        ...(telegramData?.photoUrl != null
+          ? { photoUrl: telegramData.photoUrl }
           : currentUser.photoURL != null
             ? { photoUrl: currentUser.photoURL }
             : {}),
-        ...(telegramData?.id       != null && { telegramId:       telegramData.id }),
-        ...(telegramData?.username != null && { telegramUsername: telegramData.username }),
+        ...(telegramData?.telegramId       != null && { telegramId:       telegramData.telegramId }),
+        ...(telegramData?.telegramUsername != null && { telegramUsername: telegramData.telegramUsername }),
       });
       onDone({ name: trimmed, ini });
     } catch (err) {

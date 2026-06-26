@@ -1,99 +1,80 @@
-import * as crypto from "crypto";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { defineSecret } from "firebase-functions/params";
+import { defineString } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 initializeApp();
 
-const TELEGRAM_BOT_TOKEN = defineSecret("TELEGRAM_BOT_TOKEN");
+// ── Telegram OIDC verification ────────────────────────────────────────────────
+// Set via: firebase functions:params:set TELEGRAM_CLIENT_ID=<your numeric client id>
+// Obtain the Client ID from @BotFather → Bot Settings → Web Login.
+const TELEGRAM_CLIENT_ID = defineString("TELEGRAM_CLIENT_ID");
 
-interface TelegramAuthPayload {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  photo_url?: string;
-  auth_date: number;
-  hash: string;
-}
-
-function verifyTelegramHash(data: TelegramAuthPayload, botToken: string): boolean {
-  const { hash, ...rest } = data;
-
-  // Build the data-check-string: key=value pairs sorted alphabetically, joined by \n
-  const dataCheckString = Object.entries(rest)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([k, v]) => `${k}=${v}`)
-    .join("\n");
-
-  // secret_key = SHA256(bot_token)
-  const secretKey = crypto.createHash("sha256").update(botToken).digest();
-
-  // HMAC-SHA256(data_check_string, secret_key)
-  const computed = crypto
-    .createHmac("sha256", secretKey)
-    .update(dataCheckString)
-    .digest("hex");
-
-  return computed === hash;
-}
-
-export const verifyTelegramLogin = onCall(
-  { secrets: [TELEGRAM_BOT_TOKEN] },
-  async (request) => {
-    const payload = request.data as TelegramAuthPayload;
-
-    if (
-      typeof payload?.id !== "number" ||
-      typeof payload?.auth_date !== "number" ||
-      typeof payload?.hash !== "string"
-    ) {
-      throw new HttpsError("invalid-argument", "Invalid Telegram auth payload.");
-    }
-
-    // Reject stale auth data (older than 24 hours)
-    const ageSeconds = Math.floor(Date.now() / 1000) - payload.auth_date;
-    if (ageSeconds > 86400) {
-      throw new HttpsError("unauthenticated", "Telegram auth data has expired.");
-    }
-
-    const botToken = TELEGRAM_BOT_TOKEN.value();
-    if (!verifyTelegramHash(payload, botToken)) {
-      throw new HttpsError("unauthenticated", "Telegram auth hash is invalid.");
-    }
-
-    const uid = `tg_${payload.id}`;
-    const displayName = [payload.first_name, payload.last_name].filter(Boolean).join(" ");
-
-    // Upsert the Firebase Auth user so custom token issuance always works
-    const adminAuth = getAuth();
-    try {
-      await adminAuth.getUser(uid);
-    } catch {
-      await adminAuth.createUser({
-        uid,
-        displayName,
-        ...(payload.photo_url ? { photoURL: payload.photo_url } : {}),
-      });
-    }
-
-    const customToken = await adminAuth.createCustomToken(uid, {
-      telegramId:       payload.id,
-      telegramUsername: payload.username ?? null,
-    });
-
-    return {
-      customToken,
-      telegramId:       payload.id,
-      telegramUsername: payload.username ?? null,
-      displayName,
-      photoUrl:         payload.photo_url ?? null,
-    };
-  }
+// JWKS fetcher is created at module level so jose handles caching across warm invocations
+const TELEGRAM_JWKS = createRemoteJWKSet(
+  new URL("https://oauth.telegram.org/.well-known/jwks.json")
 );
+
+interface VerifyTelegramPayload {
+  id_token: string;
+  nonce?: string;
+}
+
+export const verifyTelegramLogin = onCall(async (request) => {
+  const { id_token, nonce } = (request.data ?? {}) as VerifyTelegramPayload;
+
+  if (typeof id_token !== "string" || !id_token) {
+    throw new HttpsError("invalid-argument", "Missing id_token.");
+  }
+
+  const clientId = TELEGRAM_CLIENT_ID.value();
+
+  // Verify JWT signature, issuer, audience, and expiry using Telegram's public JWKS
+  let payload: Record<string, unknown>;
+  try {
+    const result = await jwtVerify(id_token, TELEGRAM_JWKS, {
+      issuer:   "https://oauth.telegram.org",
+      audience: clientId,
+    });
+    payload = result.payload as Record<string, unknown>;
+  } catch {
+    throw new HttpsError("unauthenticated", "Telegram token is invalid or has expired.");
+  }
+
+  // Verify nonce to prevent replay attacks
+  if (nonce && payload.nonce !== nonce) {
+    throw new HttpsError("unauthenticated", "Nonce mismatch.");
+  }
+
+  const telegramId = payload.id as number;
+  if (!telegramId) {
+    throw new HttpsError("unauthenticated", "Token missing Telegram user ID.");
+  }
+
+  const uid             = `tg_${telegramId}`;
+  const displayName     = (payload.name as string | undefined) ?? "";
+  const telegramUsername = (payload.preferred_username as string | undefined) ?? null;
+  const photoUrl        = (payload.picture as string | undefined) ?? null;
+
+  // Upsert Firebase Auth user so createCustomToken always succeeds
+  const adminAuth = getAuth();
+  try {
+    await adminAuth.getUser(uid);
+  } catch {
+    await adminAuth.createUser({
+      uid,
+      displayName,
+      ...(photoUrl ? { photoURL: photoUrl } : {}),
+    });
+  }
+
+  const customToken = await adminAuth.createCustomToken(uid, { telegramId, telegramUsername });
+
+  return { customToken, telegramId, telegramUsername, displayName, photoUrl };
+});
 
 // ── Daily task generation ─────────────────────────────────────────────────────
 

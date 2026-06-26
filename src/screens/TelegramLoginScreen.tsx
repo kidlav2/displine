@@ -1,70 +1,94 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { BRAND_COLOR } from "../constants/design";
-import type { TelegramAuthData } from "../types";
 
 interface ChallengePreview { name: string; emoji: string; description: string; inviteCode: string; }
 
 interface TelegramLoginScreenProps {
   challenge: ChallengePreview;
-  onAuth: (data: TelegramAuthData) => Promise<void>;
+  onAuth: (payload: { id_token: string; nonce: string }) => Promise<void>;
 }
 
-// The Telegram widget injects itself into the DOM and calls a global callback.
-// We stash the callback on window so the injected script can reach it.
+// Minimal type for the new Telegram.Login SDK (telegram-login.js)
 declare global {
   interface Window {
-    onTelegramAuth?: (user: TelegramAuthData) => void;
+    Telegram?: {
+      Login: {
+        init(options: TelegramLoginOptions, callback: TelegramLoginCallback): void;
+        open(callback?: TelegramLoginCallback): void;
+        auth(options: TelegramLoginOptions, callback: TelegramLoginCallback): void;
+        close(): void;
+      };
+    };
   }
 }
 
-const BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME as string | undefined;
+interface TelegramLoginOptions {
+  client_id: number;
+  request_access?: ("phone" | "write")[];
+  lang?: string;
+  nonce?: string;
+}
+
+type TelegramLoginCallback = (result: {
+  id_token?: string;
+  user?: Record<string, unknown>;
+  error?: string;
+}) => void;
+
+// Numeric Client ID from BotFather → Bot Settings → Web Login
+const CLIENT_ID = parseInt(import.meta.env.VITE_TELEGRAM_CLIENT_ID ?? "0", 10);
 
 export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [loading, setLoading]  = useState(false);
-  const [error, setError]      = useState<string | null>(null);
-  const [widgetReady, setWidgetReady] = useState(false);
+  const nonceRef = useRef<string>("");
+  const [scriptReady, setScriptReady] = useState(false);
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState<string | null>(null);
 
   useEffect(() => {
-    if (!BOT_USERNAME) {
-      setError("Bot username is not configured. Add VITE_TELEGRAM_BOT_USERNAME to your .env file.");
+    if (!CLIENT_ID) {
+      setError("Telegram Client ID is not configured. Add VITE_TELEGRAM_CLIENT_ID to your environment.");
       return;
     }
 
-    // Register the global callback before the widget script loads
-    window.onTelegramAuth = async (data: TelegramAuthData) => {
-      setLoading(true);
-      setError(null);
-      try {
-        await onAuth(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Login failed. Please try again.");
-        setLoading(false);
-      }
-      // Don't setLoading(false) on success — the parent navigates away
-    };
+    const existing = document.querySelector('script[src*="telegram-login.js"]');
+    if (existing) { setScriptReady(true); return; }
 
-    // Inject the Telegram widget script
     const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
+    script.src = "https://telegram.org/js/telegram-login.js";
     script.async = true;
-    script.setAttribute("data-telegram-login", BOT_USERNAME);
-    script.setAttribute("data-size", "large");
-    script.setAttribute("data-radius", "12");
-    script.setAttribute("data-onauth", "onTelegramAuth(user)");
-    script.setAttribute("data-request-access", "write");
-    script.onload = () => setWidgetReady(true);
-    script.onerror = () => setError("Could not load Telegram widget. Check your connection.");
+    script.onload  = () => setScriptReady(true);
+    script.onerror = () => setError("Could not load Telegram login library. Check your connection.");
+    document.head.appendChild(script);
+  }, []);
 
-    containerRef.current?.appendChild(script);
+  const handleLogin = () => {
+    if (!scriptReady || loading || !window.Telegram?.Login) return;
 
-    return () => {
-      window.onTelegramAuth = undefined;
-      // Remove the injected script on unmount so re-mounting creates a fresh instance
-      script.remove();
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // Fresh nonce per attempt — stored in ref so the callback closure can read it
+    const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    nonceRef.current = nonce;
+
+    setError(null);
+
+    window.Telegram.Login.auth(
+      { client_id: CLIENT_ID, request_access: ["write"], nonce },
+      async (result) => {
+        if (result.error || !result.id_token) {
+          setError(result.error ?? "Telegram login was cancelled or failed. Please try again.");
+          return;
+        }
+        setLoading(true);
+        try {
+          await onAuth({ id_token: result.id_token, nonce: nonceRef.current });
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+          setLoading(false);
+        }
+        // On success the parent navigates away — don't reset loading
+      }
+    );
+  };
 
   return (
     <div className="flex flex-col h-full px-6 pt-10 pb-8">
@@ -95,18 +119,27 @@ export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenPr
             </p>
           </div>
 
-          {/* Telegram widget mounts here */}
-          <div ref={containerRef} className="flex items-center justify-center min-h-[54px]">
-            {!widgetReady && !error && (
-              <Loader2 size={20} className="animate-spin text-muted-foreground" />
-            )}
-          </div>
-
-          {loading && (
+          {loading ? (
             <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
               <Loader2 size={16} className="animate-spin" style={{ color: BRAND_COLOR }} />
               Signing you in…
             </div>
+          ) : (
+            <button
+              onClick={handleLogin}
+              disabled={!scriptReady || !!error}
+              className="flex items-center gap-3 px-6 py-3.5 rounded-2xl font-extrabold text-sm text-white disabled:opacity-40 transition-opacity"
+              style={{ background: "#2AABEE" }}
+            >
+              {!scriptReady ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-2.032 9.571c-.148.658-.537.818-1.088.51l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.215-3.053 5.56-5.023c.242-.215-.054-.334-.373-.12L6.18 14.26l-2.95-.92c-.641-.2-.654-.641.137-.948l11.527-4.447c.535-.194 1.003.13.668.303z"/>
+                </svg>
+              )}
+              Continue with Telegram
+            </button>
           )}
 
           {error && (
@@ -119,8 +152,8 @@ export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenPr
 
         <div className="mt-8 text-center">
           <p className="text-xs text-muted-foreground leading-snug">
-            Joining via invite link{" "}
-            <span className="font-bold text-foreground">join.app/{challenge.inviteCode}</span>
+            Joining via invite code{" "}
+            <span className="font-bold text-foreground">{challenge.inviteCode}</span>
           </p>
         </div>
       </div>

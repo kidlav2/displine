@@ -113,15 +113,13 @@ export interface ChallengeData {
 }
 
 // ── Telegram ──────────────────────────────────────────────────────────────────
-// Payload received from the Telegram Login Widget callback
-export interface TelegramAuthData {
-  id: number;
-  first_name: string;
-  last_name?: string;
-  username?: string;
-  photo_url?: string;
-  auth_date: number;
-  hash: string;
+// User profile returned by the verifyTelegramLogin Cloud Function after OIDC JWT verification.
+// Replaces the old TelegramAuthData (HMAC widget payload) which is now legacy.
+export interface TelegramProfile {
+  telegramId: number;
+  telegramUsername: string | null;
+  displayName: string;
+  photoUrl: string | null;
 }
 
 // ── Firestore document shapes ─────────────────────────────────────────────────
