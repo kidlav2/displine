@@ -72,7 +72,7 @@ export function CreateChallengeScreen() {
   };
 
   if (step === "done") return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 px-6 text-center">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6 text-center">
       <p className="text-5xl">{emoji}</p>
       <p className="font-extrabold text-2xl">{name}</p>
       <p className="text-sm text-muted-foreground">Challenge created! Participants can join with the invite code.</p>
