@@ -8,11 +8,27 @@ import { useAppContext } from "../contexts/AppContext";
 import { updateChallengeDoc } from "../lib/firestore";
 import type { ChallengeSettings } from "../types";
 
+function toInputDate(s: string): string {
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function fromInputDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
 export function ChallengeSettingsScreen() {
   const { challenge } = useAppContext();
   const navigate = useNavigate();
 
   const [s, setS] = useState<ChallengeSettings>(challenge.settings);
+  const [startDate, setStartDate] = useState(toInputDate(challenge.startDate));
+  const [duration, setDuration] = useState(String(challenge.duration));
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +51,11 @@ export function ChallengeSettingsScreen() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      await updateChallengeDoc(challenge.id, { settings: s });
+      await updateChallengeDoc(challenge.id, {
+        settings: s,
+        ...(startDate ? { startDate: fromInputDate(startDate) } : {}),
+        duration: parseInt(duration) || challenge.duration,
+      });
       setSaved(true);
       setTimeout(() => { setSaved(false); navigate(-1); }, 1000);
     } finally {
@@ -53,6 +73,31 @@ export function ChallengeSettingsScreen() {
       </div>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 space-y-4 lg:space-y-0">
+        <Card className="!p-4 space-y-3">
+          <p className="font-bold text-sm">Challenge info</p>
+          <div>
+            <SecLabel>Start date</SecLabel>
+            <input
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+              style={bc}
+            />
+          </div>
+          <div>
+            <SecLabel>Duration (days)</SecLabel>
+            <input
+              type="number"
+              value={duration}
+              onChange={e => setDuration(e.target.value)}
+              min={1}
+              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+              style={bc}
+            />
+          </div>
+        </Card>
+
         <Card className="!p-4 space-y-3">
           <p className="font-bold text-sm">Running days &amp; deadlines</p>
           <div className="space-y-2">
