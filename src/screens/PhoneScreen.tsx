@@ -156,7 +156,7 @@ export function PhoneScreen({ challenge, onNext }: PhoneScreenProps) {
       <div className="mt-8 text-center">
         <p className="text-xs text-muted-foreground leading-snug">
           Joining via invite link{" "}
-          <span className="font-bold text-foreground">join.app/{challenge.inviteCode}</span>
+          <span className="font-bold text-foreground">displine.vercel.app/join?code={challenge.inviteCode}</span>
         </p>
       </div>
     </div>

@@ -16,7 +16,7 @@ const STATUS_LABEL: Record<ChallengeStatus, string> = {
 
 function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => void }) {
   const [copied, setCopied] = useState(false);
-  const link = `join.app/${ch.inviteCode}`;
+  const link = `displine.vercel.app/join?code=${ch.inviteCode}`;
 
   const copyLink = (e: React.MouseEvent) => {
     e.stopPropagation();
