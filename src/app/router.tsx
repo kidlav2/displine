@@ -36,26 +36,135 @@ import type { TelegramProfile } from "../types";
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser, authLoading } = useAuthContext();
   if (authLoading) return null;
-  if (!currentUser) return <Navigate to="/join" replace />;
+  if (!currentUser) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
-// ── Layouts ───────────────────────────────────────────────────────────────────
+// ── Cloud Function callable ref ───────────────────────────────────────────────
 
-// Minimal shape PhoneScreen needs to display the invite preview
-interface ChallengePreview { name: string; emoji: string; description: string; inviteCode: string; }
-
-const DEMO_PREVIEW: ChallengePreview = {
-  name: "Demo Challenge", emoji: "🏃",
-  description: "Add ?code=XXX to join a real challenge.",
-  inviteCode: "DEMO",
-};
-
-// Cloud Function callable ref — created once outside the component
 const verifyTelegramLoginFn = httpsCallable<
   { id_token: string; nonce: string },
   { customToken: string; telegramId: number; telegramUsername: string | null; displayName: string; photoUrl: string | null }
 >(functions, "verifyTelegramLogin");
+
+// ── Root layout (/) ───────────────────────────────────────────────────────────
+// Plain login entry point. No challenge preview, no invite code.
+// After login: routes based on challengeRoles in Firestore profile.
+
+type RootStep = "login" | "profile" | "no-challenges";
+
+function RootLayout() {
+  const { currentUser, userProfile, authLoading } = useAuthContext();
+  const { setSelectedId } = useAppContext();
+  const navigate = useNavigate();
+  const [step, setStep] = useState<RootStep>("login");
+  const [telegramData, setTelegramData] = useState<TelegramProfile | undefined>(undefined);
+
+  // Once auth resolves, route returning users straight to their destination
+  useEffect(() => {
+    if (authLoading) return;
+    if (!currentUser) { setStep("login"); return; }
+
+    // User is authenticated — check their profile
+    if (!userProfile) {
+      // Auth resolved but no profile yet → new user needs profile setup
+      setStep("profile");
+      return;
+    }
+
+    const roles = userProfile.challengeRoles ?? {};
+    const ids = Object.keys(roles);
+    if (ids.length === 0) {
+      setStep("no-challenges");
+    } else if (ids.length === 1) {
+      setSelectedId(ids[0]);
+      navigate("/app/home", { replace: true });
+    } else {
+      navigate("/challenges", { replace: true });
+    }
+  }, [authLoading, currentUser, userProfile, navigate, setSelectedId]);
+
+  const handleTelegramAuth = async (payload: { id_token: string; nonce: string }) => {
+    const result = await verifyTelegramLoginFn(payload);
+    await signInWithCustomToken(auth, result.data.customToken);
+    setTelegramData({
+      telegramId:       result.data.telegramId,
+      telegramUsername: result.data.telegramUsername,
+      displayName:      result.data.displayName,
+      photoUrl:         result.data.photoUrl,
+    });
+    // AuthContext will fire → useEffect above will pick up the new user + profile state
+  };
+
+  const handleProfileDone = async (_data: { name: string; ini: string }) => {
+    // After profile creation on root flow, user has no challenge yet
+    setStep("no-challenges");
+  };
+
+  const inner = (() => {
+    if (authLoading) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center" style={jk}>
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </div>
+      );
+    }
+
+    if (step === "login") {
+      return (
+        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
+          style={{ minHeight: "min(600px, 100vh)" }}>
+          <TelegramLoginScreen onAuth={handleTelegramAuth} />
+        </div>
+      );
+    }
+
+    if (step === "profile") {
+      return (
+        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
+          style={{ minHeight: "min(600px, 100vh)" }}>
+          <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} />
+        </div>
+      );
+    }
+
+    // no-challenges
+    return (
+      <div className="flex flex-col items-center justify-center gap-6 px-6 text-center" style={{ minHeight: "min(600px, 100vh)" }}>
+        <p className="text-4xl">🏁</p>
+        <div className="space-y-1">
+          <p className="font-extrabold text-xl">No challenges yet</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            You're not part of any challenge. Create one or ask an organizer for an invite link.
+          </p>
+        </div>
+        <button
+          onClick={() => navigate("/challenges/create")}
+          className="px-6 py-3 rounded-2xl font-extrabold text-sm text-white"
+          style={{ background: "#FF4F00" }}
+        >
+          Create new challenge
+        </button>
+      </div>
+    );
+  })();
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
+      <div className="flex-1 lg:flex lg:items-center lg:justify-center lg:p-8">
+        {inner}
+      </div>
+      <div className="lg:hidden px-4 py-3 border-t border-border bg-card">
+        <DemoControls />
+      </div>
+    </div>
+  );
+}
+
+// ── Onboarding layout (/join?code=XXX) ────────────────────────────────────────
+// Requires ?code param. Shows challenge preview and join flow.
+
+interface ChallengePreview { name: string; emoji: string; description: string; inviteCode: string; }
 
 function OnboardingLayout() {
   const { setSelectedId } = useAppContext();
@@ -64,7 +173,6 @@ function OnboardingLayout() {
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code") ?? "";
 
-  // "telegram" is the primary step; phone/verify are kept but not active
   const [step, setStep] = useState<"telegram" | "phone" | "verify" | "profile">("telegram");
   const [telegramData, setTelegramData] = useState<TelegramProfile | undefined>(undefined);
 
@@ -77,9 +185,13 @@ function OnboardingLayout() {
   const [inviteLoading, setInviteLoading] = useState(!!code);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  // Resolve the invite code from the URL on mount
+  // No code → immediate error
   useEffect(() => {
-    if (!code) return;
+    if (!code) {
+      setInviteError("No invite code found. Ask your organizer for a valid invite link.");
+      setInviteLoading(false);
+      return;
+    }
     resolveInviteCode(code)
       .then(data => {
         if (data) setInvite(data);
@@ -89,13 +201,11 @@ function OnboardingLayout() {
       .finally(() => setInviteLoading(false));
   }, [code]);
 
-  const preview: ChallengePreview = invite ?? DEMO_PREVIEW;
+  const preview: ChallengePreview | undefined = invite ?? undefined;
 
-  // Called by TelegramLoginScreen after the OIDC popup completes
   const handleTelegramAuth = async (payload: { id_token: string; nonce: string }) => {
     const result = await verifyTelegramLoginFn(payload);
     await signInWithCustomToken(auth, result.data.customToken);
-    // Store profile from Cloud Function so ProfileSetupScreen can pre-populate name + photo
     setTelegramData({
       telegramId:       result.data.telegramId,
       telegramUsername: result.data.telegramUsername,
@@ -166,7 +276,7 @@ function OnboardingLayout() {
             <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} />
           )}
           {/* Phone / Verify steps — inactive in current flow, kept for fallback */}
-          {step === "phone" && (
+          {step === "phone" && preview && (
             <PhoneScreen challenge={preview} onNext={handlePhoneNext} />
           )}
           {step === "verify" && confirmationResult && (
@@ -237,9 +347,9 @@ function ChallengesLayout() {
 // ── Router ────────────────────────────────────────────────────────────────────
 
 export const router = createBrowserRouter([
-  { path: "/", element: <Navigate to="/app/home" replace /> },
+  { path: "/", element: <RootLayout /> },
 
-  // Onboarding (unauthenticated)
+  // Onboarding — requires ?code=XXX to join a challenge
   { path: "/join", element: <OnboardingLayout /> },
 
   // Org login (unauthenticated)

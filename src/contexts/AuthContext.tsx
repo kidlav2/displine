@@ -25,6 +25,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!user) {
         setUserProfile(null);
         setAuthLoading(false);
+      } else {
+        // Keep authLoading true until the Firestore profile snapshot resolves,
+        // even if this is a mid-session sign-in (e.g. after signInWithCustomToken).
+        setAuthLoading(true);
       }
     });
     return unsubAuth;

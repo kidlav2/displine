@@ -5,7 +5,7 @@ import { BRAND_COLOR } from "../constants/design";
 interface ChallengePreview { name: string; emoji: string; description: string; inviteCode: string; }
 
 interface TelegramLoginScreenProps {
-  challenge: ChallengePreview;
+  challenge?: ChallengePreview;
   onAuth: (payload: { id_token: string; nonce: string }) => Promise<void>;
 }
 
@@ -94,26 +94,44 @@ export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenPr
     <div className="flex flex-col h-full px-6 pt-10 pb-8">
       <div className="flex-1 flex flex-col">
 
-        {/* Challenge preview */}
-        <div className="flex flex-col items-center text-center mb-10">
-          <div
-            className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
-            style={{ background: "#FFF3F0" }}
-          >
-            {challenge.emoji}
+        {challenge ? (
+          /* Challenge-specific header */
+          <div className="flex flex-col items-center text-center mb-10">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
+              style={{ background: "#FFF3F0" }}
+            >
+              {challenge.emoji}
+            </div>
+            <p className="text-xs font-extrabold tracking-widest uppercase text-muted-foreground mb-1">
+              You're joining
+            </p>
+            <h1 className="font-extrabold text-2xl leading-tight mb-2">{challenge.name}</h1>
+            <p className="text-sm text-muted-foreground leading-snug max-w-[260px]">
+              {challenge.description}
+            </p>
           </div>
-          <p className="text-xs font-extrabold tracking-widest uppercase text-muted-foreground mb-1">
-            You're joining
-          </p>
-          <h1 className="font-extrabold text-2xl leading-tight mb-2">{challenge.name}</h1>
-          <p className="text-sm text-muted-foreground leading-snug max-w-[260px]">
-            {challenge.description}
-          </p>
-        </div>
+        ) : (
+          /* App-branded header (root / route) */
+          <div className="flex flex-col items-center text-center mb-10">
+            <div
+              className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
+              style={{ background: "#FFF3F0" }}
+            >
+              🏁
+            </div>
+            <h1 className="font-extrabold text-2xl leading-tight mb-2">Welcome to Displine</h1>
+            <p className="text-sm text-muted-foreground leading-snug max-w-[260px]">
+              Sign in to manage your challenges and track your progress.
+            </p>
+          </div>
+        )}
 
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
           <div>
-            <h2 className="font-extrabold text-xl text-center mb-1">Sign in to join</h2>
+            <h2 className="font-extrabold text-xl text-center mb-1">
+              {challenge ? "Sign in to join" : "Sign in"}
+            </h2>
             <p className="text-sm text-muted-foreground text-center">
               Tap the button below to sign in with your Telegram account.
             </p>
@@ -150,12 +168,14 @@ export function TelegramLoginScreen({ challenge, onAuth }: TelegramLoginScreenPr
           )}
         </div>
 
-        <div className="mt-8 text-center">
-          <p className="text-xs text-muted-foreground leading-snug">
-            Joining via invite code{" "}
-            <span className="font-bold text-foreground">{challenge.inviteCode}</span>
-          </p>
-        </div>
+        {challenge && (
+          <div className="mt-8 text-center">
+            <p className="text-xs text-muted-foreground leading-snug">
+              Joining via invite code{" "}
+              <span className="font-bold text-foreground">{challenge.inviteCode}</span>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
