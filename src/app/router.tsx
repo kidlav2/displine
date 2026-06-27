@@ -48,6 +48,51 @@ const verifyTelegramLoginFn = httpsCallable<
 // Plain login entry point. No challenge preview, no invite code.
 // After login: routes based on challengeRoles in Firestore profile.
 
+function NoChallengesStep({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+  const [codeInput, setCodeInput] = useState("");
+  const submit = () => codeInput.trim() && navigate(`/join?code=${encodeURIComponent(codeInput.trim())}`);
+  return (
+    <div className="flex flex-col items-center justify-center gap-6 px-6 text-center" style={{ minHeight: "min(600px, 100vh)" }}>
+      <p className="text-4xl">🏁</p>
+      <div className="space-y-1">
+        <p className="font-extrabold text-xl">Нет челленджей</p>
+        <p className="text-sm text-muted-foreground max-w-xs">
+          Создайте новый челлендж или введите код приглашения от организатора.
+        </p>
+      </div>
+      <button
+        onClick={() => navigate("/challenges/create")}
+        className="w-full max-w-[280px] px-6 py-3 rounded-2xl font-extrabold text-sm text-white"
+        style={{ background: "#FF4F00" }}
+      >
+        Создать новый челлендж
+      </button>
+      <div className="w-full max-w-[280px] flex items-center gap-3">
+        <div className="flex-1 h-px bg-border" />
+        <span className="text-xs font-semibold text-muted-foreground">или</span>
+        <div className="flex-1 h-px bg-border" />
+      </div>
+      <div className="w-full max-w-[280px] flex gap-2">
+        <input
+          value={codeInput}
+          onChange={e => setCodeInput(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === "Enter" && submit()}
+          placeholder="Код приглашения"
+          className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none placeholder-muted-foreground tracking-wider"
+        />
+        <button
+          onClick={submit}
+          disabled={!codeInput.trim()}
+          className="px-4 py-2.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-40"
+          style={{ background: "#2AABEE" }}
+        >
+          Войти
+        </button>
+      </div>
+    </div>
+  );
+}
+
 type RootStep = "login" | "profile" | "no-challenges";
 
 function RootLayout() {
@@ -135,24 +180,7 @@ function RootLayout() {
     }
 
     // no-challenges
-    return (
-      <div className="flex flex-col items-center justify-center gap-6 px-6 text-center" style={{ minHeight: "min(600px, 100vh)" }}>
-        <p className="text-4xl">🏁</p>
-        <div className="space-y-1">
-          <p className="font-extrabold text-xl">Нет челленджей</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Вы не участвуете ни в одном челлендже. Создайте новый или попросите организатора прислать ссылку-приглашение.
-          </p>
-        </div>
-        <button
-          onClick={() => navigate("/challenges/create")}
-          className="px-6 py-3 rounded-2xl font-extrabold text-sm text-white"
-          style={{ background: "#FF4F00" }}
-        >
-          Создать новый челлендж
-        </button>
-      </div>
-    );
+    return <NoChallengesStep navigate={navigate} />;
   })();
 
   return (
@@ -183,10 +211,9 @@ function OnboardingLayout() {
   const [inviteLoading, setInviteLoading] = useState(!!code);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  // No code → immediate error
+  // No code → show join-or-create landing (handled below, skip resolution)
   useEffect(() => {
     if (!code) {
-      setInviteError("Код приглашения не найден. Попросите организатора прислать действующую ссылку.");
       setInviteLoading(false);
       return;
     }
@@ -302,10 +329,58 @@ function OnboardingLayout() {
     navigate("/app/home");
   };
 
+  const [codeInput, setCodeInput] = useState("");
+
   if (inviteLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center" style={jk}>
         <p className="text-sm text-muted-foreground">Загрузка челленджа…</p>
+      </div>
+    );
+  }
+
+  // No code provided — show join-or-create landing
+  if (!code) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-center gap-6" style={jk}>
+        <p className="text-5xl">🏁</p>
+        <div className="space-y-1.5">
+          <p className="font-extrabold text-xl">Присоединиться или создать</p>
+          <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
+            Создайте свой челлендж или введите код приглашения от организатора.
+          </p>
+        </div>
+        <div className="w-full max-w-[320px] flex flex-col gap-3">
+          <button
+            onClick={() => navigate("/challenges/create")}
+            className="w-full py-3.5 rounded-2xl font-extrabold text-sm text-white"
+            style={{ background: "#FF4F00" }}
+          >
+            Создать новый челлендж
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs font-semibold text-muted-foreground">или</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={codeInput}
+              onChange={e => setCodeInput(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === "Enter" && codeInput.trim() && navigate(`/join?code=${encodeURIComponent(codeInput.trim())}`)}
+              placeholder="Код приглашения"
+              className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none placeholder-muted-foreground tracking-wider"
+            />
+            <button
+              onClick={() => codeInput.trim() && navigate(`/join?code=${encodeURIComponent(codeInput.trim())}`)}
+              disabled={!codeInput.trim()}
+              className="px-4 py-2.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-40"
+              style={{ background: "#2AABEE" }}
+            >
+              Войти
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -317,6 +392,13 @@ function OnboardingLayout() {
           <p className="text-3xl">🔗</p>
           <p className="font-extrabold text-lg">Недействительное приглашение</p>
           <p className="text-sm text-muted-foreground">{inviteError}</p>
+          <button
+            onClick={() => navigate("/join")}
+            className="mt-2 px-6 py-2.5 rounded-xl font-extrabold text-sm text-white"
+            style={{ background: "#FF4F00" }}
+          >
+            Назад
+          </button>
         </div>
       </div>
     );
