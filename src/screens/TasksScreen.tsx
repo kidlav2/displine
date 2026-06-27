@@ -42,10 +42,7 @@ export function TasksScreen() {
     return subscribeToTodayTaskSubmission(
       challenge.id, currentUser.uid, participantTodayISO,
       (data) => {
-        if (!data) return;
-        if (data.status === "pending" || data.status === "approved") {
-          setStatus("pending"); // reuse pending screen for both
-        } else if (data.status === "rejected") {
+        if (!data) return;\n        if (data.status === \"approved\") {\n          setStatus(\"approved\");\n        } else if (data.status === \"pending\") {\n          setStatus(\"pending\");\n        } else if (data.status === \"rejected\") {
           setStatus("idle"); // stay on form
           setSubmitError(
             data.organizerComment
@@ -125,6 +122,20 @@ export function TasksScreen() {
       setSubmitting(false);
     }
   };
+
+  if (status === "approved") {
+    return (
+      <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-6 lg:pt-8 flex flex-col items-center text-center gap-4">
+        <div className="w-20 h-20 rounded-full border-2 border-green-200 bg-green-50 flex items-center justify-center mt-12">
+          <CheckCircle2 size={28} className="text-green-500" />
+        </div>
+        <p className="font-extrabold text-2xl">Задание выполнено!</p>
+        <p className="text-sm text-muted-foreground max-w-[230px]">
+          Организатор проверил и одобрил ваше подтверждение. Очки начислены.
+        </p>
+      </div>
+    );
+  }
 
   if (status === "pending") {
     return (

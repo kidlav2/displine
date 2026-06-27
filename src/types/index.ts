@@ -18,7 +18,7 @@ export interface TeamMember {
 export type CommTab    = "leaderboard" | "feed" | "achievements";
 export type SortKey    = "score" | "distance";
 export type SubStatus  = "idle" | "pending" | "approved" | "rejected";
-export type ReviewFilter  = "all" | "running" | "checklist";
+export type ReviewFilter  = "all" | "running" | "task";
 export type ManageSection = "main" | "create-task" | "create-achievement" | "participants" | "settings" | "team";
 export type ChallengeStatus = "active" | "completed" | "upcoming";
 

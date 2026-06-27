@@ -360,7 +360,7 @@ export function subscribeToTodayCheckIn(
   challengeId: string,
   uid: string,
   dateStr: string,
-  callback: (data: { subId: string; checkInAt: Date | null; submitted: boolean } | null) => void
+  callback: (data: { subId: string; checkInAt: Date | null; submitted: boolean; approved: boolean } | null) => void
 ): Unsubscribe {
   const subId = runCheckInSubId(uid, dateStr);
   return onSnapshot(submissionRef(challengeId, subId), (snap) => {
@@ -369,9 +369,11 @@ export function subscribeToTodayCheckIn(
     const ts = d.checkInAt;
     const checkInAt = ts instanceof Timestamp ? ts.toDate() : null;
     if (d.status === "checked_in") {
-      callback({ subId, checkInAt, submitted: false });
-    } else if (d.status === "pending" || d.status === "approved") {
-      callback({ subId, checkInAt, submitted: true });
+      callback({ subId, checkInAt, submitted: false, approved: false });
+    } else if (d.status === "pending") {
+      callback({ subId, checkInAt, submitted: true, approved: false });
+    } else if (d.status === "approved") {
+      callback({ subId, checkInAt, submitted: true, approved: true });
     } else {
       callback(null);
     }

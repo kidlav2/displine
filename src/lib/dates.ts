@@ -38,10 +38,21 @@ export function dayToDate(day: number, start: Date): Date {
   return d;
 }
 
-/** Parse a "YYYY-MM-DD" challenge startDate string to a UTC-midnight Date. */
-export function parseChallengeStartDate(startDate: string): Date {
+/** Parse a challenge startDate to a UTC-midnight Date.
+ * Accepts ISO "YYYY-MM-DD" strings, Date objects, or Firestore Timestamp-like
+ * objects (duck-typed via .toDate()). Handles invalid / missing values gracefully.
+ */
+export function parseChallengeStartDate(startDate: unknown): Date {
   if (!startDate) return new Date();
-  return new Date(startDate + "T00:00:00Z");
+  if (startDate instanceof Date) return isNaN(startDate.getTime()) ? new Date() : startDate;
+  // Firestore Timestamp duck-type check
+  if (typeof startDate === "object" && startDate !== null && "toDate" in startDate) {
+    const d = (startDate as { toDate(): Date }).toDate();
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+  if (typeof startDate !== "string" || !startDate) return new Date();
+  const d = new Date(startDate + "T00:00:00Z");
+  return isNaN(d.getTime()) ? new Date() : d;
 }
 
 export function fmtDate(d: Date): string {

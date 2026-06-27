@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Camera, ExternalLink, Clock, Activity, Loader2,
-  Wallet, TrendingUp, MapPin, CheckCircle2, XCircle, Zap, CalendarDays,
+  Wallet, TrendingUp, MapPin, CheckCircle2, XCircle, Zap, CalendarDays, AlertCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -21,6 +21,7 @@ export function HomeScreen() {
 
   const [checkedIn, setCheckedIn] = useState(false);
   const [submittedToday, setSubmittedToday] = useState(false);
+  const [runApproved, setRunApproved] = useState(false);
   const [runStatusLoading, setRunStatusLoading] = useState(true); // true until subscription fires
   const [thumb, setThumb] = useState<string | null>(null);
   const [checkinTime, setCheckinTime] = useState<string | null>(null);
@@ -28,6 +29,7 @@ export function HomeScreen() {
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [taskStatusLoading, setTaskStatusLoading] = useState(true); // true until task subscription fires
   const [taskSubmittedToday, setTaskSubmittedToday] = useState(false);
+  const [taskApproved, setTaskApproved] = useState(false);
   const [taskRejectedToday, setTaskRejectedToday] = useState(false);
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const cameraRef = useRef<HTMLInputElement>(null);
@@ -51,6 +53,7 @@ export function HomeScreen() {
         if (data?.submitted) {
           setCheckedIn(true);
           setSubmittedToday(true);
+          setRunApproved(data.approved);
           setCheckInSubId(data.subId);
         } else if (data && !checkedIn) {
           setCheckedIn(true);
@@ -116,11 +119,13 @@ export function HomeScreen() {
       participantTodayISO,
       (data) => {
         setTaskStatusLoading(false);
-        if (!data) { setTaskSubmittedToday(false); setTaskRejectedToday(false); return; }
-        if (data.status === "pending" || data.status === "approved") {
-          setTaskSubmittedToday(true); setTaskRejectedToday(false);
+        if (!data) { setTaskSubmittedToday(false); setTaskRejectedToday(false); setTaskApproved(false); return; }
+        if (data.status === "approved") {
+          setTaskSubmittedToday(true); setTaskRejectedToday(false); setTaskApproved(true);
+        } else if (data.status === "pending") {
+          setTaskSubmittedToday(true); setTaskRejectedToday(false); setTaskApproved(false);
         } else if (data.status === "rejected") {
-          setTaskSubmittedToday(false); setTaskRejectedToday(true);
+          setTaskSubmittedToday(false); setTaskRejectedToday(true); setTaskApproved(false);
         }
       }
     );
@@ -150,6 +155,9 @@ export function HomeScreen() {
           <div>
             <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">{challenge.emoji} {challenge.name}</p>
             <p className="font-extrabold text-xl leading-tight">День {challenge.currentDay}</p>
+            <p className="text-xs text-muted-foreground capitalize mt-0.5">
+              {new Date().toLocaleDateString("ru-RU", { weekday: "long", timeZone: meParticipant?.tz ?? "UTC" })}
+            </p>
           </div>
         </div>
         <div className="text-right">
@@ -171,7 +179,37 @@ export function HomeScreen() {
         </div>
       </Card>
 
-      {todayTask ? (
+      {/* Penalty warning */}
+      {meParticipant?.penalties?.filter(p => p.amount > 0).map((p, i) => (
+        <Card key={i} className="!p-4 border-2 border-orange-200 bg-orange-50">
+          <div className="flex items-center gap-3">
+            <AlertCircle size={16} className="text-orange-500 shrink-0" />
+            <div>
+              <p className="text-xs font-extrabold text-orange-700">Штраф от организатора</p>
+              <p className="text-[11px] text-orange-600">{p.reason} — {p.amount} {challenge.settings.currency}</p>
+            </div>
+          </div>
+        </Card>
+      ))}
+
+      {/* Completion banner when something was approved today */}
+      {(taskApproved || runApproved) && (
+        <Card className="!p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+              <CheckCircle2 size={20} className="text-green-500" />
+            </div>
+            <div>
+              <p className="font-extrabold text-sm text-green-700">
+                {taskApproved && runApproved ? "Всё выполнено сегодня!" : taskApproved ? "Задание выполнено!" : "Пробежка зачтена!"}
+              </p>
+              <p className="text-xs text-muted-foreground">Отличная работа 💪</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {todayTask && !taskApproved ? (
         <Card className="!p-5" accent>
           <div className="flex items-center gap-2 mb-3">
             <SecLabel>Задание на сегодня</SecLabel>
@@ -216,7 +254,7 @@ export function HomeScreen() {
             </button>
           )}
         </Card>
-      ) : (
+      ) : !todayTask && !taskApproved ? (
         <Card className="!p-5">
           <div className="flex items-center gap-2 mb-3">
             <CalendarDays size={15} className="text-muted-foreground" />
@@ -226,7 +264,7 @@ export function HomeScreen() {
         </Card>
       )}
 
-      {isRunDay && (
+      {isRunDay && !runApproved && (
         <Card className="!p-4">
           <div className="flex items-center gap-2 mb-3">
             <Activity size={14} style={{ color: BRAND_COLOR }} />

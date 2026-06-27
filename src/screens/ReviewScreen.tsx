@@ -33,16 +33,20 @@ export function ReviewScreen() {
   const challengeStart = parseChallengeStartDate(challenge.startDate);
   const d = dayToDate(reviewDay, challengeStart);
   const counts = {
-    all:       challenge.queue.length,
-    running:   challenge.queue.filter(q => q.type === "running").length,
-    checklist: challenge.queue.filter(q => q.type === "checklist").length,
+    all:     challenge.queue.length,
+    running: challenge.queue.filter(q => q.type === "running").length,
+    task:    challenge.queue.filter(q => q.type === "checklist" || q.type === "freeform").length,
   };
-  const filtered = challenge.queue.filter(q => filter === "all" || q.type === filter);
+  const filtered = challenge.queue.filter(q =>
+    filter === "all" ||
+    q.type === filter ||
+    (filter === "task" && (q.type === "checklist" || q.type === "freeform"))
+  );
 
   const FILTER_LABELS: { key: ReviewFilter; label: string }[] = [
-    { key: "all",       label: `Все (${counts.all})`             },
-    { key: "running",   label: `Пробежка (${counts.running})`    },
-    { key: "checklist", label: `Чеклист (${counts.checklist})`   },
+    { key: "all",     label: `Все (${counts.all})`             },
+    { key: "running", label: `Пробежка (${counts.running})`    },
+    { key: "task",    label: `Задание (${counts.task})`        },
   ];
 
   const act = async (item: ReviewItem, status: "approved" | "rejected", latePenalty = false) => {
