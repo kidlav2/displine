@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle, Copy, Check } from "lucide-react";
+import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle, Copy, Check, UserRoundPlus, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import { inviteTeamMember, updateTeamMemberRole, removeTeamMember } from "../lib/firestore";
+import { inviteTeamMember, updateTeamMemberRole, removeTeamMember, promoteParticipantToTeam } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
 import type { OrgRole, TeamMember } from "../types";
 
@@ -13,12 +13,24 @@ export function TeamScreen() {
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
+  // Path B — invite link
   const [showInvite, setShowInvite] = useState(false);
   const [inviteRole, setInviteRole] = useState<OrgRole>("helper");
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Path A — promote existing participant
+  const [showPromote, setShowPromote] = useState(false);
+  const [promoteUid, setPromoteUid] = useState("");
+  const [promoteRole, setPromoteRole] = useState<OrgRole>("helper");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Participants not already in the team (role === "participant")
+  const eligibleParticipants = challenge.participants.filter(
+    p => p.role === "participant" && p.uid !== currentUser?.uid
+  );
 
   const generateInvite = async () => {
     if (loading) return;
@@ -47,6 +59,22 @@ export function TeamScreen() {
     setShowInvite(false);
   };
 
+  const doPromote = async () => {
+    const p = challenge.participants.find(x => x.uid === promoteUid);
+    if (!p || loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await promoteParticipantToTeam(challenge.id, p.uid, p.name, promoteRole);
+      setShowPromote(false);
+      setPromoteUid("");
+    } catch {
+      setError("Не удалось повысить участника.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const changeRole = async (id: string, role: OrgRole) => {
     try { await updateTeamMemberRole(challenge.id, id, role); }
     catch { setError("Не удалось обновить роль."); }
@@ -73,15 +101,79 @@ export function TeamScreen() {
           <ChevronLeft size={16} /> Назад
         </button>
         <p className="font-extrabold text-lg">Команда</p>
-        <button onClick={() => setShowInvite(v => !v)}
-          className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-white"
-          style={{ background: BRAND_COLOR }}>
-          <Plus size={13} /> Пригласить
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => { setShowPromote(v => !v); setShowInvite(false); }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs border-2 border-border bg-card">
+            <UserRoundPlus size={13} /> Повысить
+          </button>
+          <button
+            onClick={() => { setShowInvite(v => !v); setShowPromote(false); }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-white"
+            style={{ background: BRAND_COLOR }}>
+            <Plus size={13} /> Пригласить
+          </button>
+        </div>
       </div>
 
       {error && <p className="text-xs font-bold text-red-500 mb-3">{error}</p>}
 
+      {/* Path A — promote existing participant */}
+      {showPromote && (
+        <Card className="!p-4 mb-4 border-blue-100 bg-blue-50">
+          <p className="font-bold text-sm mb-3">Повысить участника</p>
+          {eligibleParticipants.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              Все участники уже являются организаторами.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <SecLabel>Участник</SecLabel>
+                <div className="relative mt-1.5">
+                  <select
+                    value={promoteUid}
+                    onChange={e => setPromoteUid(e.target.value)}
+                    className="w-full appearance-none bg-card border border-border rounded-xl px-3 py-2.5 text-sm font-semibold outline-none pr-8">
+                    <option value="">Выберите участника…</option>
+                    {eligibleParticipants.map(p => (
+                      <option key={p.uid} value={p.uid}>{p.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <SecLabel>Роль</SecLabel>
+                <div className="flex gap-2 mt-1.5">
+                  {(["helper", "owner"] as OrgRole[]).map(r => (
+                    <button key={r} onClick={() => setPromoteRole(r)}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
+                      style={promoteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
+                      {r === "owner" ? "Совладелец" : "Помощник"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {promoteRole === "owner" && (
+                <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
+                  <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700">Совладельцы получают полный доступ, включая настройки челленджа и управление командой.</p>
+                </div>
+              )}
+              <button
+                onClick={doPromote}
+                disabled={!promoteUid || loading}
+                className="w-full py-3 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
+                style={{ background: BRAND_COLOR }}>
+                {loading ? "Повышение…" : "Повысить"}
+              </button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Path B — invite link */}
       {showInvite && (
         <Card className="!p-4 mb-4 border-orange-100 bg-orange-50">
           {generatedLink ? (
@@ -158,7 +250,6 @@ export function TeamScreen() {
                   {member.status === "invited" ? "Приглашение отправлено" : "Активен с"} {member.since}
                 </p>
               </div>
-              {/* Hide controls for the current user's own row */}
               {member.email !== currentUser?.email ? (
                 <div className="flex items-center gap-2 shrink-0">
                   <select value={member.role} onChange={e => changeRole(member.id, e.target.value as OrgRole)}

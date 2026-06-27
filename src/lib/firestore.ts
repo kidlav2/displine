@@ -6,7 +6,7 @@
 
 import {
   collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
-  addDoc, arrayUnion, arrayRemove, increment,
+  addDoc, arrayUnion, arrayRemove, increment, deleteField,
   Timestamp, runTransaction, serverTimestamp,
   type DocumentData,
   type QueryDocumentSnapshot,
@@ -599,6 +599,58 @@ export async function removeTeamMember(
   memberId: string
 ): Promise<void> {
   await deleteDoc(teamMemberRef(challengeId, memberId));
+}
+
+/** Promote an existing participant to helper or owner. Atomic transaction. */
+export async function promoteParticipantToTeam(
+  challengeId: string,
+  uid: string,
+  name: string,
+  role: import("../types").OrgRole
+): Promise<void> {
+  await runTransaction(db, async (tx) => {
+    tx.update(participantRef(challengeId, uid), { role, isAdmin: true });
+    tx.set(teamMemberRef(challengeId, uid), {
+      name, role, uid,
+      email:     "",
+      status:    "active",
+      since:     serverTimestamp(),
+      invitedAt: serverTimestamp(),
+    });
+  });
+  await updateDoc(userRef(uid), { [`challengeRoles.${challengeId}`]: role });
+}
+
+/** Demote a team member back to plain participant. Atomic transaction. */
+export async function demoteTeamMember(
+  challengeId: string,
+  uid: string
+): Promise<void> {
+  await runTransaction(db, async (tx) => {
+    tx.update(participantRef(challengeId, uid), { role: "participant", isAdmin: false });
+    tx.delete(teamMemberRef(challengeId, uid));
+  });
+  await updateDoc(userRef(uid), { [`challengeRoles.${challengeId}`]: "participant" });
+}
+
+/**
+ * Remove a participant from a challenge entirely.
+ * Deletes their participant doc and (if applicable) team doc.
+ * Removes the challenge from their challengeRoles map.
+ * Feed and submission docs are left as historical record.
+ */
+export async function removeParticipantFromChallenge(
+  challengeId: string,
+  uid: string,
+  wasTeamMember: boolean
+): Promise<void> {
+  await runTransaction(db, async (tx) => {
+    tx.delete(participantRef(challengeId, uid));
+    if (wasTeamMember) tx.delete(teamMemberRef(challengeId, uid));
+  });
+  await updateDoc(userRef(uid), {
+    [`challengeRoles.${challengeId}`]: deleteField(),
+  });
 }
 
 /**
