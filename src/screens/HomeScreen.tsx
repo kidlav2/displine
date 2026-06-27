@@ -69,8 +69,7 @@ export function HomeScreen() {
         }
       }
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [challenge?.id, currentUser?.uid, isRunDay]);
+  }, [challenge?.id, currentUser?.uid, isRunDay, participantTodayISO]);
 
   const myScore = calcScore(meParticipant?.results ?? [], scoring);
   const totalKm = challenge.participants.reduce((sum, p) => sum + (p.km ?? 0), 0);
@@ -129,8 +128,7 @@ export function HomeScreen() {
         }
       }
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [challenge?.id, currentUser?.uid, todayTask?.id]);
+  }, [challenge?.id, currentUser?.uid, todayTask?.id, participantTodayISO]);
 
   const todayTaskSubId = currentUser ? taskSubmitSubId(currentUser.uid, participantTodayISO) : null;
   const goSubmit = (t: "task" | "run") => {
