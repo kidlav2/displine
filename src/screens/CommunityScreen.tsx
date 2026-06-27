@@ -5,11 +5,14 @@ import { Av, Hearts, Card, Chip, FeedCard } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
+import { useAuthContext } from "../contexts/AuthContext";
+import { toggleLike, addComment } from "../lib/firestore";
 import { checkAchievement } from "../lib/achievements";
-import type { CommTab, SortKey, FeedItem } from "../types";
+import type { CommTab, SortKey } from "../types";
 
 export function CommunityScreen() {
-  const { challenge, updateChallenge, isAdmin, adminTz, scoring, achievements, meParticipant } = useAppContext();
+  const { challenge, isAdmin, isOwner, adminTz, scoring, achievements, meParticipant } = useAppContext();
+  const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<CommTab>("feed");
@@ -21,13 +24,29 @@ export function CommunityScreen() {
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
-  const handleLike = (id: string) => updateChallenge(challenge.id,
-    { feed: challenge.feed.map((f: FeedItem) => f.id === id ? { ...f, likes: [...f.likes] } : f) }
-  );
+  const handleLike = async (id: string) => {
+    if (!currentUser) return;
+    const item = challenge.feed.find(f => f.id === id);
+    if (!item) return;
+    try {
+      await toggleLike(challenge.id, id, currentUser.uid, item.likes.includes(currentUser.uid));
+    } catch (err) {
+      console.error("[CommunityScreen] toggleLike failed:", err);
+    }
+  };
 
-  const handleComment = (id: string, text: string) => updateChallenge(challenge.id,
-    { feed: challenge.feed.map((f: FeedItem) => f.id === id ? { ...f, socialComments: [...f.socialComments, { ini: "ЕС", name: "Ерлан С.", text }] } : f) }
-  );
+  const handleComment = async (id: string, text: string) => {
+    if (!currentUser || !meParticipant) return;
+    try {
+      await addComment(challenge.id, id, {
+        ini: meParticipant.ini,
+        name: meParticipant.name,
+        text,
+      });
+    } catch (err) {
+      console.error("[CommunityScreen] addComment failed:", err);
+    }
+  };
 
   return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 max-w-[720px] mx-auto">
@@ -46,7 +65,9 @@ export function CommunityScreen() {
             {challenge.feed.map(f => (
               <FeedCard key={f.id} item={f} onLike={handleLike} onComment={handleComment}
                 onViewParticipant={onViewParticipant} participants={challenge.participants}
-                isAdmin={isAdmin} adminTz={adminTz} />
+                isAdmin={isAdmin} adminTz={adminTz}
+                currentUserId={currentUser?.uid}
+                currentUserIni={meParticipant?.ini ?? "?"} />
             ))}
           </div>
         </div>
@@ -77,7 +98,8 @@ export function CommunityScreen() {
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold leading-none truncate">{p.name}</p>
-                    {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
+                    {p.role === "owner" && <span className="text-[9px] font-extrabold text-purple-500">Орг.</span>}
+                    {p.role === "helper" && <span className="text-[9px] font-extrabold text-blue-500">Пом.</span>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {sort === "score" ? `${calcScore(p.results, scoring)} оч.` : `${p.km} км`}
@@ -97,7 +119,7 @@ export function CommunityScreen() {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 pb-4">
           {achievements.length === 0 && (
             <p className="col-span-2 lg:col-span-3 text-sm text-muted-foreground text-center py-6">
-              {isAdmin
+              {isOwner
                 ? "Достижения ещё не созданы. Добавьте их в разделе «Управление»."
                 : "Достижения ещё не созданы."}
             </p>

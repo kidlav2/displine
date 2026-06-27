@@ -8,7 +8,6 @@ import { Card } from "./Card";
 import { ScorePill } from "./ScorePill";
 import { StatusBadge } from "./StatusBadge";
 import { BRAND_COLOR } from "../../constants/design";
-import { ME } from "../../data/mock";
 import type { FeedItem, Participant } from "../../types";
 
 interface FeedCardProps {
@@ -19,9 +18,12 @@ interface FeedCardProps {
   participants: Participant[];
   isAdmin: boolean;
   adminTz: string;
+  currentUserId?: string;
+  currentUserIni?: string;
 }
 
-export function FeedCard({ item, onLike, onComment, onViewParticipant, participants, isAdmin: _isAdmin, adminTz: _adminTz }: FeedCardProps) {
+export function FeedCard({ item, onLike, onComment, onViewParticipant, participants, isAdmin: _isAdmin, adminTz: _adminTz, currentUserId, currentUserIni }: FeedCardProps) {
+  const liked = currentUserId ? item.likes.includes(currentUserId) : false;
   const [inputOpen, setInputOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const MAX = 60;
@@ -100,8 +102,8 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
 
       <div className="px-3.5 py-2.5 flex items-center gap-4 border-t border-border mt-2">
         <button onClick={() => onLike(item.id)} className="flex items-center gap-1.5 transition-transform active:scale-90">
-          <Heart size={16} className={item.liked ? "fill-red-500 text-red-500" : "text-muted-foreground"} />
-          <span className={`text-xs font-bold ${item.liked ? "text-red-500" : "text-muted-foreground"}`}>{item.likes}</span>
+          <Heart size={16} className={liked ? "fill-red-500 text-red-500" : "text-muted-foreground"} />
+          <span className={`text-xs font-bold ${liked ? "text-red-500" : "text-muted-foreground"}`}>{item.likes.length}</span>
         </button>
         <button onClick={() => setInputOpen(v => !v)} className="flex items-center gap-1.5">
           <MessageCircle size={16} className="text-muted-foreground" />
@@ -125,7 +127,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
 
       {inputOpen && (
         <div className="px-3.5 pb-3 flex items-center gap-2 border-t border-border pt-2.5">
-          <Av ini={ME.ini} sz="xs" accent />
+          <Av ini={currentUserIni ?? "?"} sz="xs" accent />
           <input
             value={draft}
             onChange={e => setDraft(e.target.value.slice(0, MAX))}

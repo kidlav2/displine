@@ -21,6 +21,7 @@ export function HomeScreen() {
   const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
 
   const myScore = calcScore(meParticipant?.results ?? [], scoring);
+  const totalKm = challenge.participants.reduce((sum, p) => sum + (p.km ?? 0), 0);
 
   const top3 = [...challenge.participants]
     .filter(p => p.active)
@@ -123,12 +124,6 @@ export function HomeScreen() {
               >
                 <Camera size={16} /> Фото и отметиться
               </button>
-              <button
-                onClick={() => { setThumb("sim"); setCheckedIn(true); }}
-                className="w-full py-2 rounded-xl text-xs font-semibold text-muted-foreground border border-dashed border-border"
-              >
-                Симуляция (только предпросмотр)
-              </button>
               <p className="text-center text-[11px] text-muted-foreground mt-2 flex items-center justify-center gap-1">
                 <MapPin size={11} /> геолокация и время добавятся автоматически
               </p>
@@ -137,7 +132,7 @@ export function HomeScreen() {
             <>
               <div className="flex items-center gap-3 mb-3 p-3 bg-green-50 rounded-xl border border-green-200">
                 <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-green-200 flex items-center justify-center">
-                  {thumb && thumb !== "sim" ? <img src={thumb} alt="check-in" className="w-full h-full object-cover" /> : <Camera size={18} className="text-green-600" />}
+                  {thumb ? <img src={thumb} alt="check-in" className="w-full h-full object-cover" /> : <Camera size={18} className="text-green-600" />}
                 </div>
                 <div>
                   <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-extrabold text-green-700">Отмечено в 05:48</span></div>
@@ -162,9 +157,9 @@ export function HomeScreen() {
           <p className="text-xs text-muted-foreground mt-1">{challenge.settings.currency}</p>
         </Card>
         <Card className="!p-4">
-          <div className="flex items-center gap-1.5 mb-2"><TrendingUp size={13} className="text-muted-foreground" /><SecLabel>Мои очки</SecLabel></div>
-          <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{myScore}</p>
-          <p className="text-xs text-muted-foreground mt-1">очков всего</p>
+          <div className="flex items-center gap-1.5 mb-2"><TrendingUp size={13} className="text-muted-foreground" /><SecLabel>Дистанция</SecLabel></div>
+          <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{totalKm % 1 === 0 ? totalKm : totalKm.toFixed(1)}</p>
+          <p className="text-xs text-muted-foreground mt-1">км всего</p>
         </Card>
       </div>
 
@@ -189,7 +184,8 @@ export function HomeScreen() {
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-bold leading-none truncate">{p.name}</p>
-                  {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
+                  {p.role === "owner" && <span className="text-[9px] font-extrabold text-purple-500">Орг.</span>}
+                  {p.role === "helper" && <span className="text-[9px] font-extrabold text-blue-500">Пом.</span>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {lbSort === "score" ? `${calcScore(p.results, scoring)} оч.` : `${p.km} км`}

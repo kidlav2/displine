@@ -608,6 +608,12 @@ export async function promoteParticipantToTeam(
   name: string,
   role: import("../types").OrgRole
 ): Promise<void> {
+  // Note: we intentionally do NOT update users/{uid}.challengeRoles here.
+  // Security rules only allow a user to write their own profile, so updating
+  // another user's doc from the browser is denied. The participant's effective
+  // role is derived from their participants/{uid}.role doc, which IS updated
+  // atomically below. challengeRoles is only used to decide which challenges
+  // to load on startup — the promoted user's access remains correct.
   await runTransaction(db, async (tx) => {
     tx.update(participantRef(challengeId, uid), { role, isAdmin: true });
     tx.set(teamMemberRef(challengeId, uid), {
@@ -618,7 +624,6 @@ export async function promoteParticipantToTeam(
       invitedAt: serverTimestamp(),
     });
   });
-  await updateDoc(userRef(uid), { [`challengeRoles.${challengeId}`]: role });
 }
 
 /** Demote a team member back to plain participant. Atomic transaction. */
@@ -630,14 +635,16 @@ export async function demoteTeamMember(
     tx.update(participantRef(challengeId, uid), { role: "participant", isAdmin: false });
     tx.delete(teamMemberRef(challengeId, uid));
   });
-  await updateDoc(userRef(uid), { [`challengeRoles.${challengeId}`]: "participant" });
 }
 
 /**
  * Remove a participant from a challenge entirely.
  * Deletes their participant doc and (if applicable) team doc.
- * Removes the challenge from their challengeRoles map.
  * Feed and submission docs are left as historical record.
+ * Note: users/{uid}.challengeRoles is NOT cleared here (security rules
+ * prevent writing another user's profile). The removed user retains the
+ * challenge in their roles map but their participant doc is gone, so they
+ * effectively lose access to any participant-gated data.
  */
 export async function removeParticipantFromChallenge(
   challengeId: string,
@@ -647,9 +654,6 @@ export async function removeParticipantFromChallenge(
   await runTransaction(db, async (tx) => {
     tx.delete(participantRef(challengeId, uid));
     if (wasTeamMember) tx.delete(teamMemberRef(challengeId, uid));
-  });
-  await updateDoc(userRef(uid), {
-    [`challengeRoles.${challengeId}`]: deleteField(),
   });
 }
 

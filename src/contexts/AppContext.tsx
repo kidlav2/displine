@@ -128,7 +128,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (snap) => {
         const participants = snap.docs.map(snapToParticipant);
         setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, participants } : c));
-      }
+      },
+      (err) => console.error("[AppContext] participants subscription error:", err)
     );
 
     const feedUnsub = onSnapshot(
@@ -136,7 +137,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (snap) => {
         const feed = snap.docs.map(snapToFeedItem);
         setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, feed } : c));
-      }
+      },
+      (err) => console.error("[AppContext] feed subscription error:", err)
     );
 
     // FLAG: submissions collection needs a composite index on (status, submittedAt)
@@ -146,7 +148,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (snap) => {
         const queue = snap.docs.map(snapToReviewItem);
         setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, queue } : c));
-      }
+      },
+      (err) => console.error("[AppContext] queue subscription error:", err)
     );
 
     const teamUnsub = onSnapshot(
@@ -154,19 +157,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (snap) => {
         const team = snap.docs.map(snapToTeamMember);
         setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, team } : c));
-      }
+      },
+      (err) => console.error("[AppContext] team subscription error:", err)
     );
 
     const taskUnsub = onSnapshot(
       query(tasksCol(selectedId), where("date", "==", todayISO())),
       (snap) => {
         setTodayTask(snap.docs.length > 0 ? snapToTask(snap.docs[0]) : null);
-      }
+      },
+      (err) => console.error("[AppContext] tasks subscription error:", err)
     );
 
     const achUnsub = onSnapshot(
       query(achievementsCol(selectedId)),
-      (snap) => { setAchievements(snap.docs.map(snapToAchievement)); }
+      (snap) => { setAchievements(snap.docs.map(snapToAchievement)); },
+      (err) => console.error("[AppContext] achievements subscription error:", err)
     );
 
     return () => {

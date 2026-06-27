@@ -6,6 +6,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { submitProof } from "../lib/firestore";
+import { localNow } from "../lib/timezone";
 import type { SubStatus } from "../types";
 
 export function TasksScreen() {
@@ -41,11 +42,13 @@ export function TasksScreen() {
     try {
       const subType = type === "run" ? "running" : (todayTask?.type ?? "freeform");
 
-      // Determine late status
+      // Determine late status using the participant's stored timezone, not the device clock.
+      // Device timezone can differ from where the challenge was set up (e.g. participant
+      // travels, or submits from a different country).
+      const nowInTz = localNow(meParticipant.tz);
+      const [nh, nm] = nowInTz.split(":").map(Number);
       const [dh, dm] = todayDeadline.split(":").map(Number);
-      const deadline = new Date();
-      deadline.setHours(dh, dm, 0, 0);
-      const isLate = new Date() > deadline;
+      const isLate = (nh * 60 + nm) > (dh * 60 + dm);
 
       const scoreKey = type === "run"
         ? (isLate ? "running_late" : "running_on_time")

@@ -69,9 +69,14 @@ export function ParticipantProfile() {
         <Av ini={participant.ini} sz="lg" admin={participant.isAdmin} />
         <div className="flex items-center gap-2 mt-3">
           <p className="font-extrabold text-2xl">{participant.name}</p>
-          {participant.isAdmin && (
+          {participant.role === "owner" && (
+            <span className="flex items-center gap-1 text-[10px] font-extrabold text-purple-500 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
+              <Shield size={9} /> владелец
+            </span>
+          )}
+          {participant.role === "helper" && (
             <span className="flex items-center gap-1 text-[10px] font-extrabold text-blue-500 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-              <Shield size={9} /> организатор
+              <Shield size={9} /> помощник
             </span>
           )}
         </div>

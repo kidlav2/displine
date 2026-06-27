@@ -65,12 +65,17 @@ service cloud.firestore {
       // ── Feed subcollection ───────────────────────────────────────────────
       match /feed/{postId} {
         allow read: if isParticipant(challengeId);
-        // Participants can create their own posts; organizers can update (approve/reject)
         allow create: if isParticipant(challengeId);
+        // Organizers can update any field (approve/reject/comment).
+        // Participants can update any post but must not change immutable fields
+        // (submissionStatus, participantId, pointsEarned, type) — this allows
+        // likes and socialComments to be toggled/appended on any participant's post.
         allow update: if isOrganizer(challengeId) ||
-          // Allow the post author to update likes/comments fields only
           (isParticipant(challengeId) &&
-           request.resource.data.participantId == request.auth.uid);
+           request.resource.data.submissionStatus == resource.data.submissionStatus &&
+           request.resource.data.participantId == resource.data.participantId &&
+           request.resource.data.pointsEarned == resource.data.pointsEarned &&
+           request.resource.data.type == resource.data.type);
         allow delete: if isOrganizer(challengeId);
       }
 
