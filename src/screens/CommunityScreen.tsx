@@ -94,7 +94,7 @@ export function CommunityScreen() {
                 <span className="text-base w-6 text-center shrink-0">
                   {i < 3 ? ["🥇", "🥈", "🥉"][i] : <span className="text-sm font-bold text-muted-foreground">{i + 1}</span>}
                 </span>
-                <Av ini={p.ini} sz="sm" admin={p.isAdmin} onClick={() => onViewParticipant(p.uid)} />
+                <Av ini={p.ini} photoUrl={p.photoUrl} sz="sm" admin={p.isAdmin} onClick={() => onViewParticipant(p.uid)} />
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold leading-none truncate">{p.name}</p>

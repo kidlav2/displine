@@ -73,6 +73,7 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
     uid:      snap.id,
     ini:      d.ini      ?? "??",
     name:     d.name     ?? "Unknown",
+    photoUrl: d.photoUrl ?? null,
     role:     d.role     ?? "participant",
     lives:    d.lives    ?? 0,
     km:       d.km       ?? 0,
@@ -156,6 +157,7 @@ export function snapToTeamMember(snap: QueryDocumentSnapshot<DocumentData>): Tea
   const d = snap.data();
   return {
     id:     snap.id,
+    uid:    d.uid    ?? snap.id,  // for active members uid === team doc id
     email:  d.email  ?? "",
     name:   d.name   ?? "",
     role:   d.role   ?? "helper",
@@ -531,7 +533,7 @@ export async function inviteTeamMember(
 export async function acceptTeamInvite(
   inviteCode: string,
   uid: string,
-  profile: { name: string; ini: string; tz: string }
+  profile: { name: string; ini: string; tz: string; photoUrl?: string | null }
 ): Promise<{ challengeId: string; role: import("../types").OrgRole }> {
   const invRef = inviteRef(inviteCode);
   let challengeId = "";
@@ -559,6 +561,7 @@ export async function acceptTeamInvite(
       uid,
       ini:      profile.ini,
       name:     profile.name,
+      photoUrl: profile.photoUrl ?? null,
       role,
       lives:    startingLives,
       km:       0,
@@ -763,13 +766,14 @@ export async function createTaskTemplate(
 export async function joinChallengeAsParticipant(
   challengeId: string,
   uid: string,
-  profile: { name: string; ini: string; tz: string },
+  profile: { name: string; ini: string; tz: string; photoUrl?: string | null },
   startingLives: number
 ): Promise<void> {
   await setDoc(participantRef(challengeId, uid), {
     uid,
     ini:      profile.ini,
     name:     profile.name,
+    photoUrl: profile.photoUrl ?? null,
     role:     "participant",
     lives:    startingLives,
     km:       0,

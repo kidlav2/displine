@@ -66,7 +66,7 @@ export function ParticipantProfile() {
         <ChevronLeft size={16} /> Назад
       </button>
       <div className="flex flex-col items-center text-center pt-2">
-        <Av ini={participant.ini} sz="lg" admin={participant.isAdmin} />
+        <Av ini={participant.ini} photoUrl={publicProfile?.photoUrl ?? participant.photoUrl} sz="lg" admin={participant.isAdmin} />
         <div className="flex items-center gap-2 mt-3">
           <p className="font-extrabold text-2xl">{participant.name}</p>
           {participant.role === "owner" && (

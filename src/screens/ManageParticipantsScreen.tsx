@@ -85,7 +85,7 @@ export function ManageParticipantsScreen() {
               <button
                 onClick={() => navigate(`/participants/${p.uid}`)}
                 className="w-full flex items-center gap-3 text-left mb-3">
-                <Av ini={p.ini} sz="sm" admin={p.isAdmin} />
+                <Av ini={p.ini} photoUrl={p.photoUrl} sz="sm" admin={p.isAdmin} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold">{p.name}</p>

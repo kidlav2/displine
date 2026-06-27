@@ -225,9 +225,10 @@ function OnboardingLayout() {
         navigate("/app/home", { replace: true });
       } else if (invite.type === "team") {
         acceptTeamInvite(code, currentUser.uid, {
-          name: userProfile.name,
-          ini:  userProfile.ini,
-          tz:   userProfile.timezone,
+          name:     userProfile.name,
+          ini:      userProfile.ini,
+          tz:       userProfile.timezone,
+          photoUrl: userProfile.photoUrl ?? currentUser.photoURL ?? null,
         }).then(({ challengeId }) => {
           setSelectedId(challengeId);
           navigate("/app/home", { replace: true });
@@ -240,7 +241,8 @@ function OnboardingLayout() {
         joinChallengeAsParticipant(
           invite.challengeId,
           currentUser.uid,
-          { name: userProfile.name, ini: userProfile.ini, tz: userProfile.timezone },
+          { name: userProfile.name, ini: userProfile.ini, tz: userProfile.timezone,
+            photoUrl: userProfile.photoUrl ?? currentUser.photoURL ?? null },
           invite.startingLives
         ).then(() => {
           setSelectedId(invite.challengeId);
@@ -300,16 +302,18 @@ function OnboardingLayout() {
       try {
         if (invite.type === "team") {
           const { challengeId } = await acceptTeamInvite(code, currentUser.uid, {
-            name: data.name,
-            ini:  data.ini,
-            tz:   detectTz(),
+            name:     data.name,
+            ini:      data.ini,
+            tz:       detectTz(),
+            photoUrl: currentUser.photoURL ?? null,
           });
           setSelectedId(challengeId);
         } else {
           await joinChallengeAsParticipant(
             invite.challengeId,
             currentUser.uid,
-            { name: data.name, ini: data.ini, tz: detectTz() },
+            { name: data.name, ini: data.ini, tz: detectTz(),
+              photoUrl: currentUser.photoURL ?? null },
             invite.startingLives
           );
           setSelectedId(invite.challengeId);

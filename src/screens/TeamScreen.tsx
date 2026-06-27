@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle, Copy, Check, UserRoundPlus, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Card, SecLabel } from "../components/atoms";
+import { Av, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import { inviteTeamMember, updateTeamMemberRole, removeTeamMember, promoteParticipantToTeam } from "../lib/firestore";
+import { inviteTeamMember, updateTeamMemberRole, removeTeamMember, demoteTeamMember, promoteParticipantToTeam } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
 import type { OrgRole, TeamMember } from "../types";
 
@@ -80,9 +80,18 @@ export function TeamScreen() {
     catch { setError("Не удалось обновить роль."); }
   };
 
-  const removeMember = async (id: string) => {
-    try { await removeTeamMember(challenge.id, id); }
-    catch { setError("Не удалось удалить участника."); }
+  const removeMember = async (member: TeamMember) => {
+    try {
+      if (member.status === "active" && member.uid) {
+        // Demote atomically: resets participant role to "participant" AND deletes team doc
+        await demoteTeamMember(challenge.id, member.uid);
+      } else {
+        // Invited-but-not-joined: no participant doc yet, just cancel the invite slot
+        await removeTeamMember(challenge.id, member.id);
+      }
+    } catch {
+      setError("Не удалось удалить участника.");
+    }
   };
 
   const roleBadge = (role: OrgRole, status: TeamMember["status"]) => {
@@ -234,40 +243,52 @@ export function TeamScreen() {
       )}
 
       <div className="space-y-2">
-        {challenge.team.map(member => (
-          <Card key={member.id} className={`!p-4 ${member.status === "invited" ? "opacity-70" : ""}`}>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center font-extrabold text-sm shrink-0">
-                {member.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-bold text-sm">{member.name}</p>
-                  {roleBadge(member.role, member.status)}
+        {challenge.team.map(member => {
+          const participant = challenge.participants.find(p => p.uid === member.uid);
+          const isMe = member.uid === currentUser?.uid;
+          const canNavigate = member.status === "active" && member.uid;
+          return (
+            <Card key={member.id} className={`!p-4 ${member.status === "invited" ? "opacity-70" : ""}`}>
+              <div className="flex items-center gap-3">
+                <Av
+                  ini={member.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
+                  photoUrl={participant?.photoUrl}
+                  sz="md"
+                  admin={member.role !== "participant"}
+                  onClick={canNavigate ? () => navigate(`/participants/${member.uid}`) : undefined}
+                />
+                <div
+                  className={`flex-1 min-w-0 ${canNavigate && !isMe ? "cursor-pointer" : ""}`}
+                  onClick={canNavigate && !isMe ? () => navigate(`/participants/${member.uid}`) : undefined}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold text-sm">{member.name}</p>
+                    {roleBadge(member.role, member.status)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {member.status === "invited" ? "Приглашение отправлено" : "Активен с"} {member.since}
+                  </p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {member.status === "invited" ? "Приглашение отправлено" : "Активен с"} {member.since}
-                </p>
+                {!isMe ? (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <select value={member.role} onChange={e => changeRole(member.id, e.target.value as OrgRole)}
+                      className="text-xs font-bold bg-muted border border-border rounded-lg px-2 py-1 outline-none cursor-pointer">
+                      <option value="helper">Помощник</option>
+                      <option value="owner">Совладелец</option>
+                    </select>
+                    <button onClick={() => removeMember(member)}
+                      className="w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors">
+                      <XCircle size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground italic shrink-0">вы</span>
+                )}
               </div>
-              {member.email !== currentUser?.email ? (
-                <div className="flex items-center gap-2 shrink-0">
-                  <select value={member.role} onChange={e => changeRole(member.id, e.target.value as OrgRole)}
-                    className="text-xs font-bold bg-muted border border-border rounded-lg px-2 py-1 outline-none cursor-pointer">
-                    <option value="helper">Помощник</option>
-                    <option value="owner">Совладелец</option>
-                  </select>
-                  <button onClick={() => removeMember(member.id)}
-                    className="w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors">
-                    <XCircle size={14} />
-                  </button>
-                </div>
-              ) : (
-                <span className="text-xs text-muted-foreground italic shrink-0">вы</span>
-              )}
-            </div>
-          </Card>
-        ))}
+            </Card>
+          );
+        })}
       </div>
 
       <div className="mt-5 p-3.5 bg-muted rounded-xl border border-border">

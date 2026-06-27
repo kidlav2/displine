@@ -48,7 +48,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
   return (
     <Card className="overflow-hidden">
       <div className="px-3.5 pt-3.5 pb-2.5 flex items-start gap-2.5">
-        <Av ini={item.ini} sz="sm" admin={item.isAdmin} onClick={() => p && onViewParticipant(p.uid)} />
+        <Av ini={item.ini} photoUrl={p?.photoUrl} sz="sm" admin={item.isAdmin} onClick={() => p && onViewParticipant(p.uid)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             {typeIcon[item.type]}

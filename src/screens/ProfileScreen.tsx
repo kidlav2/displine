@@ -43,7 +43,7 @@ export function ProfileScreen() {
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-6">
       <div className="flex flex-col items-center text-center pt-2">
-        <Av ini={meParticipant?.ini ?? "?"} sz="lg" accent />
+        <Av ini={meParticipant?.ini ?? "?"} photoUrl={meParticipant?.photoUrl} sz="lg" accent />
         <p className="font-extrabold text-2xl mt-3">{meParticipant?.name ?? "—"}</p>
         <p className="text-sm text-muted-foreground">{challenge.emoji} {challenge.name}</p>
       </div>

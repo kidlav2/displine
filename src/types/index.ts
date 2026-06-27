@@ -9,7 +9,7 @@ export type UserRole = "participant" | "helper" | "owner";
 export type OrgRole  = "owner" | "helper";
 
 export interface TeamMember {
-  id: string; email: string; name: string;
+  id: string; uid: string; email: string; name: string;
   role: OrgRole;
   status: "active" | "invited";
   since: string;
@@ -30,6 +30,7 @@ export interface DayResult { type: "running" | "task"; scoreKey: ScoreKey; }
 export interface Participant {
   uid: string;  // Firestore doc ID = Firebase Auth UID
   ini: string; name: string;
+  photoUrl?: string | null;
   lives: number; km: number;
   active: boolean; isAdmin: boolean;
   joinDate: string; penalties: Penalty[];

@@ -52,7 +52,7 @@ export function HomeScreen() {
 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Av ini={meParticipant?.ini ?? "?"} sz="md" accent />
+          <Av ini={meParticipant?.ini ?? "?"} photoUrl={meParticipant?.photoUrl} sz="md" accent />
           <div>
             <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">{challenge.emoji} {challenge.name}</p>
             <p className="font-extrabold text-xl leading-tight">День {challenge.currentDay}</p>
@@ -184,7 +184,7 @@ export function HomeScreen() {
           {top3.map((p, i) => (
             <div key={p.uid} className="flex items-center gap-3">
               <span className="text-base w-5 text-center shrink-0">{["🥇", "🥈", "🥉"][i]}</span>
-              <Av ini={p.ini} sz="sm" admin={p.isAdmin} onClick={() => onViewParticipant(p.uid)} />
+              <Av ini={p.ini} photoUrl={p.photoUrl} sz="sm" admin={p.isAdmin} onClick={() => onViewParticipant(p.uid)} />
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-bold leading-none truncate">{p.name}</p>
