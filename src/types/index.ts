@@ -53,6 +53,7 @@ export interface FeedItem {
   ini: string; name: string; isAdmin: boolean;
   type: string; taskTitle: string;
   text: string; time: string;
+  checkInPhotoUrl?: string | null;
   photoUrl: string | null;
   submissionStatus: "approved" | "pending" | "rejected" | null;
   organizerComment: string | null;
@@ -74,6 +75,7 @@ export interface ReviewItem {
   isLate: boolean;
   scoreKey: ScoreKey;
   text: string;
+  checkInPhotoUrl?: string | null;
   photoUrl: string | null;
 }
 

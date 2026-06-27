@@ -8,6 +8,7 @@ import { Av } from "./Av";
 import { Card } from "./Card";
 import { ScorePill } from "./ScorePill";
 import { StatusBadge } from "./StatusBadge";
+import { Lightbox } from "./Lightbox";
 import { BRAND_COLOR } from "../../constants/design";
 import type { FeedItem, Participant } from "../../types";
 
@@ -27,6 +28,9 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
   const liked = currentUserId ? item.likes.includes(currentUserId) : false;
   const [inputOpen, setInputOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxStartIdx, setLightboxStartIdx] = useState(0);
+  const photos = ([item.checkInPhotoUrl, item.photoUrl].filter(Boolean)) as string[];
   const MAX = 60;
   const p = participants.find(x => x.uid === item.participantId);
   const isSystem = item.type.startsWith("system:");
@@ -97,15 +101,39 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
       </div>
 
       {hasPhoto && (
-        item.photoUrl ? (
-          <div className="mx-3.5 rounded-xl overflow-hidden bg-gray-100" style={{ height: 180 }}>
-            <img src={item.photoUrl} alt="Proof photo" className="w-full h-full object-cover" />
+        photos.length >= 2 ? (
+          <div className="mx-3.5 flex gap-1.5">
+            {photos.map((src, i) => (
+              <button
+                key={i}
+                className="relative flex-1 rounded-xl overflow-hidden bg-gray-100"
+                style={{ height: 160 }}
+                onClick={() => { setLightboxStartIdx(i); setLightboxOpen(true); }}
+              >
+                <img src={src} alt={i === 0 ? "Отметка" : "Результат"} className="w-full h-full object-cover" />
+                <span className="absolute bottom-1.5 left-1.5 text-[9px] font-bold text-white bg-black/60 px-1.5 py-0.5 rounded-md">
+                  {i === 0 ? "Отметка" : "Результат"}
+                </span>
+              </button>
+            ))}
           </div>
+        ) : photos.length === 1 ? (
+          <button
+            className="mx-3.5 w-[calc(100%-1.75rem)] rounded-xl overflow-hidden bg-gray-100 block"
+            style={{ height: 180 }}
+            onClick={() => { setLightboxStartIdx(0); setLightboxOpen(true); }}
+          >
+            <img src={photos[0]} alt="Proof photo" className="w-full h-full object-cover" />
+          </button>
         ) : (
           <div className="mx-3.5 rounded-xl bg-muted flex items-center justify-center" style={{ height: 120 }}>
             <Camera size={24} className="text-muted-foreground" />
           </div>
         )
+      )}
+
+      {lightboxOpen && (
+        <Lightbox photos={photos} initialIndex={lightboxStartIdx} onClose={() => setLightboxOpen(false)} />
       )}
 
       {hasPhoto && (

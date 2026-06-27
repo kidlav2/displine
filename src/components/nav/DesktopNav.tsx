@@ -1,4 +1,4 @@
-import { Home, CheckSquare, Users, User, Settings, ChevronLeft } from "lucide-react";
+import { Home, CheckSquare, Users, User, Settings } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { BRAND_COLOR } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
@@ -33,11 +33,10 @@ function tabsForRole(role: UserRole): TabDef[] {
 }
 
 export function DesktopNav() {
-  const { challenge, userRole, setSelectedId } = useAppContext();
+  const { challenge, userRole } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
   const tabs = tabsForRole(userRole);
-  const isOwner = userRole === "owner";
 
   return (
     <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 w-60 bg-card border-r border-border">
@@ -55,14 +54,6 @@ export function DesktopNav() {
           <p className="text-xs font-semibold text-muted-foreground mt-3 truncate">{challenge.emoji} {challenge.name}</p>
         )}
       </div>
-
-      {isOwner && (
-        <button
-          onClick={() => { setSelectedId(null); navigate("/challenges"); }}
-          className="flex items-center gap-2 px-5 py-3 text-xs font-bold text-muted-foreground border-b border-border hover:bg-muted transition-colors">
-          <ChevronLeft size={13} /> Все челленджи
-        </button>
-      )}
 
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
         {tabs.map(({ path, Icon, label }) => {

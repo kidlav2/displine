@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Globe, Instagram, Link, CheckCircle2, LogOut } from "lucide-react";
 import { signOut } from "firebase/auth";
+import { updateDoc } from "firebase/firestore";
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
@@ -9,7 +10,7 @@ import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { auth } from "../lib/firebase";
-import { writeUserProfile } from "../lib/firestore";
+import { writeUserProfile, participantRef } from "../lib/firestore";
 
 export function ProfileScreen() {
   const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto, scoring } = useAppContext();
@@ -21,6 +22,30 @@ export function ProfileScreen() {
   const [otherLink, setOtherLink]   = useState(userProfile?.socialLinks?.other ?? "");
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
+  const [tzSaved, setTzSaved]       = useState(false);
+  const [tzSaving, setTzSaving]     = useState(false);
+
+  const handleTzChange = async (tz: string) => {
+    setAdminTz(tz);
+    setAdminTzAuto(false);
+    if (!currentUser) return;
+    setTzSaving(true);
+    try {
+      await Promise.all([
+        writeUserProfile(currentUser.uid, {
+          ...(userProfile ?? { name: "", ini: "", timezone: "UTC", challengeRoles: {} }),
+          timezone: tz,
+        }),
+        updateDoc(participantRef(challenge.id, currentUser.uid), { tz }),
+      ]);
+      setTzSaved(true);
+      setTimeout(() => setTzSaved(false), 4000);
+    } catch (e) {
+      console.error("[ProfileScreen] timezone save failed:", e);
+    } finally {
+      setTzSaving(false);
+    }
+  };
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -137,11 +162,22 @@ export function ProfileScreen() {
           {adminTzAuto && (
             <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-600 ml-1">авто</span>
           )}
+          {tzSaving && (
+            <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground ml-1">сохранение…</span>
+          )}
         </div>
-        <TimezoneSettings tz={adminTz} isAuto={adminTzAuto} onChange={tz => { setAdminTz(tz); setAdminTzAuto(false); }} />
-        <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
-          Используется для отображения вашего местного времени рядом со временем отправки участников в разделе проверки и ленте активности.
-        </p>
+        <TimezoneSettings tz={adminTz} isAuto={adminTzAuto} onChange={handleTzChange} />
+        {tzSaved && (
+          <p className="text-[11px] text-green-600 font-semibold mt-3 leading-snug flex items-center gap-1.5">
+            <CheckCircle2 size={13} />
+            Часовой пояс обновлён — изменения вступят в силу со следующего дня для всех новых заданий. Уже отправленные сегодня задания не пересчитываются.
+          </p>
+        )}
+        {!tzSaved && (
+          <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
+            Влияет на расчёт дней пробежки и дедлайнов. Уже отправленные задания не пересчитываются при смене часового пояса.
+          </p>
+        )}
       </Card>
 
       <button

@@ -1,4 +1,4 @@
-import { Home, CheckSquare, Users, User, Settings, ChevronLeft } from "lucide-react";
+import { Home, CheckSquare, Users, User, Settings } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { BRAND_COLOR } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
@@ -33,21 +33,13 @@ function tabsForRole(role: UserRole): TabDef[] {
 }
 
 export function TabBar() {
-  const { userRole, setSelectedId } = useAppContext();
+  const { userRole } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
   const tabs = tabsForRole(userRole);
-  const isOwner = userRole === "owner";
 
   return (
     <div className="flex flex-col bg-card border-t border-border">
-      {isOwner && (
-        <button
-          onClick={() => { setSelectedId(null); navigate("/challenges"); }}
-          className="flex items-center justify-center gap-1.5 py-2 text-[11px] font-bold text-muted-foreground border-b border-border/60 hover:bg-muted transition-colors">
-          <ChevronLeft size={13} /> Все челленджи
-        </button>
-      )}
       <div className="flex">
         {tabs.map(({ path, Icon, label }) => {
           const active = location.pathname === path;

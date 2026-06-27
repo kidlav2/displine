@@ -114,6 +114,7 @@ export function snapToFeedItem(snap: QueryDocumentSnapshot<DocumentData>): FeedI
     taskTitle:         d.taskTitle         ?? "",
     text:              d.text              ?? "",
     time:              timeStr,
+    checkInPhotoUrl:   d.checkInPhotoUrl   ?? null,
     photoUrl:          d.photoUrl          ?? null,
     submissionStatus:  d.submissionStatus  ?? null,
     organizerComment:  d.organizerComment  ?? null,
@@ -156,6 +157,7 @@ export function snapToReviewItem(snap: QueryDocumentSnapshot<DocumentData>): Rev
     isLate,
     scoreKey,
     text:            d.text             ?? "",
+    checkInPhotoUrl: d.checkInPhotoUrl  ?? null,
     photoUrl:        d.photoUrl         ?? null,
   };
 }
@@ -443,6 +445,7 @@ export async function submitProof(
 
   const now = serverTimestamp();
   let submissionId: string;
+  let checkInPhotoUrl: string | null = null;
 
   if (existingSubId) {
     // Upsert the check-in doc — works whether or not it was persisted:
@@ -465,6 +468,12 @@ export async function submitProof(
       organizerComment: null,
       pointsEarned:     0,
     }, { merge: true });
+
+    // Read back the check-in photo URL so it can be propagated to the feed doc
+    const existingSnap = await getDoc(submissionRef(challengeId, submissionId));
+    checkInPhotoUrl = existingSnap.exists()
+      ? (existingSnap.data().checkInPhotoUrl ?? null)
+      : null;
   } else {
     // No prior check-in. Use a deterministic daily ID so the submission can be
     // found by subscription after page reload, and resubmissions after rejection
@@ -504,6 +513,7 @@ export async function submitProof(
     taskTitle:        payload.taskTitle,
     text:             payload.text,
     time:             now,
+    checkInPhotoUrl,
     photoUrl,
     km:               payload.km ?? null,
     isLate:           payload.isLate ?? false,
@@ -556,10 +566,6 @@ export async function reviewSubmission(
     // Idempotency guard: skip if already reviewed (prevents double-approval race).
     if (subData.status !== "pending") return;
 
-    // Need participant lives for late penalty deduction
-    const pSnap = applyLatePenalty ? await tx.get(pRef) : null;
-    const currentLives = pSnap?.data()?.lives ?? 0;
-
     tx.update(subRef, { status: decision, organizerComment: comment || null, pointsEarned: pts });
     tx.update(feedRef, { submissionStatus: decision, organizerComment: comment || null, pointsEarned: pts });
 
@@ -567,7 +573,6 @@ export async function reviewSubmission(
       tx.update(pRef, {
         results: arrayUnion({ type: subData.type, scoreKey: effectiveScoreKey }),
         km: subData.km ? increment(subData.km) : increment(0),
-        ...(applyLatePenalty ? { lives: Math.max(0, currentLives - 1) } : {}),
       });
     }
   });

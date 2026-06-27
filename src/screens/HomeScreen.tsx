@@ -347,12 +347,12 @@ export function HomeScreen() {
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Card className="!p-4">
+        <Card className="!p-4 flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5 mb-2"><Wallet size={13} className="text-muted-foreground" /><SecLabel>Казна</SecLabel></div>
           <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{challenge.totalTreasury.toLocaleString("ru")}</p>
           <p className="text-xs text-muted-foreground mt-1">{challenge.settings.currency}</p>
         </Card>
-        <Card className="!p-4">
+        <Card className="!p-4 flex flex-col items-center text-center">
           <div className="flex items-center gap-1.5 mb-2"><TrendingUp size={13} className="text-muted-foreground" /><SecLabel>Дистанция</SecLabel></div>
           <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{totalKm % 1 === 0 ? totalKm : totalKm.toFixed(1)}</p>
           <p className="text-xs text-muted-foreground mt-1">км всего</p>

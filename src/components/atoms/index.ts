@@ -8,3 +8,4 @@ export { StatusBadge } from "./StatusBadge";
 export { DualTimestamp } from "./DualTimestamp";
 export { TimezoneSettings } from "./TimezoneSettings";
 export { FeedCard } from "./FeedCard";
+export { Lightbox } from "./Lightbox";

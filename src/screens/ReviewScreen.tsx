@@ -1,17 +1,18 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Camera, XCircle, CheckCircle2, Activity, CheckSquare, Layers } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Camera, Activity, CheckSquare, Layers } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp } from "../components/atoms";
+import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp, Lightbox } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { findCity, utcLabel, localNow } from "../lib/timezone";
-import { fmtDate, dayToDate, parseChallengeStartDate, todayISO } from "../lib/dates";
+import { fmtDate, dayToDate, parseChallengeStartDate } from "../lib/dates";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { reviewSubmission, createTask } from "../lib/firestore";
+import { reviewSubmission, logPenalty, type FeedActor } from "../lib/firestore";
+import { CreateTaskShell } from "../components/CreateTaskShell";
 import type { ReviewFilter, ReviewItem } from "../types";
 
 export function ReviewScreen() {
-  const { challenge, adminTz } = useAppContext();
+  const { challenge, adminTz, meParticipant } = useAppContext();
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
@@ -20,13 +21,9 @@ export function ReviewScreen() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [draftComment, setDraftComment] = useState("");
   const [actLoading, setActLoading] = useState(false);
+  const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
-  const [taskForm, setTaskForm] = useState({
-    date: todayISO(),
-    type: "checklist", title: "", desc: "", deadline: "23:59",
-  });
-  const [taskCreated, setTaskCreated] = useState(false);
-  const [taskError, setTaskError] = useState<string | null>(null);
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
@@ -61,35 +58,33 @@ export function ReviewScreen() {
         item.scoreKey,
         latePenalty
       );
+      if (latePenalty && status === "approved" && currentUser && meParticipant) {
+        const actor: FeedActor = {
+          uid: currentUser.uid,
+          name: meParticipant.name,
+          ini: meParticipant.ini,
+          isAdmin: meParticipant.isAdmin,
+        };
+        await logPenalty(
+          challenge.id,
+          item.participantId,
+          {
+            reason: "Опоздание на пробежку",
+            livesLost: 1,
+            amount: challenge.settings.penaltyAmount,
+            burpees: challenge.settings.burpees > 0 ? challenge.settings.burpees : undefined,
+            loggedBy: currentUser.uid,
+          },
+          actor,
+          item.name
+        );
+      }
     } catch (e) {
-      console.error("[ReviewScreen] reviewSubmission failed:", e);
+      console.error("[ReviewScreen] act failed:", e);
     } finally {
       setActLoading(false);
       setExpanded(null);
       setDraftComment("");
-    }
-  };
-
-  const submitTask = async () => {
-    if (!taskForm.title.trim() || !currentUser) return;
-    setTaskError(null);
-    try {
-      await createTask(challenge.id, {
-        date:        taskForm.date,
-        title:       taskForm.title.trim(),
-        description: taskForm.desc.trim(),
-        deadline:    taskForm.deadline,
-        type:        taskForm.type as "running" | "checklist" | "freeform",
-        createdBy:   currentUser.uid,
-      }, currentUser.uid);
-      setTaskCreated(true);
-      setTimeout(() => {
-        setShowCreate(false);
-        setTaskCreated(false);
-        setTaskForm(f => ({ ...f, title: "", desc: "" }));
-      }, 1500);
-    } catch {
-      setTaskError("Не удалось создать задание. Попробуйте снова.");
     }
   };
 
@@ -130,42 +125,68 @@ export function ReviewScreen() {
     </div>
   );
 
-  const expandDetail = (item: ReviewItem) => (
+  const expandDetail = (item: ReviewItem) => {
+    const runPhotos = ([item.checkInPhotoUrl, item.photoUrl].filter(Boolean)) as string[];
+    const taskPhotos = ([item.photoUrl].filter(Boolean)) as string[];
+
+    return (
     <div className="p-4 border-t border-border bg-muted/30">
       {/* Type-specific content */}
       {item.type === "running" && (
-        <div className="flex gap-3 mb-3">
-          {item.photoUrl ? (
-            <img src={item.photoUrl} alt="submission" className="w-24 h-16 lg:w-32 lg:h-20 rounded-xl object-cover shrink-0" />
-          ) : (
-            <div className="w-24 h-16 lg:w-32 lg:h-20 bg-muted rounded-xl flex items-center justify-center shrink-0">
-              <Camera size={18} className="text-muted-foreground" />
-            </div>
-          )}
-          <div className="flex-1 space-y-2">
-            <div className="flex gap-4 text-xs flex-wrap">
-              <div>
-                <p className="text-muted-foreground mb-1">Отметка</p>
-                <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} />
+        <div className="mb-3">
+          <div className="flex gap-2 mb-3">
+            {runPhotos.length >= 2 ? (
+              runPhotos.map((src, i) => (
+                <button
+                  key={i}
+                  className="relative rounded-xl overflow-hidden bg-muted shrink-0"
+                  style={{ width: 112, height: 80 }}
+                  onClick={() => { setLightboxPhotos(runPhotos); setLightboxIdx(i); }}
+                >
+                  <img src={src} alt={i === 0 ? "Отм." : "Рез."} className="w-full h-full object-cover" />
+                  <span className="absolute bottom-1 left-1 text-[9px] font-bold text-white bg-black/60 px-1 py-0.5 rounded">
+                    {i === 0 ? "Отм." : "Рез."}
+                  </span>
+                </button>
+              ))
+            ) : runPhotos.length === 1 ? (
+              <button
+                className="rounded-xl overflow-hidden bg-muted shrink-0"
+                style={{ width: 96, height: 64 }}
+                onClick={() => { setLightboxPhotos(runPhotos); setLightboxIdx(0); }}
+              >
+                <img src={runPhotos[0]} alt="submission" className="w-full h-full object-cover" />
+              </button>
+            ) : (
+              <div className="w-24 h-16 lg:w-32 lg:h-20 bg-muted rounded-xl flex items-center justify-center shrink-0">
+                <Camera size={18} className="text-muted-foreground" />
               </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Результат</p>
-                <DualTimestamp time={item.resultT} participantTz={item.participantTz} adminTz={adminTz} />
-              </div>
-              {item.km && (
+            )}
+            <div className="flex-1 space-y-2">
+              <div className="flex gap-4 text-xs flex-wrap">
                 <div>
-                  <p className="text-muted-foreground mb-1">Дистанция</p>
-                  <p className="font-bold">{item.km} км</p>
+                  <p className="text-muted-foreground mb-1">Отметка</p>
+                  <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} />
                 </div>
-              )}
-              <div>
-                <p className="text-muted-foreground mb-1">Опоздание</p>
-                <p className={`font-bold ${item.isLate ? "text-orange-500" : "text-green-500"}`}>
-                  {item.isLate ? "Да" : "Нет"}
-                </p>
+                <div>
+                  <p className="text-muted-foreground mb-1">Результат</p>
+                  <DualTimestamp time={item.resultT} participantTz={item.participantTz} adminTz={adminTz} />
+                </div>
+                {item.km && (
+                  <div>
+                    <p className="text-muted-foreground mb-1">Дистанция</p>
+                    <p className="font-bold">{item.km} км</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-muted-foreground mb-1">Опоздание</p>
+                  <p className={`font-bold ${item.isLate ? "text-orange-500" : "text-green-500"}`}>
+                    {item.isLate ? "Да" : "Нет"}
+                  </p>
+                </div>
               </div>
+              {item.text && <p className="text-xs text-muted-foreground leading-snug">{item.text}</p>}
             </div>
-            {item.text && <p className="text-xs text-muted-foreground leading-snug">{item.text}</p>}
           </div>
         </div>
       )}
@@ -173,7 +194,9 @@ export function ReviewScreen() {
       {item.type === "checklist" && (
         <div className="mb-3">
           {item.photoUrl && (
-            <img src={item.photoUrl} alt="submission" className="w-full max-h-40 rounded-xl object-cover mb-2" />
+            <button className="w-full mb-2" onClick={() => { setLightboxPhotos(taskPhotos); setLightboxIdx(0); }}>
+              <img src={item.photoUrl} alt="submission" className="w-full max-h-40 rounded-xl object-cover" />
+            </button>
           )}
           {item.text && (
             <div className="bg-muted rounded-xl px-3 py-2.5 text-sm text-muted-foreground leading-snug">
@@ -189,7 +212,9 @@ export function ReviewScreen() {
       {item.type === "freeform" && (
         <div className="mb-3">
           {item.photoUrl && (
-            <img src={item.photoUrl} alt="submission" className="w-full max-h-40 rounded-xl object-cover mb-2" />
+            <button className="w-full mb-2" onClick={() => { setLightboxPhotos(taskPhotos); setLightboxIdx(0); }}>
+              <img src={item.photoUrl} alt="submission" className="w-full max-h-40 rounded-xl object-cover" />
+            </button>
           )}
           {item.text && (
             <div className="bg-muted rounded-xl px-3 py-2.5 text-sm text-muted-foreground leading-snug">
@@ -226,8 +251,13 @@ export function ReviewScreen() {
           </button>
         </div>
       )}
+
+      {lightboxPhotos.length > 0 && (
+        <Lightbox photos={lightboxPhotos} initialIndex={lightboxIdx} onClose={() => setLightboxPhotos([])} />
+      )}
     </div>
   );
+  };
 
   const typeIcon = (type: ReviewItem["type"]) => {
     if (type === "running") return <Activity size={13} className="text-blue-400 shrink-0" />;
@@ -236,40 +266,8 @@ export function ReviewScreen() {
   };
 
   const createTaskModal = showCreate && (
-    <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/40 lg:p-8">
-      <div className="bg-card rounded-t-3xl lg:rounded-3xl w-full lg:max-w-[480px] px-5 pt-5 pb-8 lg:pb-5">
-        <div className="flex items-center justify-between mb-4">
-          <p className="font-extrabold text-lg">Создать задание</p>
-          <button onClick={() => setShowCreate(false)} className="w-8 h-8 rounded-xl border border-border flex items-center justify-center"><XCircle size={16} className="text-muted-foreground" /></button>
-        </div>
-        {taskCreated ? (
-          <div className="flex flex-col items-center py-8 gap-3"><CheckCircle2 size={40} className="text-green-500" /><p className="font-bold text-lg">Задание создано!</p></div>
-        ) : (
-          <div className="space-y-3">
-            <div><SecLabel>Тип задания</SecLabel>
-              <div className="flex gap-2 mt-1.5">
-                {[["running","Пробежка"],["checklist","Чеклист"],["freeform","Произвольное"]].map(([t, label]) => (
-                  <button key={t} onClick={() => setTaskForm(f => ({ ...f, type: t }))}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold border-2"
-                    style={taskForm.type === t ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>{label}</button>
-                ))}</div></div>
-            <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
-              <div><SecLabel>Название</SecLabel>
-                <input placeholder="напр. Читать 30 минут" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
-                  className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" /></div>
-              <div><SecLabel>Дедлайн</SecLabel>
-                <input value={taskForm.deadline} onChange={e => setTaskForm(f => ({ ...f, deadline: e.target.value }))}
-                  className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" /></div>
-            </div>
-            <div><SecLabel>Описание</SecLabel>
-              <textarea placeholder="Инструкции…" value={taskForm.desc} onChange={e => setTaskForm(f => ({ ...f, desc: e.target.value }))} rows={2}
-                className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" /></div>
-            {taskError && <p className="text-xs font-bold text-red-500 text-center">{taskError}</p>}
-            <button onClick={submitTask} disabled={!taskForm.title.trim()}
-              className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>Создать задание</button>
-          </div>
-        )}
-      </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-card">
+      <CreateTaskShell challengeId={challenge.id} onDone={() => setShowCreate(false)} />
     </div>
   );
 
