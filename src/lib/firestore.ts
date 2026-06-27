@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase";
+import { todayISOInTz } from "./dates";
 import type {
   ChallengeData, ChallengeSettings, DayResult,
   FeedItem, Participant, Penalty, ReviewItem,
@@ -292,7 +293,8 @@ export async function createChallenge(
 // ── Running check-in (persist before result submission) ───────────────────────
 
 /** Returns the deterministic submission doc ID for a participant's running check-in on a given day. */
-export const runCheckInSubId = (uid: string, dateStr: string) => `${uid}_${dateStr}`;
+export const runCheckInSubId  = (uid: string, dateStr: string) => `${uid}_${dateStr}`;
+export const taskSubmitSubId  = (uid: string, dateStr: string) => `${uid}_task_${dateStr}`;
 
 /**
  * Persist a running check-in to Firestore immediately when the participant
@@ -376,6 +378,28 @@ export function subscribeToTodayCheckIn(
   });
 }
 
+/** Subscribe to today's task submission (non-run) for a participant.
+ * Returns the submission status so TasksScreen / HomeScreen can restore UI after reload.
+ */
+export function subscribeToTodayTaskSubmission(
+  challengeId: string,
+  uid: string,
+  dateStr: string,
+  callback: (data: { subId: string; status: "pending" | "approved" | "rejected"; organizerComment: string | null } | null) => void
+): Unsubscribe {
+  const subId = taskSubmitSubId(uid, dateStr);
+  return onSnapshot(submissionRef(challengeId, subId), (snap) => {
+    if (!snap.exists()) { callback(null); return; }
+    const d = snap.data();
+    const s = d.status as string;
+    if (s === "pending" || s === "approved" || s === "rejected") {
+      callback({ subId, status: s, organizerComment: d.organizerComment ?? null });
+    } else {
+      callback(null); // checked_in or unknown
+    }
+  });
+}
+
 /** Submit a proof (photo + optional distance). Writes to submissions + feed.
  *  If `existingSubId` is provided (a persisted check-in doc), updates that doc
  *  instead of creating a new one, then creates the feed entry. */
@@ -435,8 +459,15 @@ export async function submitProof(
       pointsEarned:     0,
     }, { merge: true });
   } else {
-    // No prior check-in persisted — create submission from scratch
-    const submissionDocRef = await addDoc(submissionsCol(challengeId), {
+    // No prior check-in. Use a deterministic daily ID so the submission can be
+    // found by subscription after page reload, and resubmissions after rejection
+    // overwrite the same doc (instead of creating orphan docs).
+    const dateStr = todayISOInTz(participant.tz);
+    submissionId = payload.type === "running"
+      ? runCheckInSubId(participant.uid, dateStr)
+      : taskSubmitSubId(participant.uid, dateStr);
+
+    await setDoc(submissionRef(challengeId, submissionId), {
       participantUid:   participant.uid,
       ini:              participant.ini,
       name:             participant.name,
@@ -453,8 +484,7 @@ export async function submitProof(
       status:           "pending",
       organizerComment: null,
       pointsEarned:     0,
-    });
-    submissionId = submissionDocRef.id;
+    }, { merge: true });
   }
 
   // Create / update the feed entry (merge so existing likes/comments survive)

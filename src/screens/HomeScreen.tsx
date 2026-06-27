@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Camera, ExternalLink, Clock, Activity, Loader2,
-  Wallet, TrendingUp, MapPin, CheckCircle2, Zap, CalendarDays,
+  Wallet, TrendingUp, MapPin, CheckCircle2, XCircle, Zap, CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -9,7 +9,7 @@ import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { checkInForRun, subscribeToTodayCheckIn, runCheckInSubId } from "../lib/firestore";
+import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId } from "../lib/firestore";
 import { localNow, detectTz } from "../lib/timezone";
 import { todayISOInTz } from "../lib/dates";
 import type { SortKey } from "../types";
@@ -26,6 +26,9 @@ export function HomeScreen() {
   const [checkinTime, setCheckinTime] = useState<string | null>(null);
   const [checkInSubId, setCheckInSubId] = useState<string | null>(null);
   const [checkInLoading, setCheckInLoading] = useState(false);
+  const [taskStatusLoading, setTaskStatusLoading] = useState(true); // true until task subscription fires
+  const [taskSubmittedToday, setTaskSubmittedToday] = useState(false);
+  const [taskRejectedToday, setTaskRejectedToday] = useState(false);
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const cameraRef = useRef<HTMLInputElement>(null);
   const pct = (challenge.duration > 0 && !isNaN(challenge.currentDay))
@@ -104,11 +107,31 @@ export function HomeScreen() {
     }
   }, [challenge?.id, currentUser?.uid, meParticipant]);
 
+  // Subscribe to today's task submission to persist status across reloads
+  useEffect(() => {
+    if (!todayTask || !challenge?.id || !currentUser?.uid) { setTaskStatusLoading(false); return; }
+    return subscribeToTodayTaskSubmission(
+      challenge.id,
+      currentUser.uid,
+      participantTodayISO,
+      (data) => {
+        setTaskStatusLoading(false);
+        if (!data) { setTaskSubmittedToday(false); setTaskRejectedToday(false); return; }
+        if (data.status === "pending" || data.status === "approved") {
+          setTaskSubmittedToday(true); setTaskRejectedToday(false);
+        } else if (data.status === "rejected") {
+          setTaskSubmittedToday(false); setTaskRejectedToday(true);
+        }
+      }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [challenge?.id, currentUser?.uid, todayTask?.id]);
+
+  const todayTaskSubId = currentUser ? taskSubmitSubId(currentUser.uid, participantTodayISO) : null;
   const goSubmit = (t: "task" | "run") => {
-    const url = t === "run" && checkInSubId
-      ? `/app/tasks?type=run&subId=${checkInSubId}`
-      : `/app/tasks?type=${t}`;
-    navigate(url);
+    if (t === "run" && checkInSubId) return void navigate(`/app/tasks?type=run&subId=${checkInSubId}`);
+    if (t === "task" && todayTaskSubId) return void navigate(`/app/tasks?type=task&subId=${todayTaskSubId}`);
+    navigate(`/app/tasks?type=${t}`);
   };
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
@@ -162,9 +185,36 @@ export function HomeScreen() {
             <Zap size={13} style={{ color: BRAND_COLOR }} />
             <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{taskPts} оч. за выполнение</span>
           </div>
-          <button onClick={() => goSubmit("task")} className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
-            Отправить подтверждение
-          </button>
+          {taskStatusLoading ? (
+            <div className="flex justify-center py-3">
+              <Loader2 size={18} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : taskSubmittedToday ? (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
+              <CheckCircle2 size={16} className="text-blue-500 shrink-0" />
+              <div>
+                <p className="text-xs font-extrabold text-blue-700">Задание отправлено</p>
+                <p className="text-[11px] text-blue-500">Ожидает проверки организатора</p>
+              </div>
+            </div>
+          ) : taskRejectedToday ? (
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-200">
+                <XCircle size={16} className="text-red-500 shrink-0" />
+                <div>
+                  <p className="text-xs font-extrabold text-red-700">Отклонено организатором</p>
+                  <p className="text-[11px] text-red-500">Отправьте подтверждение снова</p>
+                </div>
+              </div>
+              <button onClick={() => goSubmit("task")} className="w-full py-3 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
+                Отправить снова
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => goSubmit("task")} className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
+              Отправить подтверждение
+            </button>
+          )}
         </Card>
       ) : (
         <Card className="!p-5">

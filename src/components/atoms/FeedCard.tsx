@@ -51,7 +51,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
     setDraft(""); setInputOpen(false);
   };
 
-  const hasPhoto = item.type === "running" || item.type === "checklist";
+  const hasPhoto = item.type === "running" || item.type === "checklist" || item.type === "freeform";
 
   // ── System event card (admin actions) ──────────────────────────────────────
   if (isSystem) {

@@ -151,14 +151,14 @@ service cloud.firestore {
         allow create: if isParticipant(challengeId) &&
           request.resource.data.participantUid == request.auth.uid;
         // Organizers approve/reject. Participants may:
-        //  - re-check-in (checked_in → checked_in, e.g. photo replaced)
-        //  - submit proof (checked_in or pending → pending)
+        //  - re-check-in (checked_in/rejected → checked_in, e.g. photo replaced)
+        //  - submit proof (checked_in/pending/rejected → pending, incl. resubmit after rejection)
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
            request.auth.uid == resource.data.participantUid &&
            (
-             (resource.data.status == "checked_in" && request.resource.data.status == "checked_in") ||
-             (resource.data.status in ["checked_in", "pending"] && request.resource.data.status == "pending")
+             (resource.data.status in ["checked_in", "rejected"] && request.resource.data.status == "checked_in") ||
+             (resource.data.status in ["checked_in", "pending", "rejected"] && request.resource.data.status == "pending")
            ));
         allow delete: if isOwner(challengeId);
       }

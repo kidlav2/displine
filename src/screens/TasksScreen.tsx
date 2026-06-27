@@ -1,12 +1,13 @@
-import { useState, useRef, useCallback } from "react";
-import { Camera, ImageIcon, CheckCircle2, Clock, ExternalLink, Loader2 } from "lucide-react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
-import { submitProof } from "../lib/firestore";
+import { submitProof, subscribeToTodayTaskSubmission, taskSubmitSubId } from "../lib/firestore";
 import { localNow } from "../lib/timezone";
+import { todayISOInTz } from "../lib/dates";
 import type { SubStatus } from "../types";
 
 export function TasksScreen() {
@@ -27,6 +28,35 @@ export function TasksScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // For tasks: deterministic daily subId so resubmits update same doc
+  const participantTodayISO = meParticipant ? todayISOInTz(meParticipant.tz) : "";
+  const taskSubId = (type === "task" && currentUser && participantTodayISO)
+    ? taskSubmitSubId(currentUser.uid, participantTodayISO)
+    : undefined;
+  // Use subId from URL (passed by HomeScreen) or fall back to generated one
+  const effectiveSubId = checkInSubId ?? taskSubId;
+
+  // Subscribe to today's task submission to restore status after reload
+  useEffect(() => {
+    if (type !== "task" || !challenge?.id || !currentUser?.uid || !participantTodayISO) return;
+    return subscribeToTodayTaskSubmission(
+      challenge.id, currentUser.uid, participantTodayISO,
+      (data) => {
+        if (!data) return;
+        if (data.status === "pending" || data.status === "approved") {
+          setStatus("pending"); // reuse pending screen for both
+        } else if (data.status === "rejected") {
+          setStatus("idle"); // stay on form
+          setSubmitError(
+            data.organizerComment
+              ? `Отклонено: ${data.organizerComment}. Отправьте снова.`
+              : "Организатор отклонил. Отправьте подтверждение снова."
+          );
+        }
+      }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [challenge?.id, currentUser?.uid, type, participantTodayISO]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,7 +115,7 @@ export function TasksScreen() {
           pointsEarned: pts,
         },
         (pct) => setUploadPct(pct),
-        checkInSubId  // updates the persisted checked-in doc if it exists
+        effectiveSubId  // updates the persisted doc (run check-in or task's daily ID)
       );
       setStatus("pending");
     } catch (err) {
@@ -190,7 +220,10 @@ export function TasksScreen() {
       )}
 
       {submitError && (
-        <p className="text-xs font-bold text-red-500 text-center">{submitError}</p>
+        <div className="flex items-start gap-2 px-1">
+          <XCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+          <p className="text-xs font-bold text-red-500">{submitError}</p>
+        </div>
       )}
 
       <button
