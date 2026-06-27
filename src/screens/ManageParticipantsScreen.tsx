@@ -10,9 +10,13 @@ import { setParticipantLives, promoteParticipantToTeam, demoteTeamMember, remove
 import type { OrgRole } from "../types";
 
 export function ManageParticipantsScreen() {
-  const { challenge, isOwner, scoring } = useAppContext();
+  const { challenge, isOwner, scoring, meParticipant } = useAppContext();
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
+
+  const actor = (currentUser && meParticipant)
+    ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
+    : undefined;
 
   const [confirmingRemove, setConfirmingRemove] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -21,8 +25,9 @@ export function ManageParticipantsScreen() {
   const adjustLives = async (uid: string, current: number, delta: number) => {
     const next = Math.max(0, Math.min(5, current + delta));
     setError(null);
+    const target = challenge.participants.find(p => p.uid === uid);
     try {
-      await setParticipantLives(challenge.id, uid, next);
+      await setParticipantLives(challenge.id, uid, next, actor, target?.name);
     } catch {
       setError("Не удалось изменить жизни.");
     }
@@ -32,7 +37,7 @@ export function ManageParticipantsScreen() {
     setActionLoading(uid);
     setError(null);
     try {
-      await promoteParticipantToTeam(challenge.id, uid, name, role);
+      await promoteParticipantToTeam(challenge.id, uid, name, role, actor);
     } catch {
       setError("Не удалось изменить роль.");
     } finally {
@@ -43,8 +48,9 @@ export function ManageParticipantsScreen() {
   const handleDemote = async (uid: string) => {
     setActionLoading(uid);
     setError(null);
+    const target = challenge.participants.find(p => p.uid === uid);
     try {
-      await demoteTeamMember(challenge.id, uid);
+      await demoteTeamMember(challenge.id, uid, actor, target?.name);
     } catch {
       setError("Не удалось изменить роль.");
     } finally {
@@ -55,8 +61,9 @@ export function ManageParticipantsScreen() {
   const handleRemove = async (uid: string, wasTeamMember: boolean) => {
     setActionLoading(uid);
     setError(null);
+    const target = challenge.participants.find(p => p.uid === uid);
     try {
-      await removeParticipantFromChallenge(challenge.id, uid, wasTeamMember);
+      await removeParticipantFromChallenge(challenge.id, uid, wasTeamMember, actor, target?.name);
       setConfirmingRemove(null);
     } catch {
       setError("Не удалось удалить участника.");

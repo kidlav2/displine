@@ -17,6 +17,11 @@ export function ParticipantProfile() {
   const { challenge, isAdmin, isOwner, scoring } = useAppContext();
   const { currentUser } = useAuthContext();
 
+  const meParticipant = challenge.participants.find(p => p.uid === currentUser?.uid);
+  const actor = (currentUser && meParticipant)
+    ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
+    : undefined;
+
   const participant = challenge.participants.find(p => p.uid === uid);
 
   const [penaltyForm, setPenaltyForm]     = useState(false);
@@ -50,7 +55,7 @@ export function ParticipantProfile() {
 
   const onRemoveLife = async () => {
     setActionLoading(true);
-    try { await removeLife(challenge.id, participant.uid); }
+    try { await removeLife(challenge.id, participant.uid, actor, participant.name); }
     finally { setActionLoading(false); }
   };
 
@@ -58,7 +63,7 @@ export function ParticipantProfile() {
     if (!currentUser) return;
     setActionLoading(true);
     try {
-      await logPenalty(challenge.id, participant.uid, { ...pen, loggedBy: currentUser.uid });
+      await logPenalty(challenge.id, participant.uid, { ...pen, loggedBy: currentUser.uid }, actor, participant.name);
       setPenaltyReason(""); setPenaltyForm(false);
     } finally { setActionLoading(false); }
   };

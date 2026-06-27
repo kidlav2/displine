@@ -533,10 +533,49 @@ export async function addComment(
   });
 }
 
+// ── System feed event helper ─────────────────────────────────────────────────
+
+/** Actor info required for system feed events. */
+export interface FeedActor {
+  uid: string;
+  name: string;
+  ini: string;
+  isAdmin: boolean;
+}
+
+/** Write a system/admin event to the challenge feed (no submission doc). */
+async function writeFeedSystemEvent(
+  challengeId: string,
+  actor: FeedActor,
+  type: string,
+  text: string,
+): Promise<void> {
+  await addDoc(feedCol(challengeId), {
+    participantId:    actor.uid,
+    ini:              actor.ini,
+    name:             actor.name,
+    isAdmin:          actor.isAdmin,
+    type,
+    taskTitle:        "",
+    text,
+    time:             serverTimestamp(),
+    photoUrl:         null,
+    km:               null,
+    isLate:           false,
+    pointsEarned:     0,
+    submissionStatus: null,
+    organizerComment: null,
+    likes:            [],
+    socialComments:   [],
+  });
+}
+
 /** Remove a life from a participant. Owner only. */
 export async function removeLife(
   challengeId: string,
-  participantUid: string
+  participantUid: string,
+  actor?: FeedActor,
+  targetName?: string,
 ): Promise<void> {
   const pRef = participantRef(challengeId, participantUid);
   await runTransaction(db, async (tx) => {
@@ -545,13 +584,19 @@ export async function removeLife(
     const lives = Math.max(0, (snap.data().lives ?? 1) - 1);
     tx.update(pRef, { lives, active: lives > 0 });
   });
+  if (actor && targetName) {
+    await writeFeedSystemEvent(challengeId, actor, "system:remove_life",
+      `снял жизнь у ${targetName}`);
+  }
 }
 
 /** Log a manual penalty. Writes to penalties subcollection + deducts life. */
 export async function logPenalty(
   challengeId: string,
   participantUid: string,
-  penalty: Omit<Penalty, "date"> & { loggedBy: string }
+  penalty: Omit<Penalty, "date"> & { loggedBy: string },
+  actor?: FeedActor,
+  targetName?: string,
 ): Promise<void> {
   const pRef = participantRef(challengeId, participantUid);
 
@@ -585,6 +630,12 @@ export async function logPenalty(
     loggedBy:  penalty.loggedBy,
     date:      serverTimestamp(),
   });
+  if (actor && targetName) {
+    const livesStr = penalty.livesLost > 0 ? ` −${penalty.livesLost} ❤️` : "";
+    const amountStr = penalty.amount > 0 ? `, ${penalty.amount} руб.` : "";
+    await writeFeedSystemEvent(challengeId, actor, "system:penalty",
+      `оштрафовал ${targetName}: ${penalty.reason}${livesStr}${amountStr}`);
+  }
 }
 
 /** Update top-level challenge fields (settings, name, emoji, etc.). */
@@ -599,12 +650,18 @@ export async function updateChallengeDoc(
 export async function setParticipantLives(
   challengeId: string,
   participantUid: string,
-  lives: number
+  lives: number,
+  actor?: FeedActor,
+  targetName?: string,
 ): Promise<void> {
   await updateDoc(participantRef(challengeId, participantUid), {
     lives: Math.max(0, Math.min(5, lives)),
     active: lives > 0,
   });
+  if (actor && targetName) {
+    await writeFeedSystemEvent(challengeId, actor, "system:lives",
+      `изменил жизни ${targetName} → ${lives}`);
+  }
 }
 
 /**
@@ -719,7 +776,8 @@ export async function promoteParticipantToTeam(
   challengeId: string,
   uid: string,
   name: string,
-  role: import("../types").OrgRole
+  role: import("../types").OrgRole,
+  actor?: FeedActor,
 ): Promise<void> {
   // Note: we intentionally do NOT update users/{uid}.challengeRoles here.
   // Security rules only allow a user to write their own profile, so updating
@@ -737,17 +795,28 @@ export async function promoteParticipantToTeam(
       invitedAt: serverTimestamp(),
     });
   });
+  if (actor) {
+    const roleLabel = role === "owner" ? "владельца" : "помощника";
+    await writeFeedSystemEvent(challengeId, actor, "system:promoted",
+      `повысил ${name} до ${roleLabel}`);
+  }
 }
 
 /** Demote a team member back to plain participant. Atomic transaction. */
 export async function demoteTeamMember(
   challengeId: string,
-  uid: string
+  uid: string,
+  actor?: FeedActor,
+  targetName?: string,
 ): Promise<void> {
   await runTransaction(db, async (tx) => {
     tx.update(participantRef(challengeId, uid), { role: "participant", isAdmin: false });
     tx.delete(teamMemberRef(challengeId, uid));
   });
+  if (actor && targetName) {
+    await writeFeedSystemEvent(challengeId, actor, "system:demoted",
+      `понизил ${targetName} до участника`);
+  }
 }
 
 /**
@@ -762,12 +831,18 @@ export async function demoteTeamMember(
 export async function removeParticipantFromChallenge(
   challengeId: string,
   uid: string,
-  wasTeamMember: boolean
+  wasTeamMember: boolean,
+  actor?: FeedActor,
+  targetName?: string,
 ): Promise<void> {
   await runTransaction(db, async (tx) => {
     tx.delete(participantRef(challengeId, uid));
     if (wasTeamMember) tx.delete(teamMemberRef(challengeId, uid));
   });
+  if (actor && targetName) {
+    await writeFeedSystemEvent(challengeId, actor, "system:removed",
+      `удалил ${targetName} из челленджа`);
+  }
 }
 
 /**

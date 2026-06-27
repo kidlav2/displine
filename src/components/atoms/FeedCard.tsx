@@ -1,7 +1,8 @@
 import { useState } from "react";
 import {
   Heart, Camera, CheckCircle2, XCircle, Activity, CheckSquare, Flame,
-  MessageCircle, Send, MapPin,
+  MessageCircle, Send, MapPin, UserX, ArrowUpCircle, ArrowDownCircle,
+  AlertCircle, Shield,
 } from "lucide-react";
 import { Av } from "./Av";
 import { Card } from "./Card";
@@ -28,13 +29,20 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
   const [draft, setDraft] = useState("");
   const MAX = 60;
   const p = participants.find(x => x.uid === item.participantId);
+  const isSystem = item.type.startsWith("system:");
 
   const typeIcon: Record<string, React.ReactNode> = {
-    running:    <Activity size={12} className="text-blue-400 shrink-0" />,
-    checklist:  <CheckSquare size={12} className="text-green-500 shrink-0" />,
-    streak:     <Flame size={12} style={{ color: BRAND_COLOR }} className="shrink-0" />,
-    eliminated: <XCircle size={12} className="text-gray-400 shrink-0" />,
-    joined:     <CheckCircle2 size={12} className="text-purple-400 shrink-0" />,
+    running:            <Activity size={12} className="text-blue-400 shrink-0" />,
+    checklist:          <CheckSquare size={12} className="text-green-500 shrink-0" />,
+    streak:             <Flame size={12} style={{ color: BRAND_COLOR }} className="shrink-0" />,
+    eliminated:         <XCircle size={12} className="text-gray-400 shrink-0" />,
+    joined:             <CheckCircle2 size={12} className="text-purple-400 shrink-0" />,
+    "system:removed":   <UserX size={12} className="text-red-400 shrink-0" />,
+    "system:promoted":  <ArrowUpCircle size={12} className="text-blue-400 shrink-0" />,
+    "system:demoted":   <ArrowDownCircle size={12} className="text-gray-400 shrink-0" />,
+    "system:lives":     <Heart size={12} className="text-orange-400 shrink-0" />,
+    "system:remove_life": <Heart size={12} className="text-red-400 shrink-0" />,
+    "system:penalty":   <AlertCircle size={12} className="text-red-400 shrink-0" />,
   };
 
   const send = () => {
@@ -45,6 +53,29 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
 
   const hasPhoto = item.type === "running" || item.type === "checklist";
 
+  // ── System event card (admin actions) ──────────────────────────────────────
+  if (isSystem) {
+    return (
+      <Card className="overflow-hidden opacity-90">
+        <div className="px-3.5 py-3 flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
+            {typeIcon[item.type] ?? <Shield size={12} className="text-muted-foreground" />}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs leading-snug">
+              <span className="font-bold">{item.name}</span>
+              {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500 ml-1">ORG</span>}
+              {" "}
+              <span className="text-muted-foreground">{item.text}</span>
+            </p>
+          </div>
+          <p className="text-[10px] text-muted-foreground shrink-0">{item.time}</p>
+        </div>
+      </Card>
+    );
+  }
+
+  // ── Regular submission card ─────────────────────────────────────────────────
   return (
     <Card className="overflow-hidden">
       <div className="px-3.5 pt-3.5 pb-2.5 flex items-start gap-2.5">

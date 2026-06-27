@@ -1,22 +1,31 @@
 import { useState } from "react";
-import { Globe, Instagram, Link, CheckCircle2 } from "lucide-react";
+import { Globe, Instagram, Link, CheckCircle2, LogOut } from "lucide-react";
+import { signOut } from "firebase/auth";
+import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
 import { TimezoneSettings } from "../components/atoms";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
+import { auth } from "../lib/firebase";
 import { writeUserProfile } from "../lib/firestore";
 
 export function ProfileScreen() {
   const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto, scoring } = useAppContext();
   const { currentUser, userProfile } = useAuthContext();
+  const navigate = useNavigate();
 
   const [bio, setBio]               = useState(userProfile?.bio ?? "");
   const [instagram, setInstagram]   = useState(userProfile?.socialLinks?.instagram ?? "");
   const [otherLink, setOtherLink]   = useState(userProfile?.socialLinks?.other ?? "");
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    navigate("/login", { replace: true });
+  };
 
   const saveBio = async () => {
     if (!currentUser || saving) return;
@@ -131,6 +140,14 @@ export function ProfileScreen() {
           Используется для отображения вашего местного времени рядом со временем отправки участников в разделе проверки и ленте активности.
         </p>
       </Card>
+
+      <button
+        onClick={handleLogout}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors"
+      >
+        <LogOut size={15} />
+        Выйти из аккаунта
+      </button>
     </div>
   );
 }
