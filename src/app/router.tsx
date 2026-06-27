@@ -174,7 +174,7 @@ interface ChallengePreview { name: string; emoji: string; description: string; i
 
 function OnboardingLayout() {
   const { setSelectedId } = useAppContext();
-  const { currentUser } = useAuthContext();
+  const { currentUser, userProfile } = useAuthContext();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code") ?? "";
@@ -206,6 +206,36 @@ function OnboardingLayout() {
       .catch(() => setInviteError("Не удалось загрузить челлендж. Проверьте подключение."))
       .finally(() => setInviteLoading(false));
   }, [code]);
+
+  // If the user is already authenticated, skip the login step.
+  // If they also have a profile and the invite is loaded, join and navigate directly.
+  useEffect(() => {
+    if (!currentUser || step !== "telegram" || inviteLoading) return;
+
+    if (userProfile && invite) {
+      const alreadyJoined = !!userProfile.challengeRoles?.[invite.challengeId];
+      if (alreadyJoined) {
+        setSelectedId(invite.challengeId);
+        navigate("/app/home", { replace: true });
+      } else {
+        joinChallengeAsParticipant(
+          invite.challengeId,
+          currentUser.uid,
+          { name: userProfile.name, ini: userProfile.ini, tz: userProfile.timezone },
+          invite.startingLives
+        ).then(() => {
+          setSelectedId(invite.challengeId);
+          navigate("/app/home", { replace: true });
+        });
+      }
+    } else if (userProfile && !invite && !inviteError) {
+      // Invite still loading — wait (inviteLoading guard above handles this)
+    } else {
+      // Authenticated but no profile yet → show profile setup
+      setStep("profile");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser, userProfile, step, inviteLoading, invite]);
 
   const preview: ChallengePreview | undefined = invite ?? undefined;
 

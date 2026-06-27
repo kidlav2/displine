@@ -1,123 +1,125 @@
 import { useState, useRef, useCallback } from "react";
-import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Lock, Loader2 } from "lucide-react";
+import { Camera, ImageIcon, CheckCircle2, Clock, ExternalLink, Loader2 } from "lucide-react";
 import { useSearchParams } from "react-router";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { storage } from "../lib/firebase";
 import { useAuthContext } from "../contexts/AuthContext";
+import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
-import { SCORE } from "../constants/scoring";
+import { submitProof } from "../lib/firestore";
 import type { SubStatus } from "../types";
 
 export function TasksScreen() {
   const [searchParams] = useSearchParams();
   const type = (searchParams.get("type") ?? "task") as "task" | "run";
-  const { currentUser } = useAuthContext();
 
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const { currentUser } = useAuthContext();
+  const { challenge, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
+
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [dist, setDist] = useState("");
-  const [durationMin, setDurationMin] = useState("");
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState<SubStatus>("idle");
-  const [rejectReason, setRejectReason] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !currentUser) return;
-
-    // Show local preview immediately
-    const localUrl = URL.createObjectURL(file);
-    setPhotoUrl(localUrl);
-    setUploading(true);
-
-    try {
-      const path = `submissions/${currentUser.uid}/${Date.now()}_${file.name}`;
-      const snap = await uploadBytes(storageRef(storage, path), file);
-      const downloadUrl = await getDownloadURL(snap.ref);
-      setPhotoUrl(downloadUrl);
-    } catch {
-      // Keep local preview even if upload fails — submit will retry
-    } finally {
-      setUploading(false);
-    }
-    // Reset input so the same file can be re-selected
+    if (!file) return;
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
     e.target.value = "";
-  }, [currentUser]);
+  }, []);
 
-  const canSubmit = !!photoUrl && (type === "task" || dist.length > 0);
+  const canSubmit = !!photoFile && (type === "task" || dist.length > 0);
 
-  const submit = () => {
-    if (!canSubmit) return;
-    // Auto-validate minimum run duration if set on the task
-    // TODO: read minDurationMin from todayTask once wired through context
-    setStatus("pending");
-    setTimeout(() => setStatus("approved"), 3000);
+  const submit = async () => {
+    if (!canSubmit || submitting || !currentUser || !meParticipant) return;
+    setSubmitting(true);
+    setUploadPct(0);
+    try {
+      const subType = type === "run" ? "running" : (todayTask?.type ?? "freeform");
+
+      // Determine late status
+      const [dh, dm] = todayDeadline.split(":").map(Number);
+      const deadline = new Date();
+      deadline.setHours(dh, dm, 0, 0);
+      const isLate = new Date() > deadline;
+
+      const scoreKey = type === "run"
+        ? (isLate ? "running_late" : "running_on_time")
+        : "task_completed";
+      const pts = scoring.find(e => e.key === scoreKey)?.points ?? 0;
+
+      await submitProof(
+        challenge.id,
+        {
+          uid:     meParticipant.uid,
+          ini:     meParticipant.ini,
+          name:    meParticipant.name,
+          isAdmin: meParticipant.isAdmin,
+          tz:      meParticipant.tz,
+        },
+        {
+          type:        subType as "running" | "checklist" | "freeform",
+          taskTitle:   type === "run" ? "Утренняя пробежка" : (todayTask?.title ?? "Задание"),
+          text:        comment.trim(),
+          photoFile,
+          km:          type === "run" ? (parseFloat(dist) || undefined) : undefined,
+          isLate:      type === "run" ? isLate : false,
+          pointsEarned: pts,
+        },
+        (pct) => setUploadPct(pct)
+      );
+      setStatus("pending");
+    } catch (err) {
+      console.error("[TasksScreen] submitProof failed:", err);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const scoreInfo = type === "run"
-    ? `+${SCORE.running_on_time} pts on time · +${SCORE.running_late} pt if late`
-    : `+${SCORE.task_completed} pts on completion`;
-
-  if (status !== "idle") {
-    const cfg = {
-      pending:  { icon: <Clock size={28} className="text-amber-500" />,       ring: "border-amber-200 bg-amber-50",  title: "На проверке",   sub: "Организатор проверит ваше подтверждение в ближайшее время." },
-      approved: { icon: <CheckCircle2 size={28} className="text-green-500" />, ring: "border-green-200 bg-green-50", title: "Одобрено! ✓",  sub: `Вы заработали ${type === "run" ? SCORE.running_on_time : SCORE.task_completed} оч.` },
-      rejected: { icon: <XCircle size={28} className="text-red-500" />,        ring: "border-red-200 bg-red-50",     title: "Отклонено",     sub: null },
-    };
-    const c = cfg[status];
+  if (status === "pending") {
     return (
       <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-6 lg:pt-8 flex flex-col items-center text-center gap-4">
-        <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center mt-12 ${c.ring}`}>{c.icon}</div>
-        <p className="font-extrabold text-2xl">{c.title}</p>
-        {c.sub && <p className="text-sm text-muted-foreground max-w-[230px]">{c.sub}</p>}
-        {status === "rejected" && (
-          <Card className="!p-4 w-full text-left border-red-100">
-            <div className="flex items-center gap-1.5 mb-1"><Lock size={11} className="text-muted-foreground" /><SecLabel>Комментарий организатора</SecLabel></div>
-            <p className="text-sm">Фото нечёткое — пожалуйста, отправьте снова при лучшем освещении.</p>
-          </Card>
-        )}
-        {status === "rejected" && (
-          <button onClick={() => setStatus("idle")} className="px-8 py-3 rounded-xl border-2 border-foreground font-bold text-sm">Попробовать снова</button>
-        )}
+        <div className="w-20 h-20 rounded-full border-2 border-amber-200 bg-amber-50 flex items-center justify-center mt-12">
+          <Clock size={28} className="text-amber-500" />
+        </div>
+        <p className="font-extrabold text-2xl">На проверке</p>
+        <p className="text-sm text-muted-foreground max-w-[230px]">
+          Организатор проверит ваше подтверждение в ближайшее время.
+        </p>
+        <p className="text-xs text-muted-foreground mt-2">
+          Результат появится в ленте активности после проверки.
+        </p>
       </div>
     );
   }
 
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-6">
-      {/* Hidden file input — accepts both camera and gallery */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFile}
-      />
+      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
 
       <div>
         <SecLabel>{type === "run" ? "Утренняя пробежка" : "Задание на сегодня"}</SecLabel>
-        <p className="font-extrabold text-xl mt-1">{type === "run" ? "Загрузить результат пробежки" : "Читать 30 минут"}</p>
-        <p className="text-xs font-semibold mt-1 flex items-center gap-1" style={{ color: BRAND_COLOR }}>
-          <span style={{ color: BRAND_COLOR }}>⚡</span>{scoreInfo}
+        <p className="font-extrabold text-xl mt-1">
+          {type === "run" ? "Загрузить результат пробежки" : (todayTask?.title ?? "Задание")}
         </p>
+        {todayTask?.description && type !== "run" && (
+          <p className="text-sm text-muted-foreground mt-1 leading-snug">{todayTask.description}</p>
+        )}
       </div>
 
-      {/* Photo area */}
+      {/* Photo */}
       <button
         onClick={() => fileRef.current?.click()}
-        className={`w-full h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-colors overflow-hidden relative ${photoUrl ? "border-green-400" : "border-border bg-card"}`}
+        className={`w-full h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-colors overflow-hidden relative ${photoPreview ? "border-green-400" : "border-border bg-card"}`}
       >
-        {photoUrl ? (
+        {photoPreview ? (
           <>
-            <img src={photoUrl} alt="proof" className="absolute inset-0 w-full h-full object-cover" />
-            {uploading && (
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                <Loader2 size={28} className="text-white animate-spin" />
-              </div>
-            )}
-            {!uploading && (
+            <img src={photoPreview} alt="proof" className="absolute inset-0 w-full h-full object-cover" />
+            {!submitting && (
               <div className="absolute bottom-2 right-2 bg-green-500 rounded-full p-1">
                 <CheckCircle2 size={16} className="text-white" />
               </div>
@@ -144,16 +146,7 @@ export function TasksScreen() {
                 <input type="number" placeholder="5.0" value={dist} onChange={e => setDist(e.target.value)}
                   className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
                   style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 36, fontWeight: 900, lineHeight: 1 }} />
-                <span className="text-base font-bold text-muted-foreground mb-0.5">km</span>
-              </div>
-            </Card>
-            <Card className="!p-4">
-              <SecLabel>Длительность</SecLabel>
-              <div className="flex items-end gap-1.5 mt-2">
-                <input type="number" placeholder="30" value={durationMin} onChange={e => setDurationMin(e.target.value)}
-                  className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 36, fontWeight: 900, lineHeight: 1 }} />
-                <span className="text-base font-bold text-muted-foreground mb-0.5">min</span>
+                <span className="text-base font-bold text-muted-foreground mb-0.5">км</span>
               </div>
             </Card>
           </div>
@@ -166,7 +159,7 @@ export function TasksScreen() {
       <Card className="!p-4">
         <SecLabel>Комментарий</SecLabel>
         <textarea
-          placeholder="Расскажите о вашей тренировке…"
+          placeholder="Расскажите о вашей тренировке или задании…"
           value={comment}
           onChange={e => setComment(e.target.value)}
           rows={3}
@@ -174,13 +167,19 @@ export function TasksScreen() {
         />
       </Card>
 
+      {submitting && uploadPct > 0 && uploadPct < 100 && (
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{ width: `${uploadPct}%`, background: BRAND_COLOR }} />
+        </div>
+      )}
+
       <button
         onClick={submit}
-        disabled={!canSubmit || uploading}
-        className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
+        disabled={!canSubmit || submitting}
+        className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35 flex items-center justify-center gap-2"
         style={{ background: BRAND_COLOR }}
       >
-        {uploading ? "Загрузка…" : "Отправить"}
+        {submitting ? <><Loader2 size={16} className="animate-spin" /> Загрузка…</> : "Отправить"}
       </button>
     </div>
   );

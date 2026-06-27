@@ -4,6 +4,7 @@ import { BRAND_COLOR } from "../constants/design";
 import { useAuthContext } from "../contexts/AuthContext";
 import { writeUserProfile } from "../lib/firestore";
 import { detectTz } from "../lib/timezone";
+import { SecLabel } from "../components/atoms";
 import type { TelegramProfile } from "../types";
 
 interface ProfileSetupScreenProps {
@@ -19,10 +20,9 @@ function toIni(name: string): string {
 
 export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenProps) {
   const { currentUser } = useAuthContext();
-  // Pre-populate name from Telegram or Google; user can still edit it
-  const [name, setName]       = useState(telegramData?.displayName ?? currentUser?.displayName ?? "");
-  // Pre-populate photo thumbnail from Telegram or Google
-  const [thumb, setThumb]     = useState<string | null>(telegramData?.photoUrl ?? currentUser?.photoURL ?? null);
+  const [name, setName]   = useState(telegramData?.displayName ?? currentUser?.displayName ?? "");
+  const [thumb, setThumb] = useState<string | null>(telegramData?.photoUrl ?? currentUser?.photoURL ?? null);
+  const [bio, setBio]     = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -51,9 +51,9 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
         ini,
         timezone: detectTz(),
         challengeRoles: {},
+        ...(bio.trim()              && { bio: bio.trim() }),
         ...(currentUser.phoneNumber != null && { phone: currentUser.phoneNumber }),
         ...(currentUser.email       != null && { email: currentUser.email }),
-        // Prefer Telegram photo over OAuth photo; fall back to currentUser.photoURL
         ...(telegramData?.photoUrl != null
           ? { photoUrl: telegramData.photoUrl }
           : currentUser.photoURL != null
@@ -94,16 +94,28 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
           </p>
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4">
           <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">
             Ваше имя
           </p>
           <input
-            placeholder="e.g. Ерлан С."
+            placeholder="напр. Ерлан С."
             value={name}
             onChange={e => { setName(e.target.value); setError(null); }}
             onKeyDown={e => e.key === "Enter" && handleDone()}
             className="w-full px-4 py-3.5 bg-card border border-border rounded-xl text-base font-semibold outline-none placeholder-muted-foreground"
+          />
+        </div>
+
+        <div className="mb-6">
+          <SecLabel>О себе <span className="font-normal text-muted-foreground">(необязательно)</span></SecLabel>
+          <textarea
+            placeholder="Расскажите немного о себе…"
+            value={bio}
+            onChange={e => setBio(e.target.value)}
+            rows={2}
+            maxLength={280}
+            className="w-full mt-1.5 px-4 py-3 bg-card border border-border rounded-xl text-sm outline-none resize-none placeholder-muted-foreground"
           />
         </div>
 
