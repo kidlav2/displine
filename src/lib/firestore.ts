@@ -414,16 +414,26 @@ export async function submitProof(
   let submissionId: string;
 
   if (existingSubId) {
-    // Update the persisted checked-in doc: add result fields, move to "pending"
+    // Upsert the check-in doc — works whether or not it was persisted:
+    // setDoc with merge creates if absent, updates if present.
     submissionId = existingSubId;
-    await updateDoc(submissionRef(challengeId, submissionId), {
-      text:        payload.text,
+    await setDoc(submissionRef(challengeId, submissionId), {
+      participantUid:   participant.uid,
+      ini:              participant.ini,
+      name:             participant.name,
+      isAdmin:          participant.isAdmin,
+      participantTz:    participant.tz,
+      type:             payload.type,
+      taskTitle:        payload.taskTitle,
+      text:             payload.text,
       photoUrl,
-      km:          payload.km ?? null,
-      isLate:      payload.isLate ?? false,
-      status:      "pending",
-      submittedAt: now,
-    });
+      km:               payload.km ?? null,
+      isLate:           payload.isLate ?? false,
+      submittedAt:      now,
+      status:           "pending",
+      organizerComment: null,
+      pointsEarned:     0,
+    }, { merge: true });
   } else {
     // No prior check-in persisted — create submission from scratch
     const submissionDocRef = await addDoc(submissionsCol(challengeId), {

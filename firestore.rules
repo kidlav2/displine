@@ -145,7 +145,8 @@ service cloud.firestore {
       // ── Submissions subcollection ────────────────────────────────────────
       match /submissions/{submissionId} {
         allow read: if isOrganizer(challengeId) ||
-          resource.data.participantUid == request.auth.uid;
+          (resource == null && isParticipant(challengeId)) ||
+          (resource != null && resource.data.participantUid == request.auth.uid);
         // Participant may only submit on their own behalf.
         allow create: if isParticipant(challengeId) &&
           request.resource.data.participantUid == request.auth.uid;
