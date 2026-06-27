@@ -53,7 +53,7 @@ export const inviteRef         = (code: string)                     => doc(db, "
 function tsToString(ts: Timestamp | string | undefined): string {
   if (!ts) return "";
   if (typeof ts === "string") return ts;
-  return ts.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return ts.toDate().toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Participant {
@@ -83,7 +83,7 @@ export function snapToFeedItem(snap: QueryDocumentSnapshot<DocumentData>): FeedI
   const d = snap.data();
   const timeRaw = d.time;
   const timeStr = timeRaw instanceof Timestamp
-    ? timeRaw.toDate().toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })
+    ? timeRaw.toDate().toLocaleString("ru-RU", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })
     : (timeRaw ?? "");
   return {
     id:                snap.id,

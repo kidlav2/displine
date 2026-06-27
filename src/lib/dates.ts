@@ -19,11 +19,11 @@ export function dayToDate(day: number, start = CHALLENGE_START): Date {
 }
 
 export function fmtDate(d: Date): string {
-  return d.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "long", year: "numeric" });
 }
 
 export function fmtDateShort(d: Date): string {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
 /** Compute duration in whole days between two "YYYY-MM-DD" strings (inclusive of end date). */

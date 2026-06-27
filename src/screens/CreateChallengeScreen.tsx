@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, Plus, X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Hearts, Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, ALL_DAYS, CURRENCIES, bc } from "../constants/design";
+import { BRAND_COLOR, ALL_DAYS, CURRENCIES, DAY_LABELS, bc } from "../constants/design";
 import { DEFAULT_SCORING } from "../constants/scoring";
 import { useAuthContext } from "../contexts/AuthContext";
 import { createChallenge } from "../lib/firestore";
@@ -156,7 +156,7 @@ export function CreateChallengeScreen() {
                   <button onClick={() => toggleDay(d)}
                     className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 w-14 shrink-0 transition-colors"
                     style={selected ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                    {d}
+                    {DAY_LABELS[d]}
                   </button>
                   {selected && (
                     <input

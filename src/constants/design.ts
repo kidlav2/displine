@@ -5,6 +5,11 @@ export const BRAND_COLOR = "#F0614A";
 
 export const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
+/** Russian display labels for the English weekday keys used in runSchedule. */
+export const DAY_LABELS: Record<string, string> = {
+  Mon: "Пн", Tue: "Вт", Wed: "Ср", Thu: "Чт", Fri: "Пт", Sat: "Сб", Sun: "Вс",
+};
+
 export const CURRENCIES = [
   { symbol: "₸",   code: "KZT", label: "Tenge" },
   { symbol: "₽",   code: "RUB", label: "Ruble" },

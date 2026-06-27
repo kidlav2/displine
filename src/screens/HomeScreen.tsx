@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, bc } from "../constants/design";
+import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import type { SortKey } from "../types";
@@ -36,7 +36,7 @@ export function HomeScreen() {
   const goSubmit = (t: "task" | "run") => navigate(`/app/tasks?type=${t}`);
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
-  const runDayLabels = Object.keys(challenge.settings.runSchedule).join(" / ") || "—";
+  const runDayLabels = Object.keys(challenge.settings.runSchedule).map(d => DAY_LABELS[d] ?? d).join(" / ") || "—";
   const runOnTimePts = scoring.find(e => e.key === "running_on_time")?.points ?? 2;
   const runLatePts   = scoring.find(e => e.key === "running_late")?.points    ?? 1;
   const taskPts      = scoring.find(e => e.key === "task_completed")?.points  ?? 5;

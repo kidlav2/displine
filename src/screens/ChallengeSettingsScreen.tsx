@@ -2,24 +2,25 @@ import { useState } from "react";
 import { ChevronLeft, CheckCircle2, Plus, X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, ALL_DAYS, CURRENCIES, bc } from "../constants/design";
+import { BRAND_COLOR, ALL_DAYS, CURRENCIES, DAY_LABELS, bc } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { updateChallengeDoc } from "../lib/firestore";
 import { durationFromDates, addDays } from "../lib/dates";
 import type { ChallengeSettings, ScoringEntry } from "../types";
 
 function toInputDate(s: string): string {
+  if (!s) return "";
+  // Already ISO YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  // Legacy English format stored in Firestore (e.g. "Jun 14, 2026")
   const d = new Date(s);
   if (isNaN(d.getTime())) return "";
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+// Store dates as ISO strings so they parse reliably regardless of locale
 function fromInputDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return iso;
 }
 
 export function ChallengeSettingsScreen() {
@@ -150,7 +151,7 @@ export function ChallengeSettingsScreen() {
                   <button onClick={() => toggleDay(d)}
                     className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 w-14 shrink-0"
                     style={selected ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                    {d}
+                    {DAY_LABELS[d]}
                   </button>
                   {selected && (
                     <input

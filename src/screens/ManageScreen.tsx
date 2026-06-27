@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, ALL_DAYS, bc } from "../constants/design";
+import { BRAND_COLOR, ALL_DAYS, DAY_LABELS, bc } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { createTask, createTaskTemplate, createAchievementDoc } from "../lib/firestore";
@@ -91,7 +91,7 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
               <button onClick={() => toggleDay(d)}
                 className="w-14 py-1.5 rounded-xl text-xs font-bold border-2 shrink-0 transition-colors"
                 style={selected ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                {d}
+                {DAY_LABELS[d]}
               </button>
               {selected && (
                 <input type="time" value={runSchedule[d]} onChange={e => setDayTime(d, e.target.value)}
@@ -255,7 +255,7 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
                 <button key={d} onClick={() => toggleRepeatDay(d)}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-colors"
                   style={repeatDays.includes(d) ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                  {d}
+                  {DAY_LABELS[d]}
                 </button>
               ))}
             </div>
@@ -363,7 +363,7 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
                 <button key={d} onClick={() => toggleRepeatDay(d)}
                   className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 transition-colors"
                   style={repeatDays.includes(d) ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                  {d}
+                  {DAY_LABELS[d]}
                 </button>
               ))}
             </div>
