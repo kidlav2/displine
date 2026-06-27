@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import {
-  Camera, ExternalLink, Clock, Activity,
+  Camera, ExternalLink, Clock, Activity, Loader2,
   Wallet, TrendingUp, MapPin, CheckCircle2, Zap, CalendarDays,
 } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -8,19 +8,52 @@ import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
+import { useAuthContext } from "../contexts/AuthContext";
+import { checkInForRun, subscribeToTodayCheckIn, runCheckInSubId } from "../lib/firestore";
 import { localNow } from "../lib/timezone";
+import { todayISO } from "../lib/dates";
 import type { SortKey } from "../types";
 
 export function HomeScreen() {
   const { challenge, isRunDay, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
+  const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
   const [checkedIn, setCheckedIn] = useState(false);
   const [thumb, setThumb] = useState<string | null>(null);
   const [checkinTime, setCheckinTime] = useState<string | null>(null);
+  const [checkInSubId, setCheckInSubId] = useState<string | null>(null);
+  const [checkInLoading, setCheckInLoading] = useState(false);
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const cameraRef = useRef<HTMLInputElement>(null);
   const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
+
+  // Subscribe to today's persisted check-in so state survives browser reloads.
+  // On component mount, if a checked_in submission exists for today, restore
+  // the checked-in UI immediately without re-uploading anything.
+  useEffect(() => {
+    if (!challenge?.id || !currentUser?.uid || !isRunDay) return;
+    return subscribeToTodayCheckIn(
+      challenge.id,
+      currentUser.uid,
+      todayISO(),
+      (data) => {
+        if (data && !checkedIn) {
+          setCheckedIn(true);
+          setCheckInSubId(data.subId);
+          if (data.checkInAt) {
+            setCheckinTime(data.checkInAt.toLocaleTimeString("ru-RU", {
+              timeZone: meParticipant?.tz ?? "UTC",
+              hour: "2-digit",
+              minute: "2-digit",
+              hour12: false,
+            }));
+          }
+        }
+      }
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [challenge?.id, currentUser?.uid, isRunDay]);
 
   const myScore = calcScore(meParticipant?.results ?? [], scoring);
   const totalKm = challenge.participants.reduce((sum, p) => sum + (p.km ?? 0), 0);
@@ -30,15 +63,42 @@ export function HomeScreen() {
     .sort((a, b) => lbSort === "score" ? calcScore(b.results, scoring) - calcScore(a.results, scoring) : b.km - a.km)
     .slice(0, 3);
 
-  const handleCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCapture = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setThumb(URL.createObjectURL(file));
-    setCheckinTime(localNow(meParticipant?.tz ?? "UTC"));
-    setCheckedIn(true);
-  }, [meParticipant?.tz]);
+    if (!file || !currentUser?.uid || !challenge?.id || !meParticipant) return;
 
-  const goSubmit = (t: "task" | "run") => navigate(`/app/tasks?type=${t}`);
+    // Show check-in state immediately (optimistic) so the UI feels instant
+    const now = localNow(meParticipant.tz);
+    setThumb(URL.createObjectURL(file));
+    setCheckinTime(now);
+    setCheckedIn(true);
+    setCheckInLoading(true);
+
+    const subId = runCheckInSubId(currentUser.uid, todayISO());
+    setCheckInSubId(subId);
+
+    try {
+      await checkInForRun(
+        challenge.id,
+        subId,
+        { uid: meParticipant.uid, ini: meParticipant.ini, name: meParticipant.name,
+          isAdmin: meParticipant.isAdmin, tz: meParticipant.tz },
+        file
+      );
+    } catch (err) {
+      console.error("[HomeScreen] checkInForRun failed:", err);
+      // Keep the optimistic UI — the user can still proceed to submit their result
+    } finally {
+      setCheckInLoading(false);
+    }
+  }, [challenge?.id, currentUser?.uid, meParticipant]);
+
+  const goSubmit = (t: "task" | "run") => {
+    const url = t === "run" && checkInSubId
+      ? `/app/tasks?type=run&subId=${checkInSubId}`
+      : `/app/tasks?type=${t}`;
+    navigate(url);
+  };
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
   const runDayLabels = Object.keys(challenge.settings.runSchedule).map(d => DAY_LABELS[d] ?? d).join(" / ") || "—";
@@ -139,7 +199,14 @@ export function HomeScreen() {
                   {thumb ? <img src={thumb} alt="check-in" className="w-full h-full object-cover" /> : <Camera size={18} className="text-green-600" />}
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-extrabold text-green-700">Отмечено в {checkinTime ?? "—"}</span></div>
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    {checkInLoading
+                      ? <Loader2 size={13} className="text-green-500 animate-spin" />
+                      : <CheckCircle2 size={13} className="text-green-500" />}
+                    <span className="text-xs font-extrabold text-green-700">
+                      {checkInLoading ? "Сохранение…" : `Отмечено в ${checkinTime ?? "—"}`}
+                    </span>
+                  </div>
                   <p className="text-[11px] text-green-600 flex items-center gap-1"><MapPin size={10} /> GPS + время записаны</p>
                 </div>
               </div>

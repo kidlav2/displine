@@ -85,8 +85,13 @@ service cloud.firestore {
           // Participants can only read their own submissions
           resource.data.participantUid == request.auth.uid;
         allow create: if isParticipant(challengeId);
-        // Only organizers can update status (approve/reject)
-        allow update: if isOrganizer(challengeId);
+        // Organizers can approve/reject. Participants can add their result to
+        // their own checked-in submission (checked_in → pending transition only).
+        allow update: if isOrganizer(challengeId) ||
+          (isParticipant(challengeId) &&
+           request.auth.uid == resource.data.participantUid &&
+           resource.data.status == "checked_in" &&
+           request.resource.data.status == "pending");
         allow delete: if isOwner(challengeId);
       }
 

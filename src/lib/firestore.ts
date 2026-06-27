@@ -7,9 +7,10 @@
 import {
   collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
   addDoc, arrayUnion, arrayRemove, increment, deleteField,
-  Timestamp, runTransaction, serverTimestamp,
+  onSnapshot, Timestamp, runTransaction, serverTimestamp,
   type DocumentData,
   type QueryDocumentSnapshot,
+  type Unsubscribe,
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { db, storage } from "./firebase";
@@ -288,7 +289,91 @@ export async function createChallenge(
   return challengeId;
 }
 
-/** Submit a proof (photo + optional distance). Writes to submissions + feed. */
+// ── Running check-in (persist before result submission) ───────────────────────
+
+/** Returns the deterministic submission doc ID for a participant's running check-in on a given day. */
+export const runCheckInSubId = (uid: string, dateStr: string) => `${uid}_${dateStr}`;
+
+/**
+ * Persist a running check-in to Firestore immediately when the participant
+ * taps "check in." Creates a submission doc with status "checked_in" so the
+ * state survives a browser reload or tab close before the result is submitted.
+ *
+ * Uses a deterministic doc ID (uid_YYYY-MM-DD) so:
+ *  - Only one check-in per participant per day is possible.
+ *  - HomeScreen can subscribe to it directly without a composite index query.
+ */
+export async function checkInForRun(
+  challengeId: string,
+  subId: string,
+  participant: Pick<Participant, "uid" | "ini" | "name" | "isAdmin" | "tz">,
+  checkInPhotoFile: File | null,
+  onProgress?: (pct: number) => void
+): Promise<void> {
+  let checkInPhotoUrl: string | null = null;
+
+  if (checkInPhotoFile) {
+    const storageRef = ref(
+      storage,
+      `challenges/${challengeId}/submissions/${participant.uid}/${Date.now()}_checkin_${checkInPhotoFile.name}`
+    );
+    await new Promise<void>((resolve, reject) => {
+      const task = uploadBytesResumable(storageRef, checkInPhotoFile);
+      task.on(
+        "state_changed",
+        (snap) => onProgress?.(Math.round((snap.bytesTransferred / snap.totalBytes) * 100)),
+        reject,
+        async () => { checkInPhotoUrl = await getDownloadURL(task.snapshot.ref); resolve(); }
+      );
+    });
+  }
+
+  await setDoc(submissionRef(challengeId, subId), {
+    participantUid:   participant.uid,
+    ini:              participant.ini,
+    name:             participant.name,
+    isAdmin:          participant.isAdmin,
+    participantTz:    participant.tz,
+    type:             "running",
+    taskTitle:        "Утренняя пробежка",
+    text:             "",
+    photoUrl:         null,        // result photo added when result is submitted
+    km:               null,
+    isLate:           false,
+    status:           "checked_in",
+    checkInAt:        serverTimestamp(),
+    checkInPhotoUrl,
+    submittedAt:      null,
+    organizerComment: null,
+    pointsEarned:     0,
+  });
+}
+
+/**
+ * Subscribe to today's running check-in for the given participant.
+ * Calls back with { subId, checkInAt } when a check-in exists, or null when not.
+ * HomeScreen uses this to restore persisted check-in state after a reload.
+ */
+export function subscribeToTodayCheckIn(
+  challengeId: string,
+  uid: string,
+  dateStr: string,
+  callback: (data: { subId: string; checkInAt: Date | null } | null) => void
+): Unsubscribe {
+  const subId = runCheckInSubId(uid, dateStr);
+  return onSnapshot(submissionRef(challengeId, subId), (snap) => {
+    if (snap.exists() && snap.data().status === "checked_in") {
+      const ts = snap.data().checkInAt;
+      callback({ subId, checkInAt: ts instanceof Timestamp ? ts.toDate() : null });
+    } else {
+      callback(null);
+    }
+  });
+}
+
+/** Submit a proof (photo + optional distance). Writes to submissions + feed.
+ *  If `existingSubId` is provided (a persisted check-in doc), updates that doc
+ *  instead of creating a new one, then creates the feed entry. */
 export async function submitProof(
   challengeId: string,
   participant: Pick<Participant, "uid" | "ini" | "name" | "isAdmin" | "tz">,
@@ -301,7 +386,8 @@ export async function submitProof(
     isLate?: boolean;
     pointsEarned: number;
   },
-  onProgress?: (pct: number) => void
+  onProgress?: (pct: number) => void,
+  existingSubId?: string
 ): Promise<string> {
   let photoUrl: string | null = null;
 
@@ -320,46 +406,63 @@ export async function submitProof(
   }
 
   const now = serverTimestamp();
-  const submissionDocRef = await addDoc(submissionsCol(challengeId), {
-    participantUid: participant.uid,
-    ini:            participant.ini,
-    name:           participant.name,
-    isAdmin:        participant.isAdmin,
-    participantTz:  participant.tz,
-    type:           payload.type,
-    taskTitle:      payload.taskTitle,
-    text:           payload.text,
+  let submissionId: string;
+
+  if (existingSubId) {
+    // Update the persisted checked-in doc: add result fields, move to "pending"
+    submissionId = existingSubId;
+    await updateDoc(submissionRef(challengeId, submissionId), {
+      text:        payload.text,
+      photoUrl,
+      km:          payload.km ?? null,
+      isLate:      payload.isLate ?? false,
+      status:      "pending",
+      submittedAt: now,
+    });
+  } else {
+    // No prior check-in persisted — create submission from scratch
+    const submissionDocRef = await addDoc(submissionsCol(challengeId), {
+      participantUid:   participant.uid,
+      ini:              participant.ini,
+      name:             participant.name,
+      isAdmin:          participant.isAdmin,
+      participantTz:    participant.tz,
+      type:             payload.type,
+      taskTitle:        payload.taskTitle,
+      text:             payload.text,
+      photoUrl,
+      km:               payload.km ?? null,
+      isLate:           payload.isLate ?? false,
+      submittedAt:      now,
+      checkIn:          now,
+      status:           "pending",
+      organizerComment: null,
+      pointsEarned:     0,
+    });
+    submissionId = submissionDocRef.id;
+  }
+
+  // Create / update the feed entry (merge so existing likes/comments survive)
+  await setDoc(feedDocRef(challengeId, submissionId), {
+    participantId:    participant.uid,
+    ini:              participant.ini,
+    name:             participant.name,
+    isAdmin:          participant.isAdmin,
+    type:             payload.type,
+    taskTitle:        payload.taskTitle,
+    text:             payload.text,
+    time:             now,
     photoUrl,
-    km:             payload.km ?? null,
-    isLate:         payload.isLate ?? false,
-    submittedAt:    now,
-    checkIn:        now,
-    status:         "pending",
+    km:               payload.km ?? null,
+    isLate:           payload.isLate ?? false,
+    pointsEarned:     0,
+    submissionStatus: "pending",
     organizerComment: null,
-    pointsEarned:   0,  // set to actual value after approval
-  });
+    likes:            [],
+    socialComments:   [],
+  }, { merge: true });
 
-  // Mirror to feed immediately (shows as pending)
-  await setDoc(feedDocRef(challengeId, submissionDocRef.id), {
-    participantId:     participant.uid,
-    ini:               participant.ini,
-    name:              participant.name,
-    isAdmin:           participant.isAdmin,
-    type:              payload.type,
-    taskTitle:         payload.taskTitle,
-    text:              payload.text,
-    time:              now,
-    photoUrl,
-    km:                payload.km ?? null,
-    isLate:            payload.isLate ?? false,
-    pointsEarned:      0,
-    submissionStatus:  "pending",
-    organizerComment:  null,
-    likes:             [],
-    socialComments:    [],
-  });
-
-  return submissionDocRef.id;
+  return submissionId;
 }
 
 /** Organizer approve or reject a submission. Uses a transaction to atomically:

@@ -12,6 +12,9 @@ import type { SubStatus } from "../types";
 export function TasksScreen() {
   const [searchParams] = useSearchParams();
   const type = (searchParams.get("type") ?? "task") as "task" | "run";
+  // subId is set when the user checked in from HomeScreen — we update that doc
+  // instead of creating a new submission, so check-in and result are one record.
+  const checkInSubId = searchParams.get("subId") ?? undefined;
 
   const { currentUser } = useAuthContext();
   const { challenge, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
@@ -75,7 +78,8 @@ export function TasksScreen() {
           isLate:      type === "run" ? isLate : false,
           pointsEarned: pts,
         },
-        (pct) => setUploadPct(pct)
+        (pct) => setUploadPct(pct),
+        checkInSubId  // updates the persisted checked-in doc if it exists
       );
       setStatus("pending");
     } catch (err) {
