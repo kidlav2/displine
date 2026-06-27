@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, Shield, Globe, Minus, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon } from "lucide-react";
+import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck } from "lucide-react";
 import { useParams, useNavigate } from "react-router";
 import { getDoc } from "firebase/firestore";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -7,7 +7,7 @@ import { BRAND_COLOR, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { findCity, localNow, utcLabel } from "../lib/timezone";
 import { useAppContext } from "../contexts/AppContext";
-import { removeLife, logPenalty, userRef, getOrgNote, saveOrgNote } from "../lib/firestore";
+import { logPenalty, markPenaltyPaid, userRef, getOrgNote, saveOrgNote } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
 import type { Penalty, UserProfile } from "../types";
 
@@ -26,11 +26,13 @@ export function ParticipantProfile() {
 
   const [penaltyForm, setPenaltyForm]     = useState(false);
   const [penaltyReason, setPenaltyReason] = useState("");
-  const [penaltyAmount, setPenaltyAmount] = useState("5000");
+  const [penaltyAmount, setPenaltyAmount] = useState(String(challenge.settings.penaltyAmount || 5000));
+  const [penaltyBurpees, setPenaltyBurpees] = useState(String(challenge.settings.burpees || 0));
   const [orgNoteSaved, setOrgNoteSaved]   = useState(false);
   const [orgNote, setOrgNote]             = useState("");
   const [noteLoading, setNoteLoading]     = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [payingId, setPayingId]           = useState<string | null>(null);
   const [publicProfile, setPublicProfile] = useState<UserProfile | null>(null);
 
   // Fetch bio + social links from users/{uid}
@@ -53,12 +55,6 @@ export function ParticipantProfile() {
 
   const score = calcScore(participant.results, scoring);
 
-  const onRemoveLife = async () => {
-    setActionLoading(true);
-    try { await removeLife(challenge.id, participant.uid, actor, participant.name); }
-    finally { setActionLoading(false); }
-  };
-
   const onLogPenalty = async (pen: Omit<Penalty, "date">) => {
     if (!currentUser) return;
     setActionLoading(true);
@@ -66,6 +62,12 @@ export function ParticipantProfile() {
       await logPenalty(challenge.id, participant.uid, { ...pen, loggedBy: currentUser.uid }, actor, participant.name);
       setPenaltyReason(""); setPenaltyForm(false);
     } finally { setActionLoading(false); }
+  };
+
+  const onMarkPaid = async (penaltyId: string) => {
+    setPayingId(penaltyId);
+    try { await markPenaltyPaid(challenge.id, participant.uid, penaltyId); }
+    finally { setPayingId(null); }
   };
 
   const progressPct = challenge.duration > 0
@@ -168,16 +170,50 @@ export function ParticipantProfile() {
           ? <p className="text-sm text-muted-foreground mt-3 text-center py-2">Нарушений нет ✓</p>
           : <div className="mt-3">
               {participant.penalties.map((pen, i) => (
-                <div key={i} className="flex items-start gap-3 py-3 border-t border-border first:border-t-0">
-                  <AlertCircle size={13} className="text-red-400 shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{pen.reason}</p>
-                    <p className="text-xs text-muted-foreground">{pen.date}</p>
+                <div key={i} className="py-3 border-t border-border first:border-t-0">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle size={13} className={`shrink-0 mt-0.5 ${pen.paid ? "text-green-400" : "text-red-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold">{pen.reason}</p>
+                      <p className="text-xs text-muted-foreground">{pen.date}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {pen.amount > 0 && (
+                        <p className={`text-sm font-extrabold ${pen.paid ? "text-green-500 line-through" : "text-red-500"}`}>
+                          −{pen.amount.toLocaleString("ru")} ₸
+                        </p>
+                      )}
+                      {(pen.burpees ?? 0) > 0 && (
+                        <p className={`text-xs font-semibold mt-0.5 ${pen.paid ? "text-green-400 line-through" : "text-orange-500"}`}>
+                          {pen.burpees} бёрпи
+                        </p>
+                      )}
+                      {pen.livesLost > 0 && (
+                        <p className="text-xs text-red-400 flex items-center justify-end gap-0.5 mt-0.5">
+                          −{pen.livesLost}<Heart size={9} className="fill-red-400 text-red-400" />
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-extrabold text-red-500">−{pen.amount.toLocaleString("ru")} ₸</p>
-                    {pen.livesLost > 0 && <p className="text-xs text-red-400 flex items-center justify-end gap-0.5 mt-0.5">−{pen.livesLost}<Heart size={9} className="fill-red-400 text-red-400" /></p>}
-                  </div>
+                  {/* Mark as paid — only for organizers, only for unpaid penalties that have a penaltyId */}
+                  {isOwner && !pen.paid && pen.penaltyId && (
+                    <div className="mt-2 flex justify-end">
+                      <button
+                        onClick={() => onMarkPaid(pen.penaltyId!)}
+                        disabled={payingId === pen.penaltyId}
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-green-600 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg disabled:opacity-40"
+                      >
+                        <CheckCheck size={11} />
+                        {payingId === pen.penaltyId ? "…" : "Отметить как оплачено"}
+                      </button>
+                    </div>
+                  )}
+                  {pen.paid && (
+                    <div className="mt-1.5 flex items-center gap-1 justify-end">
+                      <CheckCircle2 size={11} className="text-green-500" />
+                      <span className="text-[10px] font-semibold text-green-600">Оплачено</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -196,22 +232,15 @@ export function ParticipantProfile() {
           </div>
           <Card className="!p-4 space-y-3 border-blue-100">
             {isOwner ? (
-              <>
-                <button onClick={onRemoveLife} disabled={participant.lives === 0 || actionLoading}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-red-100 bg-red-50 disabled:opacity-40 text-left">
-                  <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0"><Minus size={16} className="text-red-500" /></div>
-                  <div><p className="text-sm font-bold text-red-600">Снять жизнь</p><p className="text-xs text-red-400">Вычитает 1 жизнь (только владелец)</p></div>
-                </button>
-                <button onClick={() => setPenaltyForm(v => !v)}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-orange-100 bg-orange-50 text-left">
-                  <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0"><AlertCircle size={16} className="text-orange-500" /></div>
-                  <div><p className="text-sm font-bold text-orange-600">Записать штраф</p><p className="text-xs text-orange-400">Зафиксировать штраф вручную (только владелец)</p></div>
-                </button>
-              </>
+              <button onClick={() => setPenaltyForm(v => !v)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-orange-100 bg-orange-50 text-left">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0"><AlertCircle size={16} className="text-orange-500" /></div>
+                <div><p className="text-sm font-bold text-orange-600">Записать штраф</p><p className="text-xs text-orange-400">Зафиксировать штраф вручную</p></div>
+              </button>
             ) : (
               <div className="flex items-center gap-2 p-3 bg-muted rounded-xl">
                 <Lock size={13} className="text-muted-foreground shrink-0" />
-                <p className="text-xs text-muted-foreground">Изменение жизней и штрафов доступно только владельцам челленджа. Вы можете проверять отправки на вкладке «Проверка».</p>
+                <p className="text-xs text-muted-foreground">Запись штрафов доступна только владельцам челленджа. Вы можете проверять отправки на вкладке «Проверка».</p>
               </div>
             )}
             {penaltyForm && (
@@ -220,13 +249,24 @@ export function ParticipantProfile() {
                   className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
                 <div className="flex gap-2">
                   <input type="number" value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)}
-                    className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
-                  <span className="text-sm font-bold text-muted-foreground self-center">₸</span>
+                    className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" placeholder="Сумма" />
+                  <span className="text-sm font-bold text-muted-foreground self-center">{challenge.settings.currency}</span>
+                </div>
+                <div className="flex gap-2">
+                  <input type="number" value={penaltyBurpees} onChange={e => setPenaltyBurpees(e.target.value)}
+                    className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" placeholder="Бёрпи" />
+                  <span className="text-sm font-bold text-muted-foreground self-center">бёрпи</span>
                 </div>
                 <button
                   onClick={() => {
                     if (!penaltyReason.trim()) return;
-                    onLogPenalty({ reason: penaltyReason.trim(), livesLost: 1, amount: parseInt(penaltyAmount) || 5000 });
+                    const burpees = parseInt(penaltyBurpees) || 0;
+                    onLogPenalty({
+                      reason: penaltyReason.trim(),
+                      livesLost: 1,
+                      amount: parseInt(penaltyAmount) || 0,
+                      burpees: burpees > 0 ? burpees : undefined,
+                    });
                   }}
                   disabled={!penaltyReason.trim() || actionLoading}
                   className="w-full py-2.5 rounded-xl font-bold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>

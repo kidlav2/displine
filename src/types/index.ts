@@ -22,7 +22,15 @@ export type ReviewFilter  = "all" | "running" | "task";
 export type ManageSection = "main" | "create-task" | "create-achievement" | "participants" | "settings" | "team";
 export type ChallengeStatus = "active" | "completed" | "upcoming";
 
-export interface Penalty { date: string; reason: string; livesLost: number; amount: number; }
+export interface Penalty {
+  date: string;
+  reason: string;
+  livesLost: number;
+  amount: number;
+  burpees?: number;
+  paid?: boolean;
+  penaltyId?: string;
+}
 export interface SocialComment { ini: string; name: string; text: string; }
 
 export interface DayResult { type: "running" | "task"; scoreKey: ScoreKey; }

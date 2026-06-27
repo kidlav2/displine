@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Camera, ExternalLink, Clock, Activity, Loader2,
-  Wallet, TrendingUp, MapPin, CheckCircle2, XCircle, Zap, CalendarDays, AlertCircle,
+  Wallet, TrendingUp, MapPin, CheckCircle2, XCircle, Zap, CalendarDays, AlertCircle, RotateCcw,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -9,7 +9,7 @@ import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId } from "../lib/firestore";
+import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId, resetTodaySubmission } from "../lib/firestore";
 import { localNow, detectTz } from "../lib/timezone";
 import { todayISOInTz } from "../lib/dates";
 import type { SortKey } from "../types";
@@ -145,6 +145,18 @@ export function HomeScreen() {
   const runLatePts   = scoring.find(e => e.key === "running_late")?.points    ?? 1;
   const taskPts      = scoring.find(e => e.key === "task_completed")?.points  ?? 5;
 
+  // Color-code the running card based on deadline proximity (participant's own timezone).
+  // Green tint = still before the deadline; amber tint = deadline passed and not yet checked in.
+  // Once checked in the card shows its own post-check-in state so no tint is applied.
+  const nowTimeStr = new Date().toLocaleTimeString("en-US", {
+    timeZone: meParticipant?.tz ?? detectTz(),
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const isPastDeadline = !!todayDeadline && nowTimeStr > todayDeadline;
+  const runCardStyle = (isRunDay && !runApproved && !checkedIn)
+    ? { background: isPastDeadline ? "rgba(251,146,60,0.07)" : "rgba(74,222,128,0.08)" }
+    : undefined;
+
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-4">
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleCapture} className="hidden" />
@@ -179,14 +191,18 @@ export function HomeScreen() {
         </div>
       </Card>
 
-      {/* Penalty warning */}
-      {meParticipant?.penalties?.filter(p => p.amount > 0).map((p, i) => (
+      {/* Unpaid penalty warnings — only shown until organizer marks them as paid */}
+      {meParticipant?.penalties?.filter(p => !p.paid && p.amount > 0).map((p, i) => (
         <Card key={i} className="!p-4 border-2 border-orange-200 bg-orange-50">
           <div className="flex items-center gap-3">
             <AlertCircle size={16} className="text-orange-500 shrink-0" />
             <div>
-              <p className="text-xs font-extrabold text-orange-700">Штраф от организатора</p>
-              <p className="text-[11px] text-orange-600">{p.reason} — {p.amount} {challenge.settings.currency}</p>
+              <p className="text-xs font-extrabold text-orange-700">Неоплаченный штраф</p>
+              <p className="text-[11px] text-orange-600">
+                {p.reason}
+                {p.amount > 0 ? ` — ${p.amount.toLocaleString("ru")} ${challenge.settings.currency}` : ""}
+                {(p.burpees ?? 0) > 0 ? ` · ${p.burpees} бёрпи` : ""}
+              </p>
             </div>
           </div>
         </Card>
@@ -265,7 +281,7 @@ export function HomeScreen() {
       ) : null}
 
       {isRunDay && !runApproved && (
-        <Card className="!p-4">
+        <Card className="!p-4" style={runCardStyle}>
           <div className="flex items-center gap-2 mb-3">
             <Activity size={14} style={{ color: BRAND_COLOR }} />
             <SecLabel>Утренняя пробежка</SecLabel>
@@ -378,6 +394,56 @@ export function HomeScreen() {
           ))}
         </div>
       </Card>
+
+      {/* ── DEV ONLY ── Remove this block before launch ─────────────────────── */}
+      {import.meta.env.DEV && <DevResetButton
+        challengeId={challenge.id}
+        uid={currentUser?.uid ?? ""}
+        dateStr={participantTodayISO}
+        onReset={() => {
+          setCheckedIn(false);
+          setSubmittedToday(false);
+          setRunApproved(false);
+          setThumb(null);
+          setCheckinTime(null);
+          setCheckInSubId(null);
+          setTaskSubmittedToday(false);
+          setTaskApproved(false);
+          setTaskRejectedToday(false);
+        }}
+      />}
+      {/* ── END DEV ONLY ───────────────────────────────────────────────────── */}
     </div>
+  );
+}
+
+// ── DEV ONLY component — remove before launch ────────────────────────────────
+function DevResetButton({
+  challengeId, uid, dateStr, onReset,
+}: { challengeId: string; uid: string; dateStr: string; onReset: () => void }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleReset = async () => {
+    if (!uid || !challengeId) return;
+    setLoading(true);
+    try {
+      await resetTodaySubmission(challengeId, uid, dateStr);
+      onReset();
+    } catch (e) {
+      console.error("[DevReset] failed:", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleReset}
+      disabled={loading}
+      className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gray-300 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors disabled:opacity-40"
+    >
+      <RotateCcw size={12} />
+      {loading ? "Сброс…" : "[DEV] Сбросить чек-ин на сегодня"}
+    </button>
   );
 }

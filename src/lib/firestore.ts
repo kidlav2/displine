@@ -89,6 +89,9 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
       reason:    p.reason    ?? "",
       livesLost: p.livesLost ?? 0,
       amount:    p.amount    ?? 0,
+      burpees:   p.burpees   ?? undefined,
+      paid:      p.paid      ?? false,
+      penaltyId: p.penaltyId ?? undefined,
     })) as Penalty[],
   };
 }
@@ -657,6 +660,9 @@ export async function logPenalty(
   targetName?: string,
 ): Promise<void> {
   const pRef = participantRef(challengeId, participantUid);
+  // Generate the subcollection doc ref upfront so we can embed the ID in the array item.
+  const penaltyDocRef = doc(penaltiesCol(challengeId));
+  const penaltyId = penaltyDocRef.id;
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(pRef);
@@ -664,35 +670,46 @@ export async function logPenalty(
     const current = snap.data();
 
     const newLives = Math.max(0, (current.lives ?? 1) - (penalty.livesLost ?? 0));
+    const arrayItem: Record<string, unknown> = {
+      date:      Timestamp.now(),
+      reason:    penalty.reason,
+      livesLost: penalty.livesLost,
+      amount:    penalty.amount,
+      paid:      false,
+      penaltyId,
+    };
+    if (penalty.burpees !== undefined) arrayItem.burpees = penalty.burpees;
+
     tx.update(pRef, {
       lives:    newLives,
       active:   newLives > 0,
-      penalties: arrayUnion({
-        date:      Timestamp.now(),
-        reason:    penalty.reason,
-        livesLost: penalty.livesLost,
-        amount:    penalty.amount,
-      }),
+      penalties: arrayUnion(arrayItem),
     });
     tx.update(challengeRef(challengeId), {
       totalTreasury: increment(penalty.amount),
     });
   });
 
-  // Also write to penalties subcollection for querying
-  await addDoc(penaltiesCol(challengeId), {
+  // Write to penalties subcollection using the pre-generated ref.
+  const subcollDoc: Record<string, unknown> = {
     participantUid,
     reason:    penalty.reason,
     livesLost: penalty.livesLost,
     amount:    penalty.amount,
     loggedBy:  penalty.loggedBy,
+    paid:      false,
+    penaltyId,
     date:      serverTimestamp(),
-  });
+  };
+  if (penalty.burpees !== undefined) subcollDoc.burpees = penalty.burpees;
+  await setDoc(penaltyDocRef, subcollDoc);
+
   if (actor && targetName) {
-    const livesStr = penalty.livesLost > 0 ? ` −${penalty.livesLost} ❤️` : "";
-    const amountStr = penalty.amount > 0 ? `, ${penalty.amount} руб.` : "";
+    const livesStr  = penalty.livesLost > 0 ? ` −${penalty.livesLost} ❤️` : "";
+    const amountStr = penalty.amount > 0 ? `, ${penalty.amount.toLocaleString("ru")} ₸` : "";
+    const burpStr   = (penalty.burpees ?? 0) > 0 ? ` + ${penalty.burpees} бёрпи` : "";
     await writeFeedSystemEvent(challengeId, actor, "system:penalty",
-      `оштрафовал ${targetName}: ${penalty.reason}${livesStr}${amountStr}`);
+      `оштрафовал ${targetName}: ${penalty.reason}${livesStr}${amountStr}${burpStr}`);
   }
 }
 
@@ -1028,6 +1045,49 @@ export async function joinChallengeAsParticipant(
   });
   // Register the challenge role in the user's profile
   await addChallengeRole(uid, challengeId, "participant");
+}
+
+/**
+ * Mark a specific penalty as paid. Only the organizer should call this.
+ * Updates paid:true in both the participant's penalties array and the subcollection doc.
+ */
+export async function markPenaltyPaid(
+  challengeId: string,
+  participantUid: string,
+  penaltyId: string,
+): Promise<void> {
+  const pRef = participantRef(challengeId, participantUid);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(pRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const penalties = (data.penalties ?? []) as Array<Record<string, unknown>>;
+    const updated = penalties.map(p =>
+      p.penaltyId === penaltyId ? { ...p, paid: true } : p
+    );
+    tx.update(pRef, { penalties: updated });
+  });
+
+  await updateDoc(doc(penaltiesCol(challengeId), penaltyId), {
+    paid: true, paidAt: serverTimestamp(),
+  });
+}
+
+/**
+ * DEV ONLY — delete today's running check-in and task submission docs so the
+ * home-screen flow can be re-tested from scratch.
+ */
+export async function resetTodaySubmission(
+  challengeId: string,
+  uid: string,
+  dateStr: string,
+): Promise<void> {
+  const runRef  = submissionRef(challengeId, runCheckInSubId(uid, dateStr));
+  const taskRef = submissionRef(challengeId, taskSubmitSubId(uid, dateStr));
+  const [runSnap, taskSnap] = await Promise.all([getDoc(runRef), getDoc(taskRef)]);
+  if (runSnap.exists())  await deleteDoc(runRef);
+  if (taskSnap.exists()) await deleteDoc(taskRef);
 }
 
 // ── Organizer notes ───────────────────────────────────────────────────────────
