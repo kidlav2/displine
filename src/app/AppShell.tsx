@@ -29,16 +29,22 @@ function NoChallengeState() {
   );
 }
 
-function KickedState({ challengeName, challengeEmoji }: { challengeName: string; challengeEmoji: string }) {
+function KickedState({ challengeName, challengeEmoji }: { challengeName?: string; challengeEmoji?: string }) {
   const navigate = useNavigate();
   return (
     <div className="flex flex-col items-center justify-center min-h-full px-6 py-16 text-center gap-4">
       <p className="text-5xl">🚫</p>
       <div className="space-y-1.5">
         <p className="font-extrabold text-xl">Вы были удалены из челленджа</p>
-        <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
-          {challengeEmoji} <span className="font-semibold text-foreground">{challengeName}</span> — организатор удалил вас из этого челленджа.
-        </p>
+        {challengeName ? (
+          <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
+            {challengeEmoji} <span className="font-semibold text-foreground">{challengeName}</span> — организатор удалил вас из этого челленджа.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
+            Организатор удалил вас из челленджа. Чтобы участвовать снова, используйте ссылку-приглашение.
+          </p>
+        )}
       </div>
       <button
         onClick={() => navigate("/join")}
@@ -55,22 +61,26 @@ export function AppShell() {
   const { currentUser, userProfile } = useAuthContext();
   const { challenges, loading, challenge, meParticipant } = useAppContext();
 
+  const roleCount = userProfile ? Object.keys(userProfile.challengeRoles).length : 0;
+
   // Show the empty state only for real authenticated users whose join step
   // failed — i.e. they have a profile but no challenge roles and no challenges loaded.
   const showNoChallengeState =
     !loading &&
     !!currentUser &&
     !!userProfile &&
-    Object.keys(userProfile.challengeRoles).length === 0 &&
+    roleCount === 0 &&
     challenges.length === 0;
 
-  // Detect "kicked" state: challenge loaded + participants snapshot resolved (non-empty)
-  // but current user is no longer in the participants list.
+  // Detect "kicked" state in two scenarios:
+  // 1. Challenge is readable but user is absent from participants (participant doc deleted).
+  // 2. Challenge is no longer readable at all (Firestore rules denied access after removal) —
+  //    recognised by: loading done, no challenge loaded, but userProfile still lists roles.
   const showKickedState =
-    !loading &&
-    !!challenge &&
-    challenge.participants.length > 0 &&
-    !meParticipant;
+    !loading && (
+      (!!challenge && challenge.participants.length > 0 && !meParticipant) ||
+      (!challenge && !!currentUser && !!userProfile && roleCount > 0 && challenges.length === 0)
+    );
 
   const inner = (() => {
     if (loading) {
@@ -81,7 +91,7 @@ export function AppShell() {
       );
     }
     if (showNoChallengeState) return <NoChallengeState />;
-    if (showKickedState) return <KickedState challengeName={challenge!.name} challengeEmoji={challenge!.emoji} />;
+    if (showKickedState) return <KickedState challengeName={challenge?.name} challengeEmoji={challenge?.emoji} />;
     // Challenges loaded but selectedId points to a doc that didn't come back
     // (e.g. stale ID after challenge deletion). Show recovery UI rather than crash.
     if (!challenge) {

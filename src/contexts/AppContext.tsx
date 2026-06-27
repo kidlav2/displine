@@ -69,9 +69,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     setChallengeLoading(true);
+    let resolvedCount = 0;
     const unsubs = roleEntries.map(([cid]) =>
       onSnapshot(challengeRef(cid), (snap) => {
-        if (!snap.exists()) return;
+        if (!snap.exists()) {
+          // Challenge doc missing — count as resolved so loading unblocks.
+          resolvedCount++;
+          if (resolvedCount >= roleEntries.length) setChallengeLoading(false);
+          return;
+        }
         const d = snap.data();
         setChallenges(prev => {
           const existing = prev.find(c => c.id === cid);
@@ -113,6 +119,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         // Auto-select if this is the only challenge
         setSelectedId(prev => prev ?? (roleEntries.length === 1 ? cid : null));
+      }, (err) => {
+        // Permission denied (user removed from challenge) or network error.
+        // Unblock the loading state so the UI can show the appropriate fallback.
+        console.warn(`[AppContext] challenge ${cid} snapshot error:`, err.code);
+        resolvedCount++;
+        if (resolvedCount >= roleEntries.length) setChallengeLoading(false);
       })
     );
 
