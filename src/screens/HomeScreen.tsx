@@ -21,6 +21,7 @@ export function HomeScreen() {
 
   const [checkedIn, setCheckedIn] = useState(false);
   const [submittedToday, setSubmittedToday] = useState(false);
+  const [runStatusLoading, setRunStatusLoading] = useState(true); // true until subscription fires
   const [thumb, setThumb] = useState<string | null>(null);
   const [checkinTime, setCheckinTime] = useState<string | null>(null);
   const [checkInSubId, setCheckInSubId] = useState<string | null>(null);
@@ -36,12 +37,14 @@ export function HomeScreen() {
   // the checked-in UI immediately without re-uploading anything.
   const participantTodayISO = todayISOInTz(meParticipant?.tz ?? detectTz());
   useEffect(() => {
-    if (!challenge?.id || !currentUser?.uid || !isRunDay) return;
+    if (!isRunDay) { setRunStatusLoading(false); return; }
+    if (!challenge?.id || !currentUser?.uid) { setRunStatusLoading(false); return; }
     return subscribeToTodayCheckIn(
       challenge.id,
       currentUser.uid,
       participantTodayISO,
       (data) => {
+        setRunStatusLoading(false); // subscription fired — safe to show buttons
         if (data?.submitted) {
           setCheckedIn(true);
           setSubmittedToday(true);
@@ -187,7 +190,11 @@ export function HomeScreen() {
             <span className="text-border">·</span>
             <span className="flex items-center gap-1"><Clock size={10} /> до {todayDeadline}</span>
           </div>
-          {submittedToday ? (
+          {runStatusLoading ? (
+            <div className="flex justify-center py-3">
+              <Loader2 size={18} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : submittedToday ? (
             <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
               <CheckCircle2 size={16} className="text-blue-500 shrink-0" />
               <div>
