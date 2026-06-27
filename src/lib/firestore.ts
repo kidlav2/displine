@@ -358,13 +358,18 @@ export function subscribeToTodayCheckIn(
   challengeId: string,
   uid: string,
   dateStr: string,
-  callback: (data: { subId: string; checkInAt: Date | null } | null) => void
+  callback: (data: { subId: string; checkInAt: Date | null; submitted: boolean } | null) => void
 ): Unsubscribe {
   const subId = runCheckInSubId(uid, dateStr);
   return onSnapshot(submissionRef(challengeId, subId), (snap) => {
-    if (snap.exists() && snap.data().status === "checked_in") {
-      const ts = snap.data().checkInAt;
-      callback({ subId, checkInAt: ts instanceof Timestamp ? ts.toDate() : null });
+    if (!snap.exists()) { callback(null); return; }
+    const d = snap.data();
+    const ts = d.checkInAt;
+    const checkInAt = ts instanceof Timestamp ? ts.toDate() : null;
+    if (d.status === "checked_in") {
+      callback({ subId, checkInAt, submitted: false });
+    } else if (d.status === "pending" || d.status === "approved") {
+      callback({ subId, checkInAt, submitted: true });
     } else {
       callback(null);
     }
@@ -476,7 +481,8 @@ export async function reviewSubmission(
   participantUid: string,
   decision: "approved" | "rejected",
   comment: string,
-  scoreKey: import("../types").ScoreKey
+  scoreKey: import("../types").ScoreKey,
+  applyLatePenalty?: boolean
 ): Promise<void> {
   const subRef  = submissionRef(challengeId, submissionId);
   const feedRef = feedDocRef(challengeId, submissionId);
@@ -487,7 +493,12 @@ export async function reviewSubmission(
   const rawScoring = chalSnap.exists() ? chalSnap.data()?.settings?.scoring : null;
   const { parseScoring } = await import("../constants/scoring");
   const scoring = parseScoring(rawScoring);
-  const entry = scoring.find(e => e.key === scoreKey);
+
+  // Late penalty overrides scoreKey to running_late regardless of what was sent
+  const effectiveScoreKey: import("../types").ScoreKey =
+    applyLatePenalty ? "running_late" : scoreKey;
+
+  const entry = scoring.find(e => e.key === effectiveScoreKey);
   const pts = decision === "approved" ? (entry?.points ?? 0) : 0;
 
   await runTransaction(db, async (tx) => {
@@ -498,13 +509,18 @@ export async function reviewSubmission(
     // Idempotency guard: skip if already reviewed (prevents double-approval race).
     if (subData.status !== "pending") return;
 
+    // Need participant lives for late penalty deduction
+    const pSnap = applyLatePenalty ? await tx.get(pRef) : null;
+    const currentLives = pSnap?.data()?.lives ?? 0;
+
     tx.update(subRef, { status: decision, organizerComment: comment || null, pointsEarned: pts });
     tx.update(feedRef, { submissionStatus: decision, organizerComment: comment || null, pointsEarned: pts });
 
     if (decision === "approved") {
       tx.update(pRef, {
-        results: arrayUnion({ type: subData.type, scoreKey }),
+        results: arrayUnion({ type: subData.type, scoreKey: effectiveScoreKey }),
         km: subData.km ? increment(subData.km) : increment(0),
+        ...(applyLatePenalty ? { lives: Math.max(0, currentLives - 1) } : {}),
       });
     }
   });

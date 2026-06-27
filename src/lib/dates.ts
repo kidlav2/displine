@@ -3,11 +3,13 @@
  * Returns 0 if the challenge hasn't started yet, clamped to `duration` once it ends.
  */
 export function challengeCurrentDay(startDate: string, duration: number): number {
-  if (!startDate) return 0;
+  if (!startDate) return 1;
   const startMs = new Date(startDate + "T00:00:00Z").getTime();
+  if (isNaN(startMs)) return 1;
   const now = Date.now();
-  if (now < startMs) return 0;
-  return Math.min(Math.floor((now - startMs) / 86_400_000) + 1, duration);
+  if (now < startMs) return 1;
+  const safeDur = (!duration || isNaN(duration) || duration <= 0) ? 1 : duration;
+  return Math.min(Math.floor((now - startMs) / 86_400_000) + 1, safeDur);
 }
 
 /** Returns today's abbreviated weekday name in the given IANA timezone, matching runSchedule keys ("Mon"–"Sun"). */

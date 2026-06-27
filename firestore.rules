@@ -131,10 +131,14 @@ service cloud.firestore {
         allow create: if isParticipant(challengeId);
         // Organizers may update any field (approve/reject/comment/score).
         // Participants may only toggle likes or append/remove social comments.
+        // Participant who submitted may also update their own pending entry (e.g. retry).
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
            request.resource.data.diff(resource.data).affectedKeys()
-             .hasOnly(["likes", "socialComments"]));
+             .hasOnly(["likes", "socialComments"])) ||
+          (isParticipant(challengeId) &&
+           resource.data.participantId == request.auth.uid &&
+           resource.data.submissionStatus == "pending");
         allow delete: if isOrganizer(challengeId);
       }
 

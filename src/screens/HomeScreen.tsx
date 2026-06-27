@@ -20,6 +20,7 @@ export function HomeScreen() {
   const navigate = useNavigate();
 
   const [checkedIn, setCheckedIn] = useState(false);
+  const [submittedToday, setSubmittedToday] = useState(false);
   const [thumb, setThumb] = useState<string | null>(null);
   const [checkinTime, setCheckinTime] = useState<string | null>(null);
   const [checkInSubId, setCheckInSubId] = useState<string | null>(null);
@@ -41,7 +42,11 @@ export function HomeScreen() {
       currentUser.uid,
       participantTodayISO,
       (data) => {
-        if (data && !checkedIn) {
+        if (data?.submitted) {
+          setCheckedIn(true);
+          setSubmittedToday(true);
+          setCheckInSubId(data.subId);
+        } else if (data && !checkedIn) {
           setCheckedIn(true);
           setCheckInSubId(data.subId);
           if (data.checkInAt) {
@@ -182,7 +187,15 @@ export function HomeScreen() {
             <span className="text-border">·</span>
             <span className="flex items-center gap-1"><Clock size={10} /> до {todayDeadline}</span>
           </div>
-          {!checkedIn ? (
+          {submittedToday ? (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 rounded-xl border border-blue-200">
+              <CheckCircle2 size={16} className="text-blue-500 shrink-0" />
+              <div>
+                <p className="text-xs font-extrabold text-blue-700">Пробежка отправлена</p>
+                <p className="text-[11px] text-blue-500">Ожидает проверки организатора</p>
+              </div>
+            </div>
+          ) : !checkedIn ? (
             <>
               <button
                 onClick={() => cameraRef.current?.click()}

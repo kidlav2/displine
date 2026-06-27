@@ -45,7 +45,7 @@ export function ReviewScreen() {
     { key: "checklist", label: `Чеклист (${counts.checklist})`   },
   ];
 
-  const act = async (item: ReviewItem, status: "approved" | "rejected") => {
+  const act = async (item: ReviewItem, status: "approved" | "rejected", latePenalty = false) => {
     setActLoading(true);
     try {
       await reviewSubmission(
@@ -54,7 +54,8 @@ export function ReviewScreen() {
         item.participantId,
         status,
         draftComment.trim(),
-        item.scoreKey
+        item.scoreKey,
+        latePenalty
       );
     } catch (e) {
       console.error("[ReviewScreen] reviewSubmission failed:", e);
@@ -204,14 +205,20 @@ export function ReviewScreen() {
 
       {/* Actions */}
       {(item.status === "pending" || item.status === "in_progress" || item.status === "late") && (
-        <div className="flex gap-2">
-          <button onClick={() => act(item, "rejected")} disabled={actLoading}
-            className="flex-1 py-2 rounded-xl border-2 border-red-200 text-red-500 font-bold text-sm disabled:opacity-50">
-            Отклонить
-          </button>
-          <button onClick={() => act(item, "approved")} disabled={actLoading}
-            className="flex-1 py-2 rounded-xl font-bold text-sm text-white disabled:opacity-50" style={{ background: BRAND_COLOR }}>
-            {actLoading ? "…" : "Одобрить"}
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <button onClick={() => act(item, "rejected")} disabled={actLoading}
+              className="flex-1 py-2 rounded-xl border-2 border-red-200 text-red-500 font-bold text-sm disabled:opacity-50">
+              Отклонить
+            </button>
+            <button onClick={() => act(item, "approved")} disabled={actLoading}
+              className="flex-1 py-2 rounded-xl font-bold text-sm text-white disabled:opacity-50" style={{ background: BRAND_COLOR }}>
+              {actLoading ? "…" : "Одобрить"}
+            </button>
+          </div>
+          <button onClick={() => act(item, "approved", true)} disabled={actLoading}
+            className="w-full py-2 rounded-xl border-2 border-orange-200 bg-orange-50 text-orange-600 font-bold text-sm disabled:opacity-50">
+            ⚡ Опоздание (принять, −1 жизнь)
           </button>
         </div>
       )}
