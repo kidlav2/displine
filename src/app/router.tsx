@@ -26,7 +26,7 @@ import { PhoneScreen } from "../screens/PhoneScreen";
 import { VerifyScreen } from "../screens/VerifyScreen";
 import { TelegramLoginScreen } from "../screens/TelegramLoginScreen";
 import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
-import { DemoControls } from "../components/nav/DemoControls";
+
 import { useAppContext } from "../contexts/AppContext";
 import { jk } from "../constants/design";
 import type { TelegramProfile } from "../types";
@@ -162,9 +162,6 @@ function RootLayout() {
     <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
       <div className="flex-1 lg:flex lg:items-center lg:justify-center lg:p-8">
         {inner}
-      </div>
-      <div className="lg:hidden px-4 py-3 border-t border-border bg-card">
-        <DemoControls />
       </div>
     </div>
   );
@@ -309,9 +306,6 @@ function OnboardingLayout() {
         </div>
       </div>
       <div id="resend-recaptcha-container" />
-      <div className="lg:hidden px-4 py-3 border-t border-border bg-card">
-        <DemoControls />
-      </div>
     </div>
   );
 }
@@ -324,9 +318,6 @@ function ErrorLayout() {
           style={{ minHeight: "min(600px, 100vh)" }}>
           <ErrorScreen />
         </div>
-      </div>
-      <div className="lg:hidden px-4 py-3 border-t border-border bg-card">
-        <DemoControls />
       </div>
     </div>
   );
@@ -341,9 +332,6 @@ function OrgLoginLayout() {
           <OrgLoginScreen />
         </div>
       </div>
-      <div className="lg:hidden px-4 py-3 border-t border-border bg-card">
-        <DemoControls />
-      </div>
     </div>
   );
 }
@@ -352,9 +340,6 @@ function ChallengesLayout() {
   return (
     <div className="min-h-screen bg-background overflow-x-hidden" style={jk}>
       <Outlet />
-      <div className="lg:hidden px-4 py-3 border-t border-border bg-card">
-        <DemoControls />
-      </div>
     </div>
   );
 }
