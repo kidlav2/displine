@@ -64,7 +64,7 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
       });
       onDone({ name: trimmed, ini });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save profile. Try again.");
+      setError(err instanceof Error ? err.message : "Не удалось сохранить профиль. Попробуйте снова.");
     } finally {
       setLoading(false);
     }
@@ -75,8 +75,8 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
       <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
 
       <div className="flex-1">
-        <h2 className="font-extrabold text-2xl mb-1">Almost there!</h2>
-        <p className="text-sm text-muted-foreground mb-8">Set up your participant profile. Other members will see this.</p>
+        <h2 className="font-extrabold text-2xl mb-1">Почти готово!</h2>
+        <p className="text-sm text-muted-foreground mb-8">Настройте профиль участника. Другие участники увидят его.</p>
 
         <div className="flex flex-col items-center mb-8">
           <button
@@ -90,13 +90,13 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
             <div className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/10 transition-colors rounded-full" />
           </button>
           <p className="text-xs font-semibold text-muted-foreground">
-            {thumb ? "Tap to change photo" : "Add a profile photo"}
+            {thumb ? "Нажмите, чтобы изменить фото" : "Добавить фото профиля"}
           </p>
         </div>
 
         <div className="mb-6">
           <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">
-            Your name
+            Ваше имя
           </p>
           <input
             placeholder="e.g. Ерлан С."
@@ -119,7 +119,7 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
           className="w-full py-4 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
           style={{ background: BRAND_COLOR }}
         >
-          {loading ? "Saving…" : "Join challenge"}
+          {loading ? "Сохранение…" : "Вступить в челлендж"}
         </button>
       </div>
     </div>

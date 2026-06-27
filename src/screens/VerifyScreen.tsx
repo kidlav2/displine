@@ -12,11 +12,11 @@ interface VerifyScreenProps {
 }
 
 function firebaseErrMsg(err: unknown): string {
-  if (!(err instanceof Error)) return "Verification failed. Try again.";
-  if (err.message.includes("invalid-verification-code")) return "Incorrect code. Try again.";
-  if (err.message.includes("code-expired"))              return "Code expired. Request a new one.";
-  if (err.message.includes("too-many-requests"))         return "Too many attempts. Wait a moment.";
-  return "Verification failed. Try again.";
+  if (!(err instanceof Error)) return "Ошибка проверки. Попробуйте снова.";
+  if (err.message.includes("invalid-verification-code")) return "Неверный код. Попробуйте снова.";
+  if (err.message.includes("code-expired"))              return "Код истёк. Запросите новый.";
+  if (err.message.includes("too-many-requests"))         return "Слишком много попыток. Подождите немного.";
+  return "Ошибка проверки. Попробуйте снова.";
 }
 
 export function VerifyScreen({ phone, confirmationResult, onVerify, onBack, onResend }: VerifyScreenProps) {
@@ -92,7 +92,7 @@ export function VerifyScreen({ phone, confirmationResult, onVerify, onBack, onRe
   return (
     <div className="flex flex-col h-full px-6 pt-10 pb-8">
       <button onClick={onBack} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground mb-8">
-        <ChevronLeft size={16} /> Back
+        <ChevronLeft size={16} /> Назад
       </button>
 
       <div className="flex-1">
@@ -100,9 +100,9 @@ export function VerifyScreen({ phone, confirmationResult, onVerify, onBack, onRe
           <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-5">
             <Phone size={24} className="text-muted-foreground" />
           </div>
-          <h2 className="font-extrabold text-2xl mb-2">Enter the code</h2>
+          <h2 className="font-extrabold text-2xl mb-2">Введите код</h2>
           <p className="text-sm text-muted-foreground leading-snug">
-            We sent a 6-digit code to{" "}
+            Мы отправили 6-значный код на{" "}
             <span className="font-bold text-foreground">{phone}</span>
           </p>
         </div>
@@ -140,7 +140,7 @@ export function VerifyScreen({ phone, confirmationResult, onVerify, onBack, onRe
           className="w-full py-4 rounded-xl font-extrabold text-sm text-white disabled:opacity-35 mb-4"
           style={{ background: BRAND_COLOR }}
         >
-          {loading ? "Verifying…" : "Verify"}
+          {loading ? "Проверка…" : "Подтвердить"}
         </button>
 
         <button
@@ -149,15 +149,15 @@ export function VerifyScreen({ phone, confirmationResult, onVerify, onBack, onRe
           className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold text-muted-foreground py-2 disabled:opacity-50"
         >
           <RefreshCw size={13} className={resending ? "animate-spin" : ""} />
-          {resent ? "Code resent!" : resending ? "Resending…" : "Resend code"}
+          {resent ? "Код отправлен!" : resending ? "Отправка…" : "Отправить код повторно"}
         </button>
 
         <p className="text-center text-[11px] text-muted-foreground leading-snug mt-6 px-4">
-          By verifying, you agree to the{" "}
-          <span className="underline">challenge rules</span>{" "}
-          and{" "}
-          <span className="underline">terms of participation</span>{" "}
-          set by the organizer.
+          Подтверждая, вы соглашаетесь с{" "}
+          <span className="underline">правилами челленджа</span>{" "}
+          и{" "}
+          <span className="underline">условиями участия</span>{" "}
+          установленными организатором.
         </p>
       </div>
     </div>

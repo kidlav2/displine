@@ -9,15 +9,15 @@ export function DemoControls() {
 
   return (
     <div className="space-y-2 text-xs font-bold">
-      <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">Demo</p>
+      <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">Демо</p>
       <div className="flex flex-wrap gap-1">
         {([
-          ["/app/home",   "App"],
-          ["/join",       "Join (participant)"],
-          ["/org-login",  "Org login"],
-          ["/error/invite-invalid",  "Bad link"],
-          ["/error/challenge-ended", "Ended"],
-          ["/error/no-invite",       "No link"],
+          ["/app/home",   "Приложение"],
+          ["/join",       "Вступить (участник)"],
+          ["/org-login",  "Вход орг."],
+          ["/error/invite-invalid",  "Плохая ссылка"],
+          ["/error/challenge-ended", "Завершено"],
+          ["/error/no-invite",       "Нет ссылки"],
         ] as [string, string][]).map(([path, label]) => (
           <button key={path}
             onClick={() => navigate(path)}
@@ -44,7 +44,7 @@ export function DemoControls() {
             style={userRole === r
               ? { background: r === "owner" ? "#7C3AED" : r === "helper" ? "#2563EB" : BRAND_COLOR, color: "#fff", borderColor: "transparent" }
               : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-            {r === "owner" ? "👑 Owner" : r === "helper" ? "🛡 Helper" : "👤 Participant"}
+            {r === "owner" ? "👑 Владелец" : r === "helper" ? "🛡 Помощник" : "👤 Участник"}
           </button>
         ))}
       </div>

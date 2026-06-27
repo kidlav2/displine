@@ -5,21 +5,21 @@ import type { ErrorVariant } from "../types";
 const cfg = {
   "no-invite": {
     icon: <Globe size={32} className="text-muted-foreground" />,
-    title: "No challenge found",
-    sub: "It looks like you've landed here without an invite link. Ask your organizer to share the join link for your challenge.",
+    title: "Челлендж не найден",
+    sub: "Похоже, вы попали сюда без ссылки-приглашения. Попросите организатора поделиться ссылкой для вступления.",
     action: null,
   },
   "invite-invalid": {
     icon: <Link2Off size={32} className="text-muted-foreground" />,
-    title: "This invite link isn't valid",
-    sub: "The link may have expired, been revoked, or copied incorrectly. Ask your organizer to send you a fresh invite.",
-    action: "Contact your organizer",
+    title: "Эта ссылка недействительна",
+    sub: "Ссылка могла истечь, быть отозванной или скопированной неверно. Попросите организатора прислать новое приглашение.",
+    action: "Связаться с организатором",
   },
   "challenge-ended": {
     icon: <Clock size={32} className="text-muted-foreground" />,
-    title: "This challenge has ended",
-    sub: "The challenge you were invited to has already finished. Reach out to your organizer to find out about the next one.",
-    action: "Contact your organizer",
+    title: "Этот челлендж завершён",
+    sub: "Челлендж, на который вас пригласили, уже закончился. Свяжитесь с организатором, чтобы узнать о следующем.",
+    action: "Связаться с организатором",
   },
 } as const;
 

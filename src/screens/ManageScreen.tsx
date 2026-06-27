@@ -16,16 +16,16 @@ import type { Task, TaskTemplate } from "../types";
 type TaskType = "running" | "checklist" | "freeform";
 
 const TASK_TYPES: { type: TaskType; Icon: React.ElementType; label: string; desc: string }[] = [
-  { type: "running",   Icon: Activity,    label: "Running",   desc: "Check-in + GPS proof" },
-  { type: "checklist", Icon: CheckSquare, label: "Checklist", desc: "Step-by-step items" },
-  { type: "freeform",  Icon: LayoutGrid,  label: "Freeform",  desc: "Any photo or text" },
+  { type: "running",   Icon: Activity,    label: "Пробежка",    desc: "Отметка + GPS" },
+  { type: "checklist", Icon: CheckSquare, label: "Чеклист",     desc: "Пошаговые задания" },
+  { type: "freeform",  Icon: LayoutGrid,  label: "Произвольное",desc: "Фото или текст" },
 ];
 
 // ── Running form ──────────────────────────────────────────────────────────────
 
 function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () => void }) {
   const { currentUser } = useAuthContext();
-  const [title, setTitle] = useState("Morning run");
+  const [title, setTitle] = useState("Утренняя пробежка");
   const [description, setDescription] = useState("");
   const [runSchedule, setRunSchedule] = useState<Record<string, string>>({ Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" });
   const [expectedKm, setExpectedKm] = useState("");
@@ -47,7 +47,7 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
     try {
       const fallbackDeadline = Object.values(runSchedule)[0] ?? "06:00";
       const template: Omit<TaskTemplate, "id"> = {
-        title: title.trim() || "Morning run",
+        title: title.trim() || "Утренняя пробежка",
         description: description.trim(),
         deadline: fallbackDeadline,
         type: "running",
@@ -60,7 +60,7 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
       };
       await createTaskTemplate(challengeId, template, currentUser.uid);
       onDone();
-    } catch { setError("Failed to save. Try again."); }
+    } catch { setError("Не удалось сохранить. Попробуйте снова."); }
     finally { setLoading(false); }
   };
 
@@ -68,21 +68,21 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
     <div className="space-y-4">
       <Card className="!p-4 space-y-3">
         <div>
-          <SecLabel>Title</SecLabel>
+          <SecLabel>Название</SecLabel>
           <input value={title} onChange={e => setTitle(e.target.value)}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Description (optional)</SecLabel>
+          <SecLabel>Описание (необязательно)</SecLabel>
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-            placeholder="Any notes for participants…"
+            placeholder="Любые заметки для участников…"
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
         </div>
       </Card>
 
       <Card className="!p-4 space-y-2">
-        <p className="font-bold text-sm">Running days &amp; deadlines</p>
-        <p className="text-xs text-muted-foreground">Generates a recurring task for each selected day.</p>
+        <p className="font-bold text-sm">Дни пробежек и дедлайны</p>
+        <p className="text-xs text-muted-foreground">Создаёт повторяющееся задание для каждого выбранного дня.</p>
         {ALL_DAYS.map(d => {
           const selected = d in runSchedule;
           return (
@@ -104,22 +104,22 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
 
       <Card className="!p-4 space-y-3">
         <div>
-          <SecLabel>Min. run duration (auto-validate)</SecLabel>
+          <SecLabel>Мин. длительность пробежки (авто-проверка)</SecLabel>
           <div className="flex items-center gap-2 mt-1.5">
             <input type="number" min="1" value={minDurationMin} onChange={e => setMinDurationMin(e.target.value)}
-              placeholder="e.g. 15"
+              placeholder="напр. 15"
               className="w-28 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none text-center" />
-            <span className="text-sm text-muted-foreground font-semibold">min</span>
+            <span className="text-sm text-muted-foreground font-semibold">мин</span>
           </div>
-          <p className="text-xs text-muted-foreground mt-1">Submissions under this duration are auto-rejected.</p>
+          <p className="text-xs text-muted-foreground mt-1">Отправки менее этой длительности отклоняются автоматически.</p>
         </div>
         <div>
-          <SecLabel>Expected distance (optional)</SecLabel>
+          <SecLabel>Ожидаемая дистанция (необязательно)</SecLabel>
           <div className="flex items-center gap-2 mt-1.5">
             <input type="number" step="0.1" min="0" value={expectedKm} onChange={e => setExpectedKm(e.target.value)}
-              placeholder="e.g. 5"
+              placeholder="напр. 5"
               className="w-28 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none text-center" />
-            <span className="text-sm text-muted-foreground font-semibold">km</span>
+            <span className="text-sm text-muted-foreground font-semibold">км</span>
           </div>
         </div>
       </Card>
@@ -128,7 +128,7 @@ function RunningForm({ challengeId, onDone }: { challengeId: string; onDone: () 
       <button onClick={handleSubmit} disabled={!canSubmit || loading}
         className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
         style={{ background: BRAND_COLOR }}>
-        {loading ? "Saving…" : "Create recurring run"}
+        {loading ? "Сохранение…" : "Создать повтор. пробежку"}
       </button>
     </div>
   );
@@ -181,7 +181,7 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
         await createTask(challengeId, task, currentUser.uid);
       }
       onDone();
-    } catch { setError("Failed to save. Try again."); }
+    } catch { setError("Не удалось сохранить. Попробуйте снова."); }
     finally { setLoading(false); }
   };
 
@@ -189,12 +189,12 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
     <div className="space-y-4">
       <Card className="!p-4 space-y-3">
         <div>
-          <SecLabel>Title</SecLabel>
-          <input placeholder="e.g. Morning journaling" value={title} onChange={e => setTitle(e.target.value)}
+          <SecLabel>Название</SecLabel>
+          <input placeholder="напр. Утреннее ведение журнала" value={title} onChange={e => setTitle(e.target.value)}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Checklist items</SecLabel>
+          <SecLabel>Пункты чеклиста</SecLabel>
           <div className="mt-1.5 space-y-2">
             {items.map((item, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -203,7 +203,7 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
                   ref={i === items.length - 1 ? lastItemRef : undefined}
                   value={item}
                   onChange={e => setItem(i, e.target.value)}
-                  placeholder={`Step ${i + 1}`}
+                  placeholder={`Пункт ${i + 1}`}
                   className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm outline-none"
                 />
                 {items.length > 1 && (
@@ -216,17 +216,17 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
           </div>
           <button onClick={addItem}
             className="mt-2 flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border border-dashed border-border text-muted-foreground w-full justify-center">
-            <Plus size={13} /> Add item
+            <Plus size={13} /> Добавить пункт
           </button>
         </div>
         <div>
-          <SecLabel>Description (optional)</SecLabel>
+          <SecLabel>Описание (необязательно)</SecLabel>
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2}
-            placeholder="Any context for participants…"
+            placeholder="Любой контекст для участников…"
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
         </div>
         <div>
-          <SecLabel>Deadline</SecLabel>
+          <SecLabel>Дедлайн</SecLabel>
           <input type="time" value={deadline} onChange={e => setDeadline(e.target.value)}
             className="mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-extrabold outline-none"
             style={{ ...bc, fontSize: 16 }} />
@@ -236,8 +236,8 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
       <Card className="!p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-bold text-sm">Recurring</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Repeat on selected weekdays</p>
+            <p className="font-bold text-sm">Повторяющееся</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Повторять в выбранные дни недели</p>
           </div>
           <button onClick={() => setRecurring(v => !v)}
             className="w-11 h-6 rounded-full relative transition-colors"
@@ -248,7 +248,7 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
         </div>
         {recurring ? (
           <div>
-            <SecLabel>Repeat on</SecLabel>
+            <SecLabel>Повторять по</SecLabel>
             <div className="flex gap-2 flex-wrap mt-2">
               {ALL_DAYS.map(d => (
                 <button key={d} onClick={() => toggleRepeatDay(d)}
@@ -261,7 +261,7 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
           </div>
         ) : (
           <div>
-            <SecLabel>Date</SecLabel>
+            <SecLabel>Дата</SecLabel>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               className="mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
           </div>
@@ -272,7 +272,7 @@ function ChecklistForm({ challengeId, onDone }: { challengeId: string; onDone: (
       <button onClick={handleSubmit} disabled={!canSubmit || loading}
         className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
         style={{ background: BRAND_COLOR }}>
-        {loading ? "Saving…" : recurring ? "Create recurring task" : "Create task"}
+        {loading ? "Сохранение…" : recurring ? "Создать повтор. задание" : "Создать задание"}
       </button>
     </div>
   );
@@ -315,7 +315,7 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
         await createTask(challengeId, task, currentUser.uid);
       }
       onDone();
-    } catch { setError("Failed to save. Try again."); }
+    } catch { setError("Не удалось сохранить. Попробуйте снова."); }
     finally { setLoading(false); }
   };
 
@@ -323,18 +323,18 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
     <div className="space-y-4">
       <Card className="!p-4 space-y-3">
         <div>
-          <SecLabel>Title</SecLabel>
-          <input placeholder="e.g. Read for 30 minutes" value={title} onChange={e => setTitle(e.target.value)}
+          <SecLabel>Название</SecLabel>
+          <input placeholder="напр. Читать 30 минут" value={title} onChange={e => setTitle(e.target.value)}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Description</SecLabel>
+          <SecLabel>Описание</SecLabel>
           <textarea value={description} onChange={e => setDescription(e.target.value)} rows={4}
-            placeholder="Describe what participants need to do and what proof is required…"
+            placeholder="Опишите, что нужно сделать и какое подтверждение требуется…"
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none leading-relaxed" />
         </div>
         <div>
-          <SecLabel>Deadline</SecLabel>
+          <SecLabel>Дедлайн</SecLabel>
           <input type="time" value={deadline} onChange={e => setDeadline(e.target.value)}
             className="mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-extrabold outline-none"
             style={{ ...bc, fontSize: 16 }} />
@@ -344,8 +344,8 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
       <Card className="!p-4 space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <p className="font-bold text-sm">Recurring</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Repeat on selected weekdays</p>
+            <p className="font-bold text-sm">Повторяющееся</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Повторять в выбранные дни недели</p>
           </div>
           <button onClick={() => setRecurring(v => !v)}
             className="w-11 h-6 rounded-full relative transition-colors"
@@ -356,7 +356,7 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
         </div>
         {recurring ? (
           <div>
-            <SecLabel>Repeat on</SecLabel>
+            <SecLabel>Повторять по</SecLabel>
             <div className="flex gap-2 flex-wrap mt-2">
               {ALL_DAYS.map(d => (
                 <button key={d} onClick={() => toggleRepeatDay(d)}
@@ -369,7 +369,7 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
           </div>
         ) : (
           <div>
-            <SecLabel>Date</SecLabel>
+            <SecLabel>Дата</SecLabel>
             <input type="date" value={date} onChange={e => setDate(e.target.value)}
               className="mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
           </div>
@@ -380,7 +380,7 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
       <button onClick={handleSubmit} disabled={!canSubmit || loading}
         className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
         style={{ background: BRAND_COLOR }}>
-        {loading ? "Saving…" : recurring ? "Create recurring task" : "Create task"}
+        {loading ? "Сохранение…" : recurring ? "Создать повтор. задание" : "Создать задание"}
       </button>
     </div>
   );
@@ -395,9 +395,9 @@ function CreateTaskShell({ challengeId, onDone }: { challengeId: string; onDone:
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[600px] mx-auto">
       <div className="flex items-center gap-3">
         <button onClick={onDone} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          ← Back
+          ← Назад
         </button>
-        <p className="font-extrabold text-lg">Create task</p>
+        <p className="font-extrabold text-lg">Создать задание</p>
       </div>
 
       <div className="flex gap-2">
@@ -438,14 +438,14 @@ export function ManageScreen() {
   };
 
   const ownerItems = userRole === "owner" ? [
-    { icon: <Sliders size={20} />,   label: "Challenge settings", sub: "Days, penalties, lives, deadline", action: () => navigate("/app/settings") },
-    { icon: <UserCheck size={20} />, label: "Manage participants", sub: "Adjust lives, log penalties",      action: () => navigate("/app/participants") },
-    { icon: <Users size={20} />,     label: "Team",                sub: `${challenge.team.length} member${challenge.team.length !== 1 ? "s" : ""} · invite helpers`, action: () => navigate("/app/team") },
+    { icon: <Sliders size={20} />,   label: "Настройки челленджа",   sub: "Дни, штрафы, жизни, дедлайн",                                                     action: () => navigate("/app/settings") },
+    { icon: <UserCheck size={20} />, label: "Управление участниками", sub: "Настроить жизни, зафиксировать штрафы",                                            action: () => navigate("/app/participants") },
+    { icon: <Users size={20} />,     label: "Команда",               sub: `${challenge.team.length} участник${challenge.team.length !== 1 ? "ов" : ""} · пригласить помощников`, action: () => navigate("/app/team") },
   ] : [];
 
   const menuItems = [
-    { icon: <CalendarDays size={20} />, label: "Create task",       sub: "Schedule a new daily mission", action: () => setShowCreateTask(true) },
-    { icon: <Award size={20} />,        label: "Create achievement", sub: "Add a new badge or milestone", action: () => setShowCreateAch(true) },
+    { icon: <CalendarDays size={20} />, label: "Создать задание",    sub: "Запланировать новое задание",    action: () => setShowCreateTask(true) },
+    { icon: <Award size={20} />,        label: "Создать достижение", sub: "Добавить значок или веху",       action: () => setShowCreateAch(true) },
     ...ownerItems,
   ];
 
@@ -457,13 +457,13 @@ export function ManageScreen() {
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 max-w-[600px] mx-auto">
       <div className="flex items-center gap-3">
         <button onClick={() => setShowCreateAch(false)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          ← Back
+          ← Назад
         </button>
-        <p className="font-extrabold text-lg">Create achievement</p>
+        <p className="font-extrabold text-lg">Создать достижение</p>
       </div>
       <Card className="!p-4 space-y-3">
         <div>
-          <SecLabel>Icon</SecLabel>
+          <SecLabel>Значок</SecLabel>
           <div className="flex gap-2 mt-2 flex-wrap">
             {["⭐", "🔥", "🏆", "💪", "🎯", "🌟", "⚡", "🦁"].map(ico => (
               <button key={ico} onClick={() => setAchForm(f => ({ ...f, icon: ico }))}
@@ -472,18 +472,18 @@ export function ManageScreen() {
           </div>
         </div>
         <div>
-          <SecLabel>Name</SecLabel>
-          <input placeholder="e.g. Comeback King" value={achForm.name} onChange={e => setAchForm(f => ({ ...f, name: e.target.value }))}
+          <SecLabel>Название</SecLabel>
+          <input placeholder="напр. Король возрождения" value={achForm.name} onChange={e => setAchForm(f => ({ ...f, name: e.target.value }))}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
         </div>
         <div>
-          <SecLabel>Unlock condition</SecLabel>
-          <textarea placeholder="e.g. Complete 3 tasks in a row after losing a life" value={achForm.condition} onChange={e => setAchForm(f => ({ ...f, condition: e.target.value }))} rows={3}
+          <SecLabel>Условие разблокировки</SecLabel>
+          <textarea placeholder="напр. Выполнить 3 задания подряд после потери жизни" value={achForm.condition} onChange={e => setAchForm(f => ({ ...f, condition: e.target.value }))} rows={3}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
         </div>
         <button onClick={() => setShowCreateAch(false)} disabled={!achForm.name.trim()}
           className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>
-          Create achievement
+          Создать достижение
         </button>
       </Card>
     </div>
@@ -492,28 +492,28 @@ export function ManageScreen() {
   return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-4 max-w-[600px] mx-auto">
       <div className="flex items-center gap-2 mb-1">
-        <p className="font-extrabold text-xl">Manage</p>
+        <p className="font-extrabold text-xl">Управление</p>
         <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${
           userRole === "owner"
             ? "bg-purple-50 text-purple-600 border-purple-200"
             : "bg-blue-50 text-blue-600 border-blue-200"
         }`}>
-          {userRole === "owner" ? "Owner" : "Helper"}
+          {userRole === "owner" ? "Владелец" : "Помощник"}
         </span>
       </div>
       <p className="text-sm text-muted-foreground mb-4">{challenge.emoji} {challenge.name}</p>
 
       <Card className="!p-4 mb-4 border-blue-100 bg-blue-50">
-        <SecLabel>Invite code</SecLabel>
+        <SecLabel>Код приглашения</SecLabel>
         <div className="flex items-center justify-between mt-2">
           <p style={{ ...bc, fontSize: 24, fontWeight: 900 }}>{challenge.inviteCode}</p>
           <button onClick={copyCode}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border border-blue-200 bg-white text-blue-600">
             {copiedCode ? <CheckCircle2 size={12} /> : <Copy size={12} />}
-            {copiedCode ? "Copied!" : "Copy"}
+            {copiedCode ? "Скопировано!" : "Копировать"}
           </button>
         </div>
-        <p className="text-xs text-blue-500 mt-1 font-semibold">Share this code so participants can join</p>
+        <p className="text-xs text-blue-500 mt-1 font-semibold">Поделитесь кодом, чтобы участники могли присоединиться</p>
       </Card>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-2 lg:space-y-0">

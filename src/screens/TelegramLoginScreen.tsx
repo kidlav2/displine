@@ -49,7 +49,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
 
   useEffect(() => {
     if (!CLIENT_ID) {
-      setError("Telegram Client ID is not configured. Add VITE_TELEGRAM_CLIENT_ID to your environment.");
+      setError("Telegram Client ID не настроен. Добавьте VITE_TELEGRAM_CLIENT_ID в переменные окружения.");
       return;
     }
 
@@ -60,7 +60,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
     script.src = "https://telegram.org/js/telegram-login.js";
     script.async = true;
     script.onload  = () => setScriptReady(true);
-    script.onerror = () => setError("Could not load Telegram login library. Check your connection.");
+    script.onerror = () => setError("Не удалось загрузить библиотеку входа Telegram. Проверьте подключение.");
     document.head.appendChild(script);
   }, []);
 
@@ -77,14 +77,14 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
       { client_id: CLIENT_ID, request_access: ["write"], nonce },
       async (result) => {
         if (result.error || !result.id_token) {
-          setError(result.error ?? "Telegram login was cancelled or failed. Please try again.");
+          setError(result.error ?? "Вход через Telegram отменён или не удался. Попробуйте снова.");
           return;
         }
         setLoading(true);
         try {
           await onAuth({ id_token: result.id_token, nonce: nonceRef.current });
         } catch (err) {
-          setError(err instanceof Error ? err.message : "Sign-in failed. Please try again.");
+          setError(err instanceof Error ? err.message : "Ошибка входа. Попробуйте снова.");
           setLoading(false);
         }
         // On success the parent navigates away — don't reset loading
@@ -106,7 +106,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
               {challenge.emoji}
             </div>
             <p className="text-xs font-extrabold tracking-widest uppercase text-muted-foreground mb-1">
-              You're joining
+              Вы вступаете в
             </p>
             <h1 className="font-extrabold text-2xl leading-tight mb-2">{challenge.name}</h1>
             <p className="text-sm text-muted-foreground leading-snug max-w-[260px]">
@@ -122,9 +122,9 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
             >
               🏁
             </div>
-            <h1 className="font-extrabold text-2xl leading-tight mb-2">Welcome to Displine</h1>
+            <h1 className="font-extrabold text-2xl leading-tight mb-2">Добро пожаловать в Displine</h1>
             <p className="text-sm text-muted-foreground leading-snug max-w-[260px]">
-              Sign in to manage your challenges and track your progress.
+              Войдите, чтобы управлять челленджами и отслеживать прогресс.
             </p>
           </div>
         )}
@@ -132,17 +132,17 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
         <div className="flex-1 flex flex-col items-center justify-center gap-6">
           <div>
             <h2 className="font-extrabold text-xl text-center mb-1">
-              {challenge ? "Sign in to join" : "Sign in"}
+              {challenge ? "Войдите, чтобы вступить" : "Войти"}
             </h2>
             <p className="text-sm text-muted-foreground text-center">
-              Tap the button below to sign in with your Telegram account.
+              Нажмите кнопку ниже, чтобы войти через аккаунт Telegram.
             </p>
           </div>
 
           {loading ? (
             <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
               <Loader2 size={16} className="animate-spin" style={{ color: BRAND_COLOR }} />
-              Signing you in…
+              Вход…
             </div>
           ) : (
             <button
@@ -158,7 +158,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
                   <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-2.032 9.571c-.148.658-.537.818-1.088.51l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.215-3.053 5.56-5.023c.242-.215-.054-.334-.373-.12L6.18 14.26l-2.95-.92c-.641-.2-.654-.641.137-.948l11.527-4.447c.535-.194 1.003.13.668.303z"/>
                 </svg>
               )}
-              Continue with Telegram
+              Продолжить с Telegram
             </button>
           )}
 
@@ -173,7 +173,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
         {challenge && (
           <div className="mt-8 text-center">
             <p className="text-xs text-muted-foreground leading-snug">
-              Joining via invite code{" "}
+              Вход по коду приглашения{" "}
               <span className="font-bold text-foreground">{challenge.inviteCode}</span>
             </p>
           </div>
@@ -183,7 +183,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
           <div className="mt-8">
             <div className="flex items-center gap-3 mb-4">
               <div className="flex-1 h-px bg-border" />
-              <span className="text-xs font-semibold text-muted-foreground">or join as participant</span>
+              <span className="text-xs font-semibold text-muted-foreground">или вступить как участник</span>
               <div className="flex-1 h-px bg-border" />
             </div>
             <div className="flex gap-2">
@@ -191,7 +191,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
                 value={inviteInput}
                 onChange={e => setInviteInput(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key === "Enter" && inviteInput.trim() && onInviteCode(inviteInput.trim())}
-                placeholder="Enter invite code"
+                placeholder="Введите код приглашения"
                 className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none placeholder-muted-foreground tracking-wider"
               />
               <button
@@ -200,7 +200,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onInviteCode }: Telegra
                 className="px-4 py-2.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-40"
                 style={{ background: "#2AABEE" }}
               >
-                Join
+                Вступить
               </button>
             </div>
           </div>

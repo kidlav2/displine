@@ -65,7 +65,7 @@ export function CreateChallengeScreen() {
       );
       setStep("done");
     } catch {
-      setError("Failed to create challenge. Try again.");
+      setError("Не удалось создать челлендж. Попробуйте снова.");
     } finally {
       setLoading(false);
     }
@@ -75,8 +75,8 @@ export function CreateChallengeScreen() {
     <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6 text-center">
       <p className="text-5xl">{emoji}</p>
       <p className="font-extrabold text-2xl">{name}</p>
-      <p className="text-sm text-muted-foreground">Challenge created! Participants can join with the invite code.</p>
-      <button onClick={() => navigate("/challenges")} className="mt-4 px-8 py-3 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>Done</button>
+      <p className="text-sm text-muted-foreground">Челлендж создан! Участники могут присоединиться с помощью кода приглашения.</p>
+      <button onClick={() => navigate("/challenges")} className="mt-4 px-8 py-3 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>Готово</button>
     </div>
   );
 
@@ -84,14 +84,14 @@ export function CreateChallengeScreen() {
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[600px] mx-auto overflow-x-hidden" style={{ scrollbarWidth: "none" }}>
       <div className="flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          <ChevronLeft size={16} /> Back
+          <ChevronLeft size={16} /> Назад
         </button>
-        <p className="font-extrabold text-lg">Create challenge</p>
+        <p className="font-extrabold text-lg">Создать челлендж</p>
       </div>
 
       <Card className="!p-4 space-y-3">
         <div>
-          <SecLabel>Emoji</SecLabel>
+          <SecLabel>Эмодзи</SecLabel>
           <div className="flex gap-2 mt-2 flex-wrap">
             {EMOJIS.map(e => (
               <button key={e} onClick={() => setEmoji(e)}
@@ -100,31 +100,31 @@ export function CreateChallengeScreen() {
           </div>
         </div>
         <div>
-          <SecLabel>Challenge name</SecLabel>
-          <input placeholder="e.g. Summer Discipline" value={name} onChange={e => setName(e.target.value)}
+          <SecLabel>Название челленджа</SecLabel>
+          <input placeholder="напр. Летняя дисциплина" value={name} onChange={e => setName(e.target.value)}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Description</SecLabel>
-          <textarea placeholder="What's this challenge about?" value={desc} onChange={e => setDesc(e.target.value)} rows={2}
+          <SecLabel>Описание</SecLabel>
+          <textarea placeholder="О чём этот челлендж?" value={desc} onChange={e => setDesc(e.target.value)} rows={2}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
         </div>
       </Card>
 
       <Card className="!p-4 space-y-3">
-        <p className="font-bold text-sm">Schedule</p>
+        <p className="font-bold text-sm">Расписание</p>
         <div>
-          <SecLabel>Start date</SecLabel>
+          <SecLabel>Дата начала</SecLabel>
           <input value={startDate} onChange={e => setStartDate(e.target.value)}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Duration (days)</SecLabel>
+          <SecLabel>Продолжительность (дни)</SecLabel>
           <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
         </div>
         <div>
-          <SecLabel>Running days &amp; deadlines</SecLabel>
+          <SecLabel>Дни пробежек и дедлайны</SecLabel>
           <div className="mt-2 space-y-2">
             {ALL_DAYS.map(d => {
               const selected = d in runSchedule;
@@ -152,9 +152,9 @@ export function CreateChallengeScreen() {
       </Card>
 
       <Card className="!p-4 space-y-3">
-        <p className="font-bold text-sm">Penalties &amp; lives</p>
+        <p className="font-bold text-sm">Штрафы и жизни</p>
         <div>
-          <SecLabel>Financial penalty</SecLabel>
+          <SecLabel>Финансовый штраф</SecLabel>
           <div className="flex gap-2 mt-1.5">
             <div className="flex gap-1 bg-muted rounded-xl p-0.5 flex-wrap">
               {CURRENCIES.map(cur => (
@@ -170,15 +170,15 @@ export function CreateChallengeScreen() {
           </div>
         </div>
         <div>
-          <SecLabel>Burpee alternative</SecLabel>
+          <SecLabel>Альтернатива (бёрпи)</SecLabel>
           <div className="flex items-center gap-2 mt-1.5">
             <input type="number" value={burpees} onChange={e => setBurpees(e.target.value)}
               className="w-24 bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none text-center" />
-            <span className="text-sm text-muted-foreground font-semibold">burpees</span>
+            <span className="text-sm text-muted-foreground font-semibold">бёрпи</span>
           </div>
         </div>
         <div>
-          <SecLabel>Starting lives</SecLabel>
+          <SecLabel>Начальные жизни</SecLabel>
           <div className="flex items-center gap-4 mt-2">
             <button onClick={() => setStartingLives(v => Math.max(1, v - 1))}
               className="w-9 h-9 rounded-xl border-2 border-border flex items-center justify-center font-bold text-lg">−</button>
@@ -191,13 +191,13 @@ export function CreateChallengeScreen() {
 
       <div className="pb-2">
         <p className="text-[10px] text-muted-foreground mb-3 font-semibold px-1">
-          Scoring: run on time = {SCORE.running_on_time} pts · run late = {SCORE.running_late} pt · daily task = {SCORE.task_completed} pts · missed = {SCORE.missed} pts
+          Очки: пробежка вовремя = {SCORE.running_on_time} · с оп. = {SCORE.running_late} · задание = {SCORE.task_completed} · пропуск = {SCORE.missed}
         </p>
         {error && <p className="text-xs font-bold text-red-500 mb-3">{error}</p>}
         <button onClick={submit} disabled={!name.trim() || loading}
           className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
           style={{ background: BRAND_COLOR }}>
-          {loading ? "Creating…" : "Create challenge"}
+          {loading ? "Создание…" : "Создать челлендж"}
         </button>
       </div>
     </div>

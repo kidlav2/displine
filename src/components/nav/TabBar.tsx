@@ -7,25 +7,25 @@ import type { UserRole } from "../../types";
 type TabDef = { path: string; Icon: React.ElementType; label: string };
 
 const USER_TABS: TabDef[] = [
-  { path: "/app/home",      Icon: Home,        label: "Home"      },
-  { path: "/app/tasks",     Icon: CheckSquare, label: "Tasks"     },
-  { path: "/app/community", Icon: Users,       label: "Community" },
-  { path: "/app/profile",   Icon: User,        label: "Profile"   },
+  { path: "/app/home",      Icon: Home,        label: "Главная"     },
+  { path: "/app/tasks",     Icon: CheckSquare, label: "Задания"     },
+  { path: "/app/community", Icon: Users,       label: "Сообщество"  },
+  { path: "/app/profile",   Icon: User,        label: "Профиль"     },
 ];
 
 const HELPER_TABS: TabDef[] = [
-  { path: "/app/home",      Icon: Home,        label: "Home"      },
-  { path: "/app/review",    Icon: CheckSquare, label: "Review"    },
-  { path: "/app/community", Icon: Users,       label: "Community" },
-  { path: "/app/profile",   Icon: User,        label: "Profile"   },
+  { path: "/app/home",      Icon: Home,        label: "Главная"    },
+  { path: "/app/review",    Icon: CheckSquare, label: "Проверка"   },
+  { path: "/app/community", Icon: Users,       label: "Сообщество" },
+  { path: "/app/profile",   Icon: User,        label: "Профиль"    },
 ];
 
 const OWNER_TABS: TabDef[] = [
-  { path: "/app/home",      Icon: Home,        label: "Home"      },
-  { path: "/app/review",    Icon: CheckSquare, label: "Review"    },
-  { path: "/app/community", Icon: Users,       label: "Community" },
-  { path: "/app/manage",    Icon: Settings,    label: "Manage"    },
-  { path: "/app/profile",   Icon: User,        label: "Profile"   },
+  { path: "/app/home",      Icon: Home,        label: "Главная"     },
+  { path: "/app/review",    Icon: CheckSquare, label: "Проверка"    },
+  { path: "/app/community", Icon: Users,       label: "Сообщество"  },
+  { path: "/app/manage",    Icon: Settings,    label: "Управление"  },
+  { path: "/app/profile",   Icon: User,        label: "Профиль"     },
 ];
 
 function tabsForRole(role: UserRole): TabDef[] {

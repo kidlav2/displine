@@ -18,9 +18,9 @@ export function ManageParticipantsScreen() {
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-4 max-w-[720px] mx-auto">
       <div className="flex items-center gap-3 mb-4">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          <ChevronLeft size={16} /> Back
+          <ChevronLeft size={16} /> Назад
         </button>
-        <p className="font-extrabold text-lg">Manage participants</p>
+        <p className="font-extrabold text-lg">Управление участниками</p>
       </div>
       <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-2 lg:space-y-0">
         {challenge.participants.map(p => (
@@ -32,12 +32,12 @@ export function ManageParticipantsScreen() {
                   <p className="text-sm font-bold">{p.name}</p>
                   {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
                 </div>
-                <p className="text-xs text-muted-foreground">{calcScore(p.results)} pts</p>
+                <p className="text-xs text-muted-foreground">{calcScore(p.results)} оч.</p>
               </div>
               <Hearts n={p.lives} sz={13} />
             </div>
             <div className="flex items-center justify-between">
-              <SecLabel>Lives</SecLabel>
+              <SecLabel>Жизни</SecLabel>
               <div className="flex items-center gap-3">
                 <button
                   onClick={() => adjustLives(p.uid, p.lives, -1)}

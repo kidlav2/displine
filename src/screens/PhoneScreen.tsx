@@ -61,7 +61,7 @@ export function PhoneScreen({ challenge, onNext }: PhoneScreenProps) {
       recaptchaRef.current = null;
       onNext(fullPhone, result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send code. Check the number and try again.");
+      setError(err instanceof Error ? err.message : "Не удалось отправить код. Проверьте номер и попробуйте снова.");
       // Always clear on error — next attempt needs a fresh verifier instance
       // because reCAPTCHA doesn't allow re-rendering into a used container.
       recaptchaRef.current?.clear();
@@ -81,14 +81,14 @@ export function PhoneScreen({ challenge, onNext }: PhoneScreenProps) {
         <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4" style={{ background: "#FFF3F0" }}>
           {challenge.emoji}
         </div>
-        <p className="text-xs font-extrabold tracking-widest uppercase text-muted-foreground mb-1">You're joining</p>
+        <p className="text-xs font-extrabold tracking-widest uppercase text-muted-foreground mb-1">Вы вступаете в</p>
         <h1 className="font-extrabold text-2xl leading-tight mb-2">{challenge.name}</h1>
         <p className="text-sm text-muted-foreground leading-snug max-w-[260px]">{challenge.description}</p>
       </div>
 
       <div className="flex-1">
         <p className="text-xs font-extrabold tracking-widest uppercase text-muted-foreground mb-3">
-          Your phone number
+          Ваш номер телефона
         </p>
 
         <div className="flex gap-2 mb-3">
@@ -115,7 +115,7 @@ export function PhoneScreen({ challenge, onNext }: PhoneScreenProps) {
           <div className="bg-card border border-border rounded-2xl overflow-hidden mb-3 shadow-sm">
             <div className="p-2 border-b border-border">
               <input
-                placeholder="Search country…"
+                placeholder="Поиск страны…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 className="w-full px-3 py-2 text-sm bg-muted rounded-xl outline-none placeholder-muted-foreground"
@@ -149,13 +149,13 @@ export function PhoneScreen({ challenge, onNext }: PhoneScreenProps) {
           className="w-full py-4 rounded-xl font-extrabold text-sm text-white disabled:opacity-35 mt-2"
           style={{ background: BRAND_COLOR }}
         >
-          {loading ? "Sending…" : "Get code"}
+          {loading ? "Отправка…" : "Получить код"}
         </button>
       </div>
 
       <div className="mt-8 text-center">
         <p className="text-xs text-muted-foreground leading-snug">
-          Joining via invite link{" "}
+          Вход по ссылке приглашения{" "}
           <span className="font-bold text-foreground">displine.vercel.app/join?code={challenge.inviteCode}</span>
         </p>
       </div>

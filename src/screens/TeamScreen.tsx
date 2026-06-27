@@ -30,7 +30,7 @@ export function TeamScreen() {
       setSent(true);
       setTimeout(() => { setSent(false); setShowInvite(false); }, 2000);
     } catch {
-      setError("Failed to send invite. Try again.");
+      setError("Не удалось отправить приглашение. Попробуйте снова.");
     } finally {
       setLoading(false);
     }
@@ -38,34 +38,34 @@ export function TeamScreen() {
 
   const changeRole = async (id: string, role: OrgRole) => {
     try { await updateTeamMemberRole(challenge.id, id, role); }
-    catch { setError("Failed to update role."); }
+    catch { setError("Не удалось обновить роль."); }
   };
 
   const removeMember = async (id: string) => {
     try { await removeTeamMember(challenge.id, id); }
-    catch { setError("Failed to remove member."); }
+    catch { setError("Не удалось удалить участника."); }
   };
 
   const roleBadge = (role: OrgRole, status: TeamMember["status"]) => {
     if (status === "invited") return (
-      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Invited</span>
+      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Приглашён</span>
     );
     return role === "owner"
-      ? <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">Owner</span>
-      : <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">Helper</span>;
+      ? <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">Владелец</span>
+      : <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">Помощник</span>;
   };
 
   return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-6 max-w-[600px] mx-auto">
       <div className="flex items-center gap-3 mb-5">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          <ChevronLeft size={16} /> Back
+          <ChevronLeft size={16} /> Назад
         </button>
-        <p className="font-extrabold text-lg">Team</p>
+        <p className="font-extrabold text-lg">Команда</p>
         <button onClick={() => setShowInvite(v => !v)}
           className="ml-auto flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-white"
           style={{ background: BRAND_COLOR }}>
-          <Plus size={13} /> Invite teammate
+          <Plus size={13} /> Пригласить
         </button>
       </div>
 
@@ -76,26 +76,26 @@ export function TeamScreen() {
           {sent ? (
             <div className="flex items-center gap-2 py-2">
               <CheckCircle2 size={18} className="text-green-500" />
-              <p className="font-bold text-sm text-green-700">Invite sent! They'll receive an email with a link to set their password.</p>
+              <p className="font-bold text-sm text-green-700">Приглашение отправлено! Они получат письмо со ссылкой для установки пароля.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="font-bold text-sm">Invite a teammate</p>
+              <p className="font-bold text-sm">Пригласить участника</p>
               <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
                 <div>
-                  <SecLabel>Email address</SecLabel>
-                  <input type="email" placeholder="colleague@example.com" value={inviteEmail}
+                  <SecLabel>Адрес эл. почты</SecLabel>
+                  <input type="email" placeholder="коллега@пример.рф" value={inviteEmail}
                     onChange={e => setInviteEmail(e.target.value)}
                     className="w-full mt-1.5 bg-card rounded-xl px-3 py-2.5 text-sm outline-none border border-border" />
                 </div>
                 <div>
-                  <SecLabel>Role</SecLabel>
+                  <SecLabel>Роль</SecLabel>
                   <div className="flex gap-2 mt-1.5">
                     {(["helper", "owner"] as OrgRole[]).map(r => (
                       <button key={r} onClick={() => setInviteRole(r)}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors capitalize"
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
                         style={inviteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                        {r === "owner" ? "Co-owner" : "Helper"}
+                        {r === "owner" ? "Совладелец" : "Помощник"}
                       </button>
                     ))}
                   </div>
@@ -104,17 +104,17 @@ export function TeamScreen() {
               {inviteRole === "owner" && (
                 <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
                   <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">Co-owners get full access including challenge settings and team management.</p>
+                  <p className="text-xs text-amber-700">Совладельцы получают полный доступ, включая настройки челленджа и управление командой.</p>
                 </div>
               )}
               <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-                <p className="text-xs text-blue-600 font-semibold">Helper access includes:</p>
-                <p className="text-xs text-blue-500 mt-0.5">Review &amp; approve submissions · View all stats · Cannot change settings or adjust lives/scores</p>
+                <p className="text-xs text-blue-600 font-semibold">Доступ помощника включает:</p>
+                <p className="text-xs text-blue-500 mt-0.5">Проверка и одобрение отправок · Просмотр статистики · Не может изменять настройки или корректировать жизни/очки</p>
               </div>
               <button onClick={sendInvite} disabled={!inviteEmail.trim() || loading}
                 className="w-full py-3 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
                 style={{ background: BRAND_COLOR }}>
-                {loading ? "Sending…" : "Send invite email"}
+                {loading ? "Отправка…" : "Отправить приглашение"}
               </button>
             </div>
           )}
@@ -135,7 +135,7 @@ export function TeamScreen() {
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {member.status === "invited" ? "Invite sent" : "Active since"} {member.since}
+                  {member.status === "invited" ? "Приглашение отправлено" : "Активен с"} {member.since}
                 </p>
               </div>
               {/* Hide controls for the current user's own row */}
@@ -143,8 +143,8 @@ export function TeamScreen() {
                 <div className="flex items-center gap-2 shrink-0">
                   <select value={member.role} onChange={e => changeRole(member.id, e.target.value as OrgRole)}
                     className="text-xs font-bold bg-muted border border-border rounded-lg px-2 py-1 outline-none cursor-pointer">
-                    <option value="helper">Helper</option>
-                    <option value="owner">Co-owner</option>
+                    <option value="helper">Помощник</option>
+                    <option value="owner">Совладелец</option>
                   </select>
                   <button onClick={() => removeMember(member.id)}
                     className="w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors">
@@ -152,7 +152,7 @@ export function TeamScreen() {
                   </button>
                 </div>
               ) : (
-                <span className="text-xs text-muted-foreground italic shrink-0">you</span>
+                <span className="text-xs text-muted-foreground italic shrink-0">вы</span>
               )}
             </div>
           </Card>
@@ -161,8 +161,8 @@ export function TeamScreen() {
 
       <div className="mt-5 p-3.5 bg-muted rounded-xl border border-border">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          <span className="font-bold text-foreground">All review decisions are public.</span>{" "}
-          Every submission, approval, rejection, and organizer comment is visible in the activity feed to all participants — so any teammate can review any submission, including submissions from people they know personally. Accountability comes from transparency, not restrictions.
+          <span className="font-bold text-foreground">Все решения по проверке публичны.</span>{" "}
+          Каждая отправка, одобрение, отказ и комментарий организатора видны в ленте активности всем участникам — поэтому любой помощник может проверять любую отправку, в том числе от людей, которых знает лично. Ответственность достигается прозрачностью, а не ограничениями.
         </p>
       </div>
     </div>

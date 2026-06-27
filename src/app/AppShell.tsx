@@ -1,4 +1,5 @@
 import { Outlet, useNavigate } from "react-router";
+import { Loader2 } from "lucide-react";
 import { DesktopNav } from "../components/nav/DesktopNav";
 import { TabBar } from "../components/nav/TabBar";
 import { DemoControls } from "../components/nav/DemoControls";
@@ -12,10 +13,10 @@ function NoChallengeState() {
     <div className="flex flex-col items-center justify-center min-h-full px-6 py-16 text-center gap-4">
       <p className="text-5xl">🔗</p>
       <div className="space-y-1">
-        <p className="font-extrabold text-xl">You haven't joined a challenge yet</p>
+        <p className="font-extrabold text-xl">Вы ещё не вступили в челлендж</p>
         <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
-          It looks like the join step didn't complete. Ask your organizer to resend
-          the invite link, then tap it to try again.
+          Похоже, вступление не завершилось. Попросите организатора повторно отправить
+          ссылку-приглашение и нажмите её ещё раз.
         </p>
       </div>
       <button
@@ -23,25 +24,55 @@ function NoChallengeState() {
         className="mt-2 px-8 py-3 rounded-xl font-extrabold text-sm text-white"
         style={{ background: BRAND_COLOR }}
       >
-        Use my invite link
+        Использовать ссылку-приглашение
       </button>
     </div>
   );
 }
 
 export function AppShell() {
-  const { currentUser, userProfile, authLoading } = useAuthContext();
-  const { challenges } = useAppContext();
+  const { currentUser, userProfile } = useAuthContext();
+  const { challenges, loading, challenge } = useAppContext();
 
   // Show the empty state only for real authenticated users whose join step
   // failed — i.e. they have a profile but no challenge roles and no challenges
   // loaded. Demo mode (currentUser = null) falls through to normal rendering.
   const showNoChallengeState =
-    !authLoading &&
+    !loading &&
     !!currentUser &&
     !!userProfile &&
     Object.keys(userProfile.challengeRoles).length === 0 &&
     challenges.length === 0;
+
+  const inner = (() => {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-full min-h-[50vh]">
+          <Loader2 size={28} className="animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    if (showNoChallengeState) return <NoChallengeState />;
+    // Challenges loaded but selectedId points to a doc that didn't come back
+    // (e.g. stale ID after challenge deletion). Show recovery UI rather than crash.
+    if (!challenge) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full min-h-[50vh] px-6 text-center gap-3">
+          <p className="text-3xl">🔗</p>
+          <p className="font-extrabold text-lg">Челлендж не найден</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Не удалось загрузить данные. Попробуйте обновить страницу.
+          </p>
+          <button onClick={() => window.location.reload()}
+            className="px-6 py-3 rounded-xl font-extrabold text-sm text-white mt-1"
+            style={{ background: BRAND_COLOR }}>
+            Обновить
+          </button>
+        </div>
+      );
+    }
+    return <Outlet />;
+  })();
 
   return (
     <div className="min-h-screen bg-background flex overflow-x-hidden">
@@ -55,7 +86,7 @@ export function AppShell() {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20 lg:pb-8" style={{ scrollbarWidth: "none" }}>
-          {showNoChallengeState ? <NoChallengeState /> : <Outlet />}
+          {inner}
         </div>
 
         {/* Mobile bottom tab bar */}

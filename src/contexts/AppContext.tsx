@@ -38,14 +38,15 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser, userProfile } = useAuthContext();
+  const { currentUser, userProfile, authLoading } = useAuthContext();
 
   const [challenges, setChallenges] = useState<ChallengeData[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminTz, setAdminTz]       = useState<string>(detectTz);
   const [adminTzAuto, setAdminTzAuto] = useState(true);
   const [isRunDayState, setIsRunDay] = useState(false);
-  const [loading, setLoading]       = useState(false);
+  // Start true — we don't know yet whether there are challenges to load
+  const [challengeLoading, setChallengeLoading] = useState(true);
   const [todayTask, setTodayTask]   = useState<Task | null>(null);
 
   // DEV-only role override; in production role comes from meParticipant.
@@ -53,15 +54,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // ── Load challenge metadata from Firestore ────────────────────────────────
   useEffect(() => {
-    if (!currentUser || !userProfile) return;
+    // Auth still resolving — stay in loading state
+    if (authLoading) return;
+
+    // Not signed in or no profile yet — nothing to load
+    if (!currentUser || !userProfile) {
+      setChallengeLoading(false);
+      return;
+    }
 
     const roleEntries = Object.entries(userProfile.challengeRoles);
     if (roleEntries.length === 0) {
       setChallenges([]);
+      setChallengeLoading(false);
       return;
     }
 
-    setLoading(true);
+    setChallengeLoading(true);
     const unsubs = roleEntries.map(([cid]) =>
       onSnapshot(challengeRef(cid), (snap) => {
         if (!snap.exists()) return;
@@ -97,7 +106,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
           return [...prev, merged];
         });
-        setLoading(false);
+        setChallengeLoading(false);
 
         // Auto-select if this is the only challenge
         setSelectedId(prev => prev ?? (roleEntries.length === 1 ? cid : null));
@@ -105,7 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     );
 
     return () => unsubs.forEach(u => u());
-  }, [currentUser, userProfile]);
+  }, [authLoading, currentUser, userProfile]);
 
   // ── Subscribe to active challenge subcollections ──────────────────────────
   useEffect(() => {
@@ -192,6 +201,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateChallenge = useCallback((id: string, update: Partial<ChallengeData>) => {
     setChallenges(prev => prev.map(c => c.id === id ? { ...c, ...update } : c));
   }, []);
+
+  // True while auth is resolving OR while Firestore challenge docs are in-flight.
+  // Consumers can gate rendering on this to avoid reading undefined challenge data.
+  const loading = authLoading || challengeLoading;
 
   return (
     <AppContext.Provider value={{

@@ -48,11 +48,11 @@ export function HomeScreen() {
           <Av ini={meParticipant?.ini ?? "?"} sz="md" accent />
           <div>
             <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">{challenge.emoji} {challenge.name}</p>
-            <p className="font-extrabold text-xl leading-tight">Day {challenge.currentDay}</p>
+            <p className="font-extrabold text-xl leading-tight">День {challenge.currentDay}</p>
           </div>
         </div>
         <div className="text-right">
-          <p className="text-[10px] font-bold text-muted-foreground">Score</p>
+          <p className="text-[10px] font-bold text-muted-foreground">Очки</p>
           <p style={{ ...bc, color: BRAND_COLOR, fontSize: 22, fontWeight: 900, lineHeight: 1 }}>{myScore}</p>
           <div className="flex justify-end mt-0.5">
             <Hearts n={meParticipant?.lives ?? 0} sz={16} />
@@ -62,7 +62,7 @@ export function HomeScreen() {
 
       <Card className="!p-4">
         <div className="flex justify-between items-center mb-2.5">
-          <SecLabel>Marathon progress</SecLabel>
+          <SecLabel>Прогресс марафона</SecLabel>
           <span className="text-xs font-bold text-muted-foreground">{challenge.currentDay}/{challenge.duration} · {pct}%</span>
         </div>
         <div className="h-2 bg-muted rounded-full overflow-hidden">
@@ -73,28 +73,28 @@ export function HomeScreen() {
       {todayTask ? (
         <Card className="!p-5" accent>
           <div className="flex items-center gap-2 mb-3">
-            <SecLabel>Today&apos;s mission</SecLabel>
+            <SecLabel>Задание на сегодня</SecLabel>
             <span className="ml-auto text-[11px] font-semibold text-muted-foreground flex items-center gap-1">
-              <Clock size={11} /> Due {todayTask.deadline}
+              <Clock size={11} /> До {todayTask.deadline}
             </span>
           </div>
           <p className="font-extrabold text-xl mb-1">{todayTask.title}</p>
           <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{todayTask.description}</p>
           <div className="flex items-center gap-2 mb-4">
             <Zap size={13} style={{ color: BRAND_COLOR }} />
-            <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} pts on completion</span>
+            <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} оч. за выполнение</span>
           </div>
           <button onClick={() => goSubmit("task")} className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
-            Submit Proof
+            Отправить подтверждение
           </button>
         </Card>
       ) : (
         <Card className="!p-5">
           <div className="flex items-center gap-2 mb-3">
             <CalendarDays size={15} className="text-muted-foreground" />
-            <SecLabel>Today&apos;s mission</SecLabel>
+            <SecLabel>Задание на сегодня</SecLabel>
           </div>
-          <p className="text-sm text-muted-foreground">No task scheduled for today. Check back later or contact your organizer.</p>
+          <p className="text-sm text-muted-foreground">На сегодня задание не запланировано. Проверьте позже или свяжитесь с организатором.</p>
         </Card>
       )}
 
@@ -102,15 +102,15 @@ export function HomeScreen() {
         <Card className="!p-4">
           <div className="flex items-center gap-2 mb-3">
             <Activity size={14} style={{ color: BRAND_COLOR }} />
-            <SecLabel>Morning run</SecLabel>
+            <SecLabel>Утренняя пробежка</SecLabel>
             <span className="ml-auto text-[11px] text-muted-foreground">{runDayLabels}</span>
           </div>
           <div className="flex items-center gap-3 mb-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Zap size={10} style={{ color: BRAND_COLOR }} /><span style={{ color: BRAND_COLOR }} className="font-bold">+{SCORE.running_on_time} pts</span> on time</span>
+            <span className="flex items-center gap-1"><Zap size={10} style={{ color: BRAND_COLOR }} /><span style={{ color: BRAND_COLOR }} className="font-bold">+{SCORE.running_on_time} оч.</span> вовремя</span>
             <span className="text-border">·</span>
-            <span className="flex items-center gap-1">+{SCORE.running_late} pt late</span>
+            <span className="flex items-center gap-1">+{SCORE.running_late} оч. с оп.</span>
             <span className="text-border">·</span>
-            <span className="flex items-center gap-1"><Clock size={10} /> by {todayDeadline}</span>
+            <span className="flex items-center gap-1"><Clock size={10} /> до {todayDeadline}</span>
           </div>
           {!checkedIn ? (
             <>
@@ -119,16 +119,16 @@ export function HomeScreen() {
                 className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white flex items-center justify-center gap-2 mb-2"
                 style={{ background: BRAND_COLOR }}
               >
-                <Camera size={16} /> Take photo &amp; check in
+                <Camera size={16} /> Фото и отметиться
               </button>
               <button
                 onClick={() => { setThumb("sim"); setCheckedIn(true); }}
                 className="w-full py-2 rounded-xl text-xs font-semibold text-muted-foreground border border-dashed border-border"
               >
-                Simulate capture (preview only)
+                Симуляция (только предпросмотр)
               </button>
               <p className="text-center text-[11px] text-muted-foreground mt-2 flex items-center justify-center gap-1">
-                <MapPin size={11} /> location and time will be added automatically
+                <MapPin size={11} /> геолокация и время добавятся автоматически
               </p>
             </>
           ) : (
@@ -138,15 +138,15 @@ export function HomeScreen() {
                   {thumb && thumb !== "sim" ? <img src={thumb} alt="check-in" className="w-full h-full object-cover" /> : <Camera size={18} className="text-green-600" />}
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-extrabold text-green-700">Checked in at 05:48</span></div>
-                  <p className="text-[11px] text-green-600 flex items-center gap-1"><MapPin size={10} /> GPS + timestamp recorded</p>
+                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-extrabold text-green-700">Отмечено в 05:48</span></div>
+                  <p className="text-[11px] text-green-600 flex items-center gap-1"><MapPin size={10} /> GPS + время записаны</p>
                 </div>
               </div>
               <button
                 onClick={() => goSubmit("run")}
                 className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm"
               >
-                <ExternalLink size={14} /> Upload result / Connect Strava
+                <ExternalLink size={14} /> Загрузить результат / Подключить Strava
               </button>
             </>
           )}
@@ -155,26 +155,26 @@ export function HomeScreen() {
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="!p-4">
-          <div className="flex items-center gap-1.5 mb-2"><Wallet size={13} className="text-muted-foreground" /><SecLabel>Treasury</SecLabel></div>
+          <div className="flex items-center gap-1.5 mb-2"><Wallet size={13} className="text-muted-foreground" /><SecLabel>Казна</SecLabel></div>
           <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{challenge.totalTreasury.toLocaleString("ru")}</p>
           <p className="text-xs text-muted-foreground mt-1">{challenge.settings.currency}</p>
         </Card>
         <Card className="!p-4">
-          <div className="flex items-center gap-1.5 mb-2"><TrendingUp size={13} className="text-muted-foreground" /><SecLabel>My score</SecLabel></div>
+          <div className="flex items-center gap-1.5 mb-2"><TrendingUp size={13} className="text-muted-foreground" /><SecLabel>Мои очки</SecLabel></div>
           <p style={{ ...bc, fontSize: 28, fontWeight: 900, lineHeight: 1 }}>{myScore}</p>
-          <p className="text-xs text-muted-foreground mt-1">pts total</p>
+          <p className="text-xs text-muted-foreground mt-1">очков всего</p>
         </Card>
       </div>
 
       <Card className="!p-4">
         <div className="flex items-center justify-between mb-3">
-          <SecLabel>Leaderboard</SecLabel>
+          <SecLabel>Таблица лидеров</SecLabel>
           <div className="flex gap-1 bg-muted rounded-xl p-0.5">
             {(["score", "distance"] as SortKey[]).map(k => (
               <button key={k} onClick={() => setLbSort(k)}
                 className="px-2.5 py-1 rounded-lg text-[10px] font-bold"
                 style={lbSort === k ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>
-                {k === "score" ? "Score" : "Distance"}
+                {k === "score" ? "Очки" : "Дистанция"}
               </button>
             ))}
           </div>
@@ -190,7 +190,7 @@ export function HomeScreen() {
                   {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {lbSort === "score" ? `${calcScore(p.results)} pts` : `${p.km} km`}
+                  {lbSort === "score" ? `${calcScore(p.results)} оч.` : `${p.km} км`}
                 </p>
               </div>
               <Hearts n={p.lives} sz={14} />

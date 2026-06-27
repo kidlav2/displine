@@ -27,7 +27,7 @@ export function ParticipantProfile() {
   const [actionLoading, setActionLoading] = useState(false);
 
   if (!participant) return (
-    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Participant not found.</div>
+    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Участник не найден.</div>
   );
 
   const score = calcScore(participant.results);
@@ -54,7 +54,7 @@ export function ParticipantProfile() {
   return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[560px] mx-auto">
       <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-        <ChevronLeft size={16} /> Back
+        <ChevronLeft size={16} /> Назад
       </button>
       <div className="flex flex-col items-center text-center pt-2">
         <Av ini={participant.ini} sz="lg" admin={participant.isAdmin} />
@@ -62,11 +62,11 @@ export function ParticipantProfile() {
           <p className="font-extrabold text-2xl">{participant.name}</p>
           {participant.isAdmin && (
             <span className="flex items-center gap-1 text-[10px] font-extrabold text-blue-500 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-              <Shield size={9} /> organizer
+              <Shield size={9} /> организатор
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-1">Joined {participant.joinDate}</p>
+        <p className="text-xs text-muted-foreground mt-1">Вступил {participant.joinDate}</p>
         {isAdmin && (() => {
           const c = findCity(participant.tz);
           const now = localNow(participant.tz);
@@ -76,7 +76,7 @@ export function ParticipantProfile() {
               <span className="font-semibold">{c.city}</span>
               <span className="text-muted-foreground">·</span>
               <span className="text-muted-foreground font-mono">{utcLabel(participant.tz)}</span>
-              <span className="text-muted-foreground">· now</span>
+              <span className="text-muted-foreground">· сейчас</span>
               <span className="font-mono font-bold" style={{ color: BRAND_COLOR }}>{now}</span>
             </div>
           );
@@ -85,8 +85,8 @@ export function ParticipantProfile() {
 
       <Card className="!p-4">
         <div className="flex justify-between items-baseline mb-2.5">
-          <SecLabel>Progress</SecLabel>
-          <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>Day {challenge.currentDay} / {challenge.duration}</span>
+          <SecLabel>Прогресс</SecLabel>
+          <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>День {challenge.currentDay} / {challenge.duration}</span>
         </div>
         <div className="h-2.5 bg-muted rounded-full overflow-hidden">
           <div className="h-full rounded-full" style={{ width: `${progressPct}%`, background: BRAND_COLOR }} />
@@ -95,29 +95,29 @@ export function ParticipantProfile() {
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="!p-4">
-          <SecLabel>Challenge score</SecLabel>
+          <SecLabel>Очки в челлендже</SecLabel>
           <p style={{ ...bc, fontSize: 32, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{score.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground mt-1">points</p>
+          <p className="text-xs text-muted-foreground mt-1">очков</p>
         </Card>
         <Card className="!p-4">
-          <SecLabel>Distance run</SecLabel>
+          <SecLabel>Пробежано</SecLabel>
           <p style={{ ...bc, fontSize: 32, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{participant.km}</p>
-          <p className="text-xs text-muted-foreground mt-1">km</p>
+          <p className="text-xs text-muted-foreground mt-1">км</p>
         </Card>
       </div>
 
       <Card className="!p-4">
-        <SecLabel>Lives remaining</SecLabel>
+        <SecLabel>Оставшиеся жизни</SecLabel>
         <div className="flex gap-3 justify-center py-3">
           <Hearts n={participant.lives} sz={28} />
         </div>
-        {!participant.active && <p className="text-center text-xs font-bold text-red-500">Eliminated</p>}
+        {!participant.active && <p className="text-center text-xs font-bold text-red-500">Выбыл</p>}
       </Card>
 
       <Card className="!p-4">
-        <SecLabel>Penalty history</SecLabel>
+        <SecLabel>История штрафов</SecLabel>
         {participant.penalties.length === 0
-          ? <p className="text-sm text-muted-foreground mt-3 text-center py-2">Clean record ✓</p>
+          ? <p className="text-sm text-muted-foreground mt-3 text-center py-2">Нарушений нет ✓</p>
           : <div className="mt-3">
               {participant.penalties.map((pen, i) => (
                 <div key={i} className="flex items-start gap-3 py-3 border-t border-border first:border-t-0">
@@ -142,7 +142,7 @@ export function ParticipantProfile() {
             <div className="flex-1 h-px bg-border" />
             <span className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
               <Shield size={9} className="text-blue-400" />
-              {isOwner ? "Owner panel" : "Helper panel"}
+              {isOwner ? "Панель владельца" : "Панель помощника"}
             </span>
             <div className="flex-1 h-px bg-border" />
           </div>
@@ -152,23 +152,23 @@ export function ParticipantProfile() {
                 <button onClick={onRemoveLife} disabled={participant.lives === 0 || actionLoading}
                   className="w-full flex items-center gap-3 p-3 rounded-xl border border-red-100 bg-red-50 disabled:opacity-40 text-left">
                   <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center shrink-0"><Minus size={16} className="text-red-500" /></div>
-                  <div><p className="text-sm font-bold text-red-600">Remove a life</p><p className="text-xs text-red-400">Deducts 1 life (owner only)</p></div>
+                  <div><p className="text-sm font-bold text-red-600">Снять жизнь</p><p className="text-xs text-red-400">Вычитает 1 жизнь (только владелец)</p></div>
                 </button>
                 <button onClick={() => setPenaltyForm(v => !v)}
                   className="w-full flex items-center gap-3 p-3 rounded-xl border border-orange-100 bg-orange-50 text-left">
                   <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0"><AlertCircle size={16} className="text-orange-500" /></div>
-                  <div><p className="text-sm font-bold text-orange-600">Log penalty</p><p className="text-xs text-orange-400">Record a fine manually (owner only)</p></div>
+                  <div><p className="text-sm font-bold text-orange-600">Записать штраф</p><p className="text-xs text-orange-400">Зафиксировать штраф вручную (только владелец)</p></div>
                 </button>
               </>
             ) : (
               <div className="flex items-center gap-2 p-3 bg-muted rounded-xl">
                 <Lock size={13} className="text-muted-foreground shrink-0" />
-                <p className="text-xs text-muted-foreground">Life and penalty adjustments are restricted to challenge owners. You can review submissions using the Review tab.</p>
+                <p className="text-xs text-muted-foreground">Изменение жизней и штрафов доступно только владельцам челленджа. Вы можете проверять отправки на вкладке «Проверка».</p>
               </div>
             )}
             {penaltyForm && (
               <div className="space-y-2">
-                <input placeholder="Reason…" value={penaltyReason} onChange={e => setPenaltyReason(e.target.value)}
+                <input placeholder="Причина…" value={penaltyReason} onChange={e => setPenaltyReason(e.target.value)}
                   className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
                 <div className="flex gap-2">
                   <input type="number" value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)}
@@ -182,16 +182,16 @@ export function ParticipantProfile() {
                   }}
                   disabled={!penaltyReason.trim() || actionLoading}
                   className="w-full py-2.5 rounded-xl font-bold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>
-                  Confirm
+                  Подтвердить
                 </button>
               </div>
             )}
             <div>
-              <p className="text-sm font-bold mb-2 flex items-center gap-2"><MessageCircle size={14} className="text-blue-400" /> Organizer note</p>
+              <p className="text-sm font-bold mb-2 flex items-center gap-2"><MessageCircle size={14} className="text-blue-400" /> Заметка организатора</p>
               {orgNoteSaved
-                ? <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-200"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-semibold text-green-700">Note saved</span></div>
+                ? <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-200"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-semibold text-green-700">Заметка сохранена</span></div>
                 : <div className="flex gap-2">
-                    <textarea placeholder="Private note…" value={orgNote} onChange={e => setOrgNote(e.target.value)} rows={2}
+                    <textarea placeholder="Приватная заметка…" value={orgNote} onChange={e => setOrgNote(e.target.value)} rows={2}
                       className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-xs outline-none resize-none placeholder-muted-foreground" />
                     <button onClick={() => { if (orgNote.trim()) { setOrgNoteSaved(true); setTimeout(() => setOrgNoteSaved(false), 2000); } }}
                       className="self-end pb-0.5" style={{ color: BRAND_COLOR }}><Send size={17} /></button>

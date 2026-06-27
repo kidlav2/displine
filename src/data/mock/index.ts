@@ -18,12 +18,12 @@ export const PHOTOS = {
 
 // ── Mock achievements (replace with achievements subcollection per challenge) ──
 export const ACHIEVEMENTS = [
-  { icon: "🔥", title: "10-Day Streak",  desc: "10 days without missing a task",    unlocked: true  },
-  { icon: "⚡", title: "First Week",     desc: "Completed your first full week",     unlocked: true  },
-  { icon: "❤️", title: "Full Lives",     desc: "5 lives for 5 consecutive days",     unlocked: true  },
-  { icon: "🏃", title: "25 km Club",     desc: "Ran a total of 25 km",              unlocked: true  },
-  { icon: "🧘", title: "Inner Peace",    desc: "Completed 5 journaling tasks",       unlocked: false },
-  { icon: "🗓",  title: "Halfway There", desc: "Reach Day 25",                      unlocked: false },
+  { icon: "🔥", title: "10 дней подряд",   desc: "10 дней без пропуска задания",          unlocked: true  },
+  { icon: "⚡", title: "Первая неделя",    desc: "Завершили первую полную неделю",         unlocked: true  },
+  { icon: "❤️", title: "Полные жизни",    desc: "5 жизней 5 дней подряд",                 unlocked: true  },
+  { icon: "🏃", title: "Клуб 25 км",      desc: "Пробежали в сумме 25 км",                unlocked: true  },
+  { icon: "🧘", title: "Внутренний покой", desc: "Выполнили 5 заданий по ведению дневника", unlocked: false },
+  { icon: "🗓",  title: "На полпути",      desc: "Достигли дня 25",                        unlocked: false },
 ];
 
 // ── Default challenge settings ──

@@ -40,12 +40,12 @@ export function TimezoneSettings({ tz, isAuto, onChange }: TimezoneSettingsProps
         </div>
         <div className="text-right">
           <p className="font-extrabold text-lg leading-none" style={{ ...bc, color: BRAND_COLOR }}>{now}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">now</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">сейчас</p>
         </div>
       </div>
 
       <input
-        placeholder="Search city or country…"
+        placeholder="Поиск города или страны…"
         value={search}
         onChange={e => setSearch(e.target.value)}
         className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none placeholder-muted-foreground"
@@ -73,7 +73,7 @@ export function TimezoneSettings({ tz, isAuto, onChange }: TimezoneSettingsProps
           );
         })}
         {filtered.length === 0 && (
-          <p className="text-center text-xs text-muted-foreground py-4">No cities found</p>
+          <p className="text-center text-xs text-muted-foreground py-4">Города не найдены</p>
         )}
       </div>
     </div>

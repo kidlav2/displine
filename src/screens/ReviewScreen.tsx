@@ -35,9 +35,9 @@ export function ReviewScreen() {
   const filtered = challenge.queue.filter(q => filter === "all" || q.type === filter);
 
   const FILTER_LABELS: { key: ReviewFilter; label: string }[] = [
-    { key: "all",       label: `All (${counts.all})`             },
-    { key: "running",   label: `Running (${counts.running})`     },
-    { key: "checklist", label: `Checklist (${counts.checklist})` },
+    { key: "all",       label: `Все (${counts.all})`             },
+    { key: "running",   label: `Пробежка (${counts.running})`    },
+    { key: "checklist", label: `Чеклист (${counts.checklist})`   },
   ];
 
   const act = (id: number, status: "approved" | "rejected") => {
@@ -57,7 +57,7 @@ export function ReviewScreen() {
         className="w-8 h-8 rounded-xl border border-border bg-card flex items-center justify-center"><ChevronLeft size={16} /></button>
       <div className="text-center">
         <p className="font-extrabold text-sm leading-none">{fmtDate(d)}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 font-semibold">Day {reviewDay} / {challenge.duration}</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5 font-semibold">День {reviewDay} / {challenge.duration}</p>
       </div>
       <button onClick={() => setReviewDay(v => Math.min(challenge.duration, v + 1))}
         className="w-8 h-8 rounded-xl border border-border bg-card flex items-center justify-center"><ChevronRight size={16} /></button>
@@ -76,9 +76,9 @@ export function ReviewScreen() {
   const statusSummary = (
     <div className="space-y-1">
       {[
-        { label: "Pending",          count: challenge.queue.filter(q => q.status === "pending" || q.status === "in_progress").length, color: "#F59E0B" },
-        { label: "Approved",         count: challenge.queue.filter(q => q.status === "approved").length,                               color: "#22C55E" },
-        { label: "Rejected / Late",  count: challenge.queue.filter(q => q.status === "rejected" || q.status === "late" || q.status === "missing").length, color: "#EF4444" },
+        { label: "На проверке",        count: challenge.queue.filter(q => q.status === "pending" || q.status === "in_progress").length, color: "#F59E0B" },
+        { label: "Одобрено",          count: challenge.queue.filter(q => q.status === "approved").length,                               color: "#22C55E" },
+        { label: "Отклонено / Оп.",   count: challenge.queue.filter(q => q.status === "rejected" || q.status === "late" || q.status === "missing").length, color: "#EF4444" },
       ].map(s => (
         <div key={s.label} className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">{s.label}</span>
@@ -97,18 +97,18 @@ export function ReviewScreen() {
         <div className="flex-1 space-y-2">
           <div className="flex gap-4 text-xs">
             <div>
-              <p className="text-muted-foreground mb-1">Check-in</p>
+              <p className="text-muted-foreground mb-1">Отметка</p>
               <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} />
             </div>
             <div>
-              <p className="text-muted-foreground mb-1">Result time</p>
+              <p className="text-muted-foreground mb-1">Время результата</p>
               <DualTimestamp time={item.resultT} participantTz={item.participantTz} adminTz={adminTz} />
             </div>
-            {item.km && <div><p className="text-muted-foreground mb-1">Distance</p><p className="font-bold">{item.km} km</p></div>}
+            {item.km && <div><p className="text-muted-foreground mb-1">Дистанция</p><p className="font-bold">{item.km} км</p></div>}
           </div>
           <div>
-            <div className="flex items-center gap-1 mb-1"><SecLabel>Private comment</SecLabel></div>
-            <textarea placeholder="Reason — visible only to participant…"
+            <div className="flex items-center gap-1 mb-1"><SecLabel>Приватный комментарий</SecLabel></div>
+            <textarea placeholder="Причина — видна только участнику…"
               value={draftComment} onChange={e => setDraftComment(e.target.value)} rows={2}
               className="w-full text-xs bg-muted rounded-xl px-3 py-2 outline-none resize-none placeholder-muted-foreground" />
           </div>
@@ -117,9 +117,9 @@ export function ReviewScreen() {
       {(item.status === "pending" || item.status === "in_progress" || item.status === "late") && (
         <div className="flex gap-2">
           <button onClick={() => act(item.id, "rejected")}
-            className="flex-1 py-2 rounded-xl border-2 border-red-200 text-red-500 font-bold text-sm">Reject</button>
+            className="flex-1 py-2 rounded-xl border-2 border-red-200 text-red-500 font-bold text-sm">Отклонить</button>
           <button onClick={() => act(item.id, "approved")}
-            className="flex-1 py-2 rounded-xl font-bold text-sm text-white" style={{ background: BRAND_COLOR }}>Approve</button>
+            className="flex-1 py-2 rounded-xl font-bold text-sm text-white" style={{ background: BRAND_COLOR }}>Одобрить</button>
         </div>
       )}
     </div>
@@ -129,33 +129,33 @@ export function ReviewScreen() {
     <div className="fixed inset-0 z-50 flex items-end lg:items-center justify-center bg-black/40 lg:p-8">
       <div className="bg-card rounded-t-3xl lg:rounded-3xl w-full lg:max-w-[480px] px-5 pt-5 pb-8 lg:pb-5">
         <div className="flex items-center justify-between mb-4">
-          <p className="font-extrabold text-lg">Create task</p>
+          <p className="font-extrabold text-lg">Создать задание</p>
           <button onClick={() => setShowCreate(false)} className="w-8 h-8 rounded-xl border border-border flex items-center justify-center"><XCircle size={16} className="text-muted-foreground" /></button>
         </div>
         {taskCreated ? (
-          <div className="flex flex-col items-center py-8 gap-3"><CheckCircle2 size={40} className="text-green-500" /><p className="font-bold text-lg">Task created!</p></div>
+          <div className="flex flex-col items-center py-8 gap-3"><CheckCircle2 size={40} className="text-green-500" /><p className="font-bold text-lg">Задание создано!</p></div>
         ) : (
           <div className="space-y-3">
-            <div><SecLabel>Task type</SecLabel>
+            <div><SecLabel>Тип задания</SecLabel>
               <div className="flex gap-2 mt-1.5">
-                {["running", "checklist", "freeform"].map(t => (
+                {[["running","Пробежка"],["checklist","Чеклист"],["freeform","Произвольное"]].map(([t, label]) => (
                   <button key={t} onClick={() => setTaskForm(f => ({ ...f, type: t }))}
-                    className="flex-1 py-2 rounded-xl text-xs font-bold border-2 capitalize"
-                    style={taskForm.type === t ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>{t}</button>
+                    className="flex-1 py-2 rounded-xl text-xs font-bold border-2"
+                    style={taskForm.type === t ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>{label}</button>
                 ))}</div></div>
             <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
-              <div><SecLabel>Title</SecLabel>
-                <input placeholder="e.g. Read for 30 minutes" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+              <div><SecLabel>Название</SecLabel>
+                <input placeholder="напр. Читать 30 минут" value={taskForm.title} onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
                   className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" /></div>
-              <div><SecLabel>Deadline</SecLabel>
+              <div><SecLabel>Дедлайн</SecLabel>
                 <input value={taskForm.deadline} onChange={e => setTaskForm(f => ({ ...f, deadline: e.target.value }))}
                   className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" /></div>
             </div>
-            <div><SecLabel>Description</SecLabel>
-              <textarea placeholder="Instructions…" value={taskForm.desc} onChange={e => setTaskForm(f => ({ ...f, desc: e.target.value }))} rows={2}
+            <div><SecLabel>Описание</SecLabel>
+              <textarea placeholder="Инструкции…" value={taskForm.desc} onChange={e => setTaskForm(f => ({ ...f, desc: e.target.value }))} rows={2}
                 className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" /></div>
             <button onClick={submitTask} disabled={!taskForm.title.trim()}
-              className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>Create task</button>
+              className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>Создать задание</button>
           </div>
         )}
       </div>
@@ -171,11 +171,11 @@ export function ReviewScreen() {
         <div className="flex items-center justify-between mb-4">
           {dateNav}
           <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-white" style={{ background: BRAND_COLOR }}>
-            <Plus size={13} /> Create task
+            <Plus size={13} /> Создать задание
           </button>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-3 mb-2" style={{ scrollbarWidth: "none" }}>{filterPills}</div>
-        {filtered.length === 0 && <p className="text-center text-sm text-muted-foreground py-12">No submissions</p>}
+        {filtered.length === 0 && <p className="text-center text-sm text-muted-foreground py-12">Нет отправок</p>}
         <div className="space-y-2">
           {filtered.map(item => (
             <div key={item.id}>
@@ -190,7 +190,7 @@ export function ReviewScreen() {
                         {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
                       </div>
                       <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-muted-foreground">{item.type === "running" ? "Run" : "Task"}</span>
+                        <span className="text-xs text-muted-foreground">{item.type === "running" ? "Пробежка" : "Задание"}</span>
                         {item.checkIn !== "—" && <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} label={false} />}
                       </div>
                     </div>
@@ -211,40 +211,40 @@ export function ReviewScreen() {
         <div className="w-72 shrink-0 border-r border-border overflow-y-auto bg-card/50 px-5 py-6 space-y-5"
           style={{ scrollbarWidth: "none" }}>
           <div>
-            <p className="font-extrabold text-lg mb-4">Review</p>
+            <p className="font-extrabold text-lg mb-4">Проверка</p>
             {dateNav}
           </div>
           <div>
-            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Filter by type</p>
+            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Фильтр по типу</p>
             {filterPills}
           </div>
           <div>
-            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Status summary</p>
+            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Сводка статусов</p>
             {statusSummary}
           </div>
           <div>
-            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Your timezone</p>
+            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Ваш часовой пояс</p>
             <div className="text-xs bg-muted rounded-xl px-3 py-2.5">
               <p className="font-semibold">{findCity(adminTz).city}</p>
               <p className="text-muted-foreground font-mono">{utcLabel(adminTz)} · now {localNow(adminTz)}</p>
-              <p className="text-muted-foreground mt-1 text-[10px]">Timestamps show participant time + your time</p>
+              <p className="text-muted-foreground mt-1 text-[10px]">Метки показывают время участника + ваше время</p>
             </div>
           </div>
           <button onClick={() => setShowCreate(true)}
             className="w-full py-3 rounded-xl font-extrabold text-sm text-white flex items-center justify-center gap-2"
             style={{ background: BRAND_COLOR }}>
-            <Plus size={14} /> Create task
+            <Plus size={14} /> Создать задание
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
           {filtered.length === 0 ? (
-            <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">No submissions for this day</div>
+            <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Нет отправок за этот день</div>
           ) : (
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm z-10">
                 <tr className="text-left">
-                  {["Participant", "Task", "Check-in", "Result", "Proof", "Status", "Actions"].map(h => (
+                  {["Участник", "Задание", "Отметка", "Результат", "Подтверждение", "Статус", "Действия"].map(h => (
                     <th key={h} className="px-4 py-3 text-[11px] font-extrabold tracking-widest uppercase text-muted-foreground">{h}</th>
                   ))}
                 </tr>
@@ -290,7 +290,7 @@ export function ReviewScreen() {
                           <div className="flex gap-1.5" onClick={e => e.stopPropagation()}>
                             <button onClick={() => setExpanded(item.id)}
                               className="px-2.5 py-1.5 rounded-lg border border-border text-xs font-bold text-muted-foreground hover:bg-muted">
-                              Review
+                              Проверить
                             </button>
                           </div>
                         ) : (

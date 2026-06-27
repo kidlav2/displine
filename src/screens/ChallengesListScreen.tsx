@@ -11,7 +11,7 @@ const STATUS_COLOR: Record<ChallengeStatus, string> = {
   active: "#22C55E", completed: "#8C8C9A", upcoming: "#3B82F6",
 };
 const STATUS_LABEL: Record<ChallengeStatus, string> = {
-  active: "Active", completed: "Completed", upcoming: "Upcoming",
+  active: "Активен", completed: "Завершён", upcoming: "Предстоящий",
 };
 
 function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => void }) {
@@ -44,13 +44,13 @@ function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => vo
                 <div className="h-full rounded-full" style={{ width: `${(ch.currentDay / ch.duration) * 100}%`, background: BRAND_COLOR }} />
               </div>
               <div className="flex items-center justify-between text-[10px] text-muted-foreground font-semibold">
-                <span>Day {ch.currentDay} / {ch.duration}</span>
-                <span>{ch.participants.length} participants</span>
+                <span>День {ch.currentDay} / {ch.duration}</span>
+                <span>{ch.participants.length} участников</span>
               </div>
             </>
           )}
           {ch.status !== "active" && (
-            <p className="text-[10px] text-muted-foreground font-semibold">{ch.duration} days · {ch.participants.length} participants</p>
+            <p className="text-[10px] text-muted-foreground font-semibold">{ch.duration} дней · {ch.participants.length} участников</p>
           )}
         </div>
         <ArrowRight size={16} className="text-muted-foreground shrink-0 mt-1" />
@@ -61,7 +61,7 @@ function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => vo
           className="flex items-center gap-1.5 shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-border bg-card transition-colors"
           style={copied ? { color: "#22C55E", borderColor: "#BBF7D0" } : { color: BRAND_COLOR }}>
           {copied ? <CheckCircle2 size={11} /> : <Copy size={11} />}
-          {copied ? "Copied!" : "Copy link"}
+          {copied ? "Скопировано!" : "Копировать"}
         </button>
       </div>
     </Card>
@@ -82,8 +82,8 @@ export function ChallengesListScreen() {
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-5 max-w-[720px] mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">Organizer</p>
-          <h1 className="font-extrabold text-2xl leading-tight">My Challenges</h1>
+          <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">Организатор</p>
+          <h1 className="font-extrabold text-2xl leading-tight">Мои челленджи</h1>
         </div>
         <Av ini={userProfile?.ini ?? "?"} sz="md" accent admin />
       </div>
@@ -91,13 +91,13 @@ export function ChallengesListScreen() {
       <button onClick={() => navigate("/challenges/create")}
         className="w-full lg:w-auto lg:px-8 py-4 rounded-2xl font-extrabold text-sm text-white flex items-center justify-center gap-2"
         style={{ background: BRAND_COLOR }}>
-        <Plus size={18} /> Create new challenge
+        <Plus size={18} /> Создать челлендж
       </button>
 
       {(["active", "upcoming", "completed"] as ChallengeStatus[]).map(status => {
         const group = challenges.filter(c => c.status === status);
         if (!group.length) return null;
-        const labels: Record<ChallengeStatus, string> = { active: "Active", upcoming: "Upcoming", completed: "Completed" };
+        const labels: Record<ChallengeStatus, string> = { active: "Активные", upcoming: "Предстоящие", completed: "Завершённые" };
         return (
           <div key={status} className={status === "completed" ? "opacity-60" : ""}>
             <SecLabel>{labels[status]}</SecLabel>

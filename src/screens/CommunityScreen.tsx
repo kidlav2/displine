@@ -31,17 +31,17 @@ export function CommunityScreen() {
 
   return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 max-w-[720px] mx-auto">
-      <h2 className="font-extrabold text-xl mb-4">Community</h2>
+      <h2 className="font-extrabold text-xl mb-4">Сообщество</h2>
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
         {(["feed", "leaderboard", "achievements"] as CommTab[]).map(t => (
-          <Chip key={t} label={t === "feed" ? "Activity" : t === "leaderboard" ? "Leaderboard" : "Achievements"}
+          <Chip key={t} label={t === "feed" ? "Активность" : t === "leaderboard" ? "Таблица лидеров" : "Достижения"}
             active={tab === t} onClick={() => setTab(t)} />
         ))}
       </div>
 
       {tab === "feed" && (
         <div className="pb-4">
-          <p className="text-xs text-muted-foreground font-semibold mb-3">All submissions — approved, rejected, and pending. Full transparency.</p>
+          <p className="text-xs text-muted-foreground font-semibold mb-3">Все отправки — одобренные, отклонённые и ожидающие. Полная прозрачность.</p>
           <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
             {challenge.feed.map(f => (
               <FeedCard key={f.id} item={f} onLike={handleLike} onComment={handleComment}
@@ -55,13 +55,13 @@ export function CommunityScreen() {
       {tab === "leaderboard" && (
         <div>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-bold">{challenge.participants.length} participants</p>
+            <p className="text-sm font-bold">{challenge.participants.length} участников</p>
             <div className="flex gap-1 bg-muted rounded-xl p-0.5">
               {(["score", "distance"] as SortKey[]).map(k => (
                 <button key={k} onClick={() => setSort(k)}
                   className="px-2.5 py-1 rounded-lg text-[10px] font-bold"
                   style={sort === k ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>
-                  {k === "score" ? "Score" : "Distance"}
+                  {k === "score" ? "Очки" : "Дистанция"}
                 </button>
               ))}
             </div>
@@ -80,12 +80,12 @@ export function CommunityScreen() {
                     {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {sort === "score" ? `${calcScore(p.results)} pts` : `${p.km} km`}
+                    {sort === "score" ? `${calcScore(p.results)} оч.` : `${p.km} км`}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   <Hearts n={p.lives} sz={14} />
-                  {!p.active && <span className="text-[10px] font-bold text-red-400">Eliminated</span>}
+                  {!p.active && <span className="text-[10px] font-bold text-red-400">Выбыл</span>}
                 </div>
               </div>
             ))}
@@ -103,7 +103,7 @@ export function CommunityScreen() {
               {a.unlocked && (
                 <div className="flex items-center gap-1 mt-2">
                   <CheckCircle2 size={11} style={{ color: BRAND_COLOR }} />
-                  <span className="text-[10px] font-bold" style={{ color: BRAND_COLOR }}>Unlocked</span>
+                  <span className="text-[10px] font-bold" style={{ color: BRAND_COLOR }}>Разблокировано</span>
                 </div>
               )}
             </Card>

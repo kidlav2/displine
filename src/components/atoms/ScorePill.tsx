@@ -13,7 +13,7 @@ export function ScorePill({ scoreKey }: ScorePillProps) {
       className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full"
       style={{ background: "#FFF3F0", color: BRAND_COLOR }}
     >
-      <Zap size={9} /> +{pts} pts
+      <Zap size={9} /> +{pts} оч.
     </span>
   );
 }

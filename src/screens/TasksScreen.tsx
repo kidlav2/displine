@@ -62,9 +62,9 @@ export function TasksScreen() {
 
   if (status !== "idle") {
     const cfg = {
-      pending:  { icon: <Clock size={28} className="text-amber-500" />,       ring: "border-amber-200 bg-amber-50",  title: "Under review",  sub: "The organizer will check your proof shortly." },
-      approved: { icon: <CheckCircle2 size={28} className="text-green-500" />, ring: "border-green-200 bg-green-50", title: "Approved! ✓",   sub: `You earned ${type === "run" ? SCORE.running_on_time : SCORE.task_completed} pts.` },
-      rejected: { icon: <XCircle size={28} className="text-red-500" />,        ring: "border-red-200 bg-red-50",     title: "Rejected",      sub: null },
+      pending:  { icon: <Clock size={28} className="text-amber-500" />,       ring: "border-amber-200 bg-amber-50",  title: "На проверке",   sub: "Организатор проверит ваше подтверждение в ближайшее время." },
+      approved: { icon: <CheckCircle2 size={28} className="text-green-500" />, ring: "border-green-200 bg-green-50", title: "Одобрено! ✓",  sub: `Вы заработали ${type === "run" ? SCORE.running_on_time : SCORE.task_completed} оч.` },
+      rejected: { icon: <XCircle size={28} className="text-red-500" />,        ring: "border-red-200 bg-red-50",     title: "Отклонено",     sub: null },
     };
     const c = cfg[status];
     return (
@@ -74,12 +74,12 @@ export function TasksScreen() {
         {c.sub && <p className="text-sm text-muted-foreground max-w-[230px]">{c.sub}</p>}
         {status === "rejected" && (
           <Card className="!p-4 w-full text-left border-red-100">
-            <div className="flex items-center gap-1.5 mb-1"><Lock size={11} className="text-muted-foreground" /><SecLabel>Organizer comment</SecLabel></div>
-            <p className="text-sm">Photo unclear — please resubmit with better lighting.</p>
+            <div className="flex items-center gap-1.5 mb-1"><Lock size={11} className="text-muted-foreground" /><SecLabel>Комментарий организатора</SecLabel></div>
+            <p className="text-sm">Фото нечёткое — пожалуйста, отправьте снова при лучшем освещении.</p>
           </Card>
         )}
         {status === "rejected" && (
-          <button onClick={() => setStatus("idle")} className="px-8 py-3 rounded-xl border-2 border-foreground font-bold text-sm">Try again</button>
+          <button onClick={() => setStatus("idle")} className="px-8 py-3 rounded-xl border-2 border-foreground font-bold text-sm">Попробовать снова</button>
         )}
       </div>
     );
@@ -97,8 +97,8 @@ export function TasksScreen() {
       />
 
       <div>
-        <SecLabel>{type === "run" ? "Morning run" : "Today's mission"}</SecLabel>
-        <p className="font-extrabold text-xl mt-1">{type === "run" ? "Upload run result" : "Read for 30 Minutes"}</p>
+        <SecLabel>{type === "run" ? "Утренняя пробежка" : "Задание на сегодня"}</SecLabel>
+        <p className="font-extrabold text-xl mt-1">{type === "run" ? "Загрузить результат пробежки" : "Читать 30 минут"}</p>
         <p className="text-xs font-semibold mt-1 flex items-center gap-1" style={{ color: BRAND_COLOR }}>
           <span style={{ color: BRAND_COLOR }}>⚡</span>{scoreInfo}
         </p>
@@ -129,8 +129,8 @@ export function TasksScreen() {
               <Camera size={28} className="text-muted-foreground" />
               <ImageIcon size={28} className="text-muted-foreground" />
             </div>
-            <p className="text-sm font-bold">Camera / Gallery</p>
-            <p className="text-xs text-muted-foreground">Tap to add proof photo</p>
+            <p className="text-sm font-bold">Камера / Галерея</p>
+            <p className="text-xs text-muted-foreground">Нажмите, чтобы добавить фото</p>
           </>
         )}
       </button>
@@ -139,7 +139,7 @@ export function TasksScreen() {
         <>
           <div className="grid grid-cols-2 gap-3">
             <Card className="!p-4">
-              <SecLabel>Distance</SecLabel>
+              <SecLabel>Дистанция</SecLabel>
               <div className="flex items-end gap-1.5 mt-2">
                 <input type="number" placeholder="5.0" value={dist} onChange={e => setDist(e.target.value)}
                   className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
@@ -148,7 +148,7 @@ export function TasksScreen() {
               </div>
             </Card>
             <Card className="!p-4">
-              <SecLabel>Duration</SecLabel>
+              <SecLabel>Длительность</SecLabel>
               <div className="flex items-end gap-1.5 mt-2">
                 <input type="number" placeholder="30" value={durationMin} onChange={e => setDurationMin(e.target.value)}
                   className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
@@ -158,15 +158,15 @@ export function TasksScreen() {
             </Card>
           </div>
           <button className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm">
-            <ExternalLink size={14} /> Connect Strava
+            <ExternalLink size={14} /> Подключить Strava
           </button>
         </>
       )}
 
       <Card className="!p-4">
-        <SecLabel>Comment</SecLabel>
+        <SecLabel>Комментарий</SecLabel>
         <textarea
-          placeholder="Tell us about your session…"
+          placeholder="Расскажите о вашей тренировке…"
           value={comment}
           onChange={e => setComment(e.target.value)}
           rows={3}
@@ -180,7 +180,7 @@ export function TasksScreen() {
         className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
         style={{ background: BRAND_COLOR }}
       >
-        {uploading ? "Uploading…" : "Submit"}
+        {uploading ? "Загрузка…" : "Отправить"}
       </button>
     </div>
   );

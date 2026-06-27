@@ -83,7 +83,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
                 <MapPin size={11} /> {item.km} km
               </span>
             )}
-            {item.isLate && <span className="text-xs font-bold text-orange-400">Late</span>}
+            {item.isLate && <span className="text-xs font-bold text-orange-400">Опоздание</span>}
             <ScorePill scoreKey={item.submissionStatus === "approved"
               ? (item.type === "running" ? (item.isLate ? "running_late" : "running_on_time") : "task_completed")
               : null} />
@@ -93,7 +93,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
 
       {item.submissionStatus === "rejected" && item.organizerComment && (
         <div className="mx-3.5 mt-2 px-3 py-2 bg-red-50 rounded-xl border border-red-100">
-          <p className="text-[10px] font-extrabold tracking-wider uppercase text-red-400 mb-0.5">Organizer review</p>
+          <p className="text-[10px] font-extrabold tracking-wider uppercase text-red-400 mb-0.5">Проверка организатора</p>
           <p className="text-xs text-red-600 leading-snug">{item.organizerComment}</p>
         </div>
       )}
@@ -118,7 +118,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
             </div>
           ))}
           {item.socialComments.length > 2 && (
-            <p className="text-xs font-bold text-muted-foreground pl-8">view all {item.socialComments.length} comments</p>
+            <p className="text-xs font-bold text-muted-foreground pl-8">показать все {item.socialComments.length} комментариев</p>
           )}
         </div>
       )}
@@ -130,7 +130,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
             value={draft}
             onChange={e => setDraft(e.target.value.slice(0, MAX))}
             onKeyDown={e => e.key === "Enter" && send()}
-            placeholder="Add a comment…"
+            placeholder="Добавить комментарий…"
             className="flex-1 text-xs bg-muted rounded-xl px-3 py-1.5 outline-none placeholder-muted-foreground"
           />
           <button onClick={send} disabled={!draft.trim()} className="disabled:opacity-30" style={{ color: BRAND_COLOR }}>

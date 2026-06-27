@@ -105,7 +105,7 @@ function RootLayout() {
     if (authLoading) {
       return (
         <div className="min-h-screen bg-background flex items-center justify-center" style={jk}>
-          <p className="text-sm text-muted-foreground">Loading…</p>
+          <p className="text-sm text-muted-foreground">Загрузка…</p>
         </div>
       );
     }
@@ -136,9 +136,9 @@ function RootLayout() {
       <div className="flex flex-col items-center justify-center gap-6 px-6 text-center" style={{ minHeight: "min(600px, 100vh)" }}>
         <p className="text-4xl">🏁</p>
         <div className="space-y-1">
-          <p className="font-extrabold text-xl">No challenges yet</p>
+          <p className="font-extrabold text-xl">Нет челленджей</p>
           <p className="text-sm text-muted-foreground max-w-xs">
-            You're not part of any challenge. Create one or ask an organizer for an invite link.
+            Вы не участвуете ни в одном челлендже. Создайте новый или попросите организатора прислать ссылку-приглашение.
           </p>
         </div>
         <button
@@ -146,7 +146,7 @@ function RootLayout() {
           className="px-6 py-3 rounded-2xl font-extrabold text-sm text-white"
           style={{ background: "#FF4F00" }}
         >
-          Create new challenge
+          Создать новый челлендж
         </button>
       </div>
     );
@@ -191,16 +191,16 @@ function OnboardingLayout() {
   // No code → immediate error
   useEffect(() => {
     if (!code) {
-      setInviteError("No invite code found. Ask your organizer for a valid invite link.");
+      setInviteError("Код приглашения не найден. Попросите организатора прислать действующую ссылку.");
       setInviteLoading(false);
       return;
     }
     resolveInviteCode(code)
       .then(data => {
         if (data) setInvite(data);
-        else setInviteError("This invite link is invalid or has expired.");
+        else setInviteError("Эта ссылка-приглашение недействительна или устарела.");
       })
-      .catch(() => setInviteError("Could not load the challenge. Check your connection."))
+      .catch(() => setInviteError("Не удалось загрузить челлендж. Проверьте подключение."))
       .finally(() => setInviteLoading(false));
   }, [code]);
 
@@ -253,7 +253,7 @@ function OnboardingLayout() {
   if (inviteLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center" style={jk}>
-        <p className="text-sm text-muted-foreground">Loading challenge…</p>
+        <p className="text-sm text-muted-foreground">Загрузка челленджа…</p>
       </div>
     );
   }
@@ -263,7 +263,7 @@ function OnboardingLayout() {
       <div className="min-h-screen bg-background flex items-center justify-center px-6" style={jk}>
         <div className="text-center space-y-3 max-w-xs">
           <p className="text-3xl">🔗</p>
-          <p className="font-extrabold text-lg">Invalid invite</p>
+          <p className="font-extrabold text-lg">Недействительное приглашение</p>
           <p className="text-sm text-muted-foreground">{inviteError}</p>
         </div>
       </div>

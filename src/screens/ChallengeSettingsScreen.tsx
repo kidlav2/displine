@@ -67,16 +67,16 @@ export function ChallengeSettingsScreen() {
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[600px] mx-auto">
       <div className="flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          <ChevronLeft size={16} /> Back
+          <ChevronLeft size={16} /> Назад
         </button>
-        <p className="font-extrabold text-lg">Challenge settings</p>
+        <p className="font-extrabold text-lg">Настройки челленджа</p>
       </div>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 space-y-4 lg:space-y-0">
         <Card className="!p-4 space-y-3">
-          <p className="font-bold text-sm">Challenge info</p>
+          <p className="font-bold text-sm">Информация о челлендже</p>
           <div>
-            <SecLabel>Start date</SecLabel>
+            <SecLabel>Дата начала</SecLabel>
             <input
               type="date"
               value={startDate}
@@ -86,7 +86,7 @@ export function ChallengeSettingsScreen() {
             />
           </div>
           <div>
-            <SecLabel>Duration (days)</SecLabel>
+            <SecLabel>Продолжительность (дни)</SecLabel>
             <input
               type="number"
               value={duration}
@@ -99,7 +99,7 @@ export function ChallengeSettingsScreen() {
         </Card>
 
         <Card className="!p-4 space-y-3">
-          <p className="font-bold text-sm">Running days &amp; deadlines</p>
+          <p className="font-bold text-sm">Дни пробежек и дедлайны</p>
           <div className="space-y-2">
             {ALL_DAYS.map(d => {
               const selected = d in s.runSchedule;
@@ -126,9 +126,9 @@ export function ChallengeSettingsScreen() {
         </Card>
 
         <Card className="!p-4 space-y-3">
-          <p className="font-bold text-sm">Penalties</p>
+          <p className="font-bold text-sm">Штрафы</p>
           <div>
-            <SecLabel>Currency</SecLabel>
+            <SecLabel>Валюта</SecLabel>
             <div className="flex gap-1 bg-muted rounded-xl p-0.5 mt-1.5 flex-wrap">
               {CURRENCIES.map(cur => (
                 <button key={cur.code} onClick={() => setS(p => ({ ...p, currency: cur.symbol }))}
@@ -147,12 +147,12 @@ export function ChallengeSettingsScreen() {
           <div className="flex items-center gap-2">
             <input type="number" value={s.burpees} onChange={e => setS(p => ({ ...p, burpees: parseInt(e.target.value) || 0 }))}
               className="w-24 bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none text-center" />
-            <span className="text-sm text-muted-foreground font-semibold">burpees alternative</span>
+            <span className="text-sm text-muted-foreground font-semibold">бёрпи (альтернатива)</span>
           </div>
         </Card>
 
         <Card className="!p-4">
-          <p className="font-bold text-sm mb-3">Starting lives</p>
+          <p className="font-bold text-sm mb-3">Начальные жизни</p>
           <div className="flex items-center gap-4">
             <button onClick={() => setS(p => ({ ...p, startingLives: Math.max(1, p.startingLives - 1) }))} className="w-10 h-10 rounded-xl border-2 border-border flex items-center justify-center font-bold text-xl">−</button>
             <div className="flex-1 flex justify-center">
@@ -167,24 +167,24 @@ export function ChallengeSettingsScreen() {
         </Card>
 
         <Card className="!p-4">
-          <p className="font-bold text-sm mb-2">Scoring formula</p>
+          <p className="font-bold text-sm mb-2">Формула очков</p>
           <div className="space-y-1.5 text-sm text-muted-foreground">
-            <div className="flex justify-between"><span>Run on time</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.running_on_time} pts</span></div>
-            <div className="flex justify-between"><span>Run late</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.running_late} pt</span></div>
-            <div className="flex justify-between"><span>Daily task completed</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} pts</span></div>
-            <div className="flex justify-between"><span>Missed</span><span className="font-bold text-gray-400">0 pts</span></div>
+            <div className="flex justify-between"><span>Пробежка вовремя</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.running_on_time} оч.</span></div>
+            <div className="flex justify-between"><span>Пробежка с оп.</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.running_late} оч.</span></div>
+            <div className="flex justify-between"><span>Задание выполнено</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} оч.</span></div>
+            <div className="flex justify-between"><span>Пропущено</span><span className="font-bold text-gray-400">0 оч.</span></div>
           </div>
         </Card>
       </div>
 
       {saved ? (
         <div className="flex items-center justify-center gap-2 py-3">
-          <CheckCircle2 size={18} className="text-green-500" /><span className="font-bold text-green-600">Saved!</span>
+          <CheckCircle2 size={18} className="text-green-500" /><span className="font-bold text-green-600">Сохранено!</span>
         </div>
       ) : (
         <button onClick={handleSave} disabled={loading}
           className="w-full lg:max-w-xs py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-50" style={{ background: BRAND_COLOR }}>
-          {loading ? "Saving…" : "Save settings"}
+          {loading ? "Сохранение…" : "Сохранить настройки"}
         </button>
       )}
     </div>
