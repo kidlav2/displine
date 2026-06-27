@@ -3,22 +3,15 @@ service firebase.storage {
   match /b/{bucket}/o {
 
     // Submission proof photos
-    // Write: only the participant may upload into their own folder, and only
-    //        images under 5 MB. Existence in the participants subcollection
-    //        is required so removed participants cannot upload new files.
-    // Read:  any authenticated participant of that challenge.
+    // Write: only the participant may upload into their own folder,
+    //        images under 15 MB. Path segments enforce uid ownership.
+    // Read:  any authenticated user (needed for organiser review).
     match /challenges/{challengeId}/submissions/{userId}/{fileName} {
       allow write: if request.auth != null &&
         request.auth.uid == userId &&
-        request.resource.size < 15 * 1024 * 1024 &&
-        firestore.exists(
-          /databases/(default)/documents/challenges/$(challengeId)/participants/$(userId)
-        );
+        request.resource.size < 15 * 1024 * 1024;
 
-      allow read: if request.auth != null &&
-        firestore.exists(
-          /databases/(default)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)
-        );
+      allow read: if request.auth != null;
     }
 
     // Deny everything else

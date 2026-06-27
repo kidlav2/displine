@@ -149,14 +149,16 @@ service cloud.firestore {
         // Participant may only submit on their own behalf.
         allow create: if isParticipant(challengeId) &&
           request.resource.data.participantUid == request.auth.uid;
-        // Organizers approve/reject. Participants may attach their run result
-        // to a persisted check-in (checked_in → pending transition only),
-        // or re-submit if their pending proof wasn't yet reviewed.
+        // Organizers approve/reject. Participants may:
+        //  - re-check-in (checked_in → checked_in, e.g. photo replaced)
+        //  - submit proof (checked_in or pending → pending)
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
            request.auth.uid == resource.data.participantUid &&
-           resource.data.status in ["checked_in", "pending"] &&
-           request.resource.data.status == "pending");
+           (
+             (resource.data.status == "checked_in" && request.resource.data.status == "checked_in") ||
+             (resource.data.status in ["checked_in", "pending"] && request.resource.data.status == "pending")
+           ));
         allow delete: if isOwner(challengeId);
       }
 
