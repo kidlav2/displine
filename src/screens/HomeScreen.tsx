@@ -262,7 +262,7 @@ export function HomeScreen() {
           </div>
           <p className="text-sm text-muted-foreground">На сегодня задание не запланировано. Проверьте позже или свяжитесь с организатором.</p>
         </Card>
-      )}
+      ) : null}
 
       {isRunDay && !runApproved && (
         <Card className="!p-4">
