@@ -26,7 +26,9 @@ export function HomeScreen() {
   const [checkInLoading, setCheckInLoading] = useState(false);
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const cameraRef = useRef<HTMLInputElement>(null);
-  const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
+  const pct = (challenge.duration > 0 && !isNaN(challenge.currentDay))
+    ? Math.round((challenge.currentDay / challenge.duration) * 100)
+    : 0;
 
   // Subscribe to today's persisted check-in so state survives browser reloads.
   // On component mount, if a checked_in submission exists for today, restore

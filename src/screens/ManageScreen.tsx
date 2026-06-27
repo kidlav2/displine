@@ -390,7 +390,7 @@ function FreeformForm({ challengeId, onDone }: { challengeId: string; onDone: ()
 // ── Create task shell ─────────────────────────────────────────────────────────
 
 function CreateTaskShell({ challengeId, onDone }: { challengeId: string; onDone: () => void }) {
-  const [taskType, setTaskType] = useState<TaskType>("checklist");
+  const [taskType, setTaskType] = useState<TaskType>("running");
 
   return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[600px] mx-auto">
@@ -556,7 +556,7 @@ export function ManageScreen() {
             ? "bg-purple-50 text-purple-600 border-purple-200"
             : "bg-blue-50 text-blue-600 border-blue-200"
         }`}>
-          {userRole === "owner" ? "Владелец" : "Помощник"}
+          {userRole === "owner" ? "Владелец" : "Организатор"}
         </span>
       </div>
       <p className="text-sm text-muted-foreground mb-4">{challenge.emoji} {challenge.name}</p>

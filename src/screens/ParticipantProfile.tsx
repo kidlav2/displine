@@ -88,7 +88,7 @@ export function ParticipantProfile() {
           )}
           {participant.role === "helper" && (
             <span className="flex items-center gap-1 text-[10px] font-extrabold text-blue-500 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-              <Shield size={9} /> помощник
+              <Shield size={9} /> организатор
             </span>
           )}
         </div>
@@ -190,7 +190,7 @@ export function ParticipantProfile() {
             <div className="flex-1 h-px bg-border" />
             <span className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
               <Shield size={9} className="text-blue-400" />
-              {isOwner ? "Панель владельца" : "Панель помощника"}
+              {isOwner ? "Панель владельца" : "Панель организатора"}
             </span>
             <div className="flex-1 h-px bg-border" />
           </div>

@@ -32,6 +32,12 @@ export function TasksScreen() {
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 14 * 1024 * 1024) {
+      setSubmitError("Файл слишком большой (максимум 14 МБ). Сожмите фото в настройках камеры.");
+      e.target.value = "";
+      return;
+    }
+    setSubmitError(null);
     setPhotoFile(file);
     setPhotoPreview(URL.createObjectURL(file));
     e.target.value = "";

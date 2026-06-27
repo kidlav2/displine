@@ -10,7 +10,7 @@ import { setParticipantLives, promoteParticipantToTeam, demoteTeamMember, remove
 import type { OrgRole } from "../types";
 
 export function ManageParticipantsScreen() {
-  const { challenge, isOwner, scoring, meParticipant } = useAppContext();
+  const { challenge, isOwner, isAdmin, scoring, meParticipant } = useAppContext();
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
@@ -87,7 +87,9 @@ export function ManageParticipantsScreen() {
         {challenge.participants.map(p => {
           const isMe = p.uid === currentUser?.uid;
           const isParticipantOwner = p.role === "owner";
-          const canAct = isOwner && !isMe && !isParticipantOwner;
+          const canPromote = isAdmin && p.role === "participant" && !isMe;
+          const canDemote  = isOwner && p.role === "helper"      && !isMe;
+          const canRemove  = isOwner && !isMe && !isParticipantOwner;
           const isActing = actionLoading === p.uid;
           const isConfirming = confirmingRemove === p.uid;
 
@@ -102,7 +104,7 @@ export function ManageParticipantsScreen() {
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold">{p.name}</p>
                     {isParticipantOwner && <span className="text-[9px] font-extrabold text-purple-500">ВЛАДЕЛЕЦ</span>}
-                    {p.isAdmin && !isParticipantOwner && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
+                    {p.isAdmin && !isParticipantOwner && <span className="text-[9px] font-extrabold text-blue-500">ОРГ</span>}
                   </div>
                   <p className="text-xs text-muted-foreground">{calcScore(p.results, scoring)} оч.</p>
                 </div>
@@ -124,18 +126,18 @@ export function ManageParticipantsScreen() {
                 </div>
               </div>
 
-              {/* Role & remove actions (owner only, non-owner non-self participants) */}
-              {canAct && (
+              {/* Role & remove actions */}
+              {(canPromote || canDemote || canRemove) && (
                 <div className="flex gap-2 mt-3 pt-3 border-t border-border">
-                  {p.role === "participant" && (
+                  {canPromote && (
                     <button
                       onClick={() => handlePromote(p.uid, p.name, "helper")}
                       disabled={isActing}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border-2 border-blue-200 bg-blue-50 text-blue-600 disabled:opacity-40">
-                      <ArrowUp size={11} /> Помощник
+                      <ArrowUp size={11} /> Организатор
                     </button>
                   )}
-                  {p.role === "helper" && (
+                  {canDemote && (
                     <button
                       onClick={() => handleDemote(p.uid)}
                       disabled={isActing}
@@ -143,12 +145,14 @@ export function ManageParticipantsScreen() {
                       <ArrowDown size={11} /> Участник
                     </button>
                   )}
-                  <button
-                    onClick={() => setConfirmingRemove(p.uid)}
-                    disabled={isActing}
-                    className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border-2 border-red-200 bg-red-50 text-red-500 disabled:opacity-40">
-                    <Trash2 size={11} /> Удалить
-                  </button>
+                  {canRemove && (
+                    <button
+                      onClick={() => setConfirmingRemove(p.uid)}
+                      disabled={isActing}
+                      className="ml-auto flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold border-2 border-red-200 bg-red-50 text-red-500 disabled:opacity-40">
+                      <Trash2 size={11} /> Удалить
+                    </button>
+                  )}
                 </div>
               )}
 

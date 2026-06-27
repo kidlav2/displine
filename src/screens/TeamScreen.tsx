@@ -100,7 +100,7 @@ export function TeamScreen() {
     );
     return role === "owner"
       ? <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">Владелец</span>
-      : <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">Помощник</span>;
+      : <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">Организатор</span>;
   };
 
   return (
@@ -159,7 +159,7 @@ export function TeamScreen() {
                     <button key={r} onClick={() => setPromoteRole(r)}
                       className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
                       style={promoteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                      {r === "owner" ? "Совладелец" : "Помощник"}
+                      {r === "owner" ? "Совладелец" : "Организатор"}
                     </button>
                   ))}
                 </div>
@@ -217,7 +217,7 @@ export function TeamScreen() {
                     <button key={r} onClick={() => setInviteRole(r)}
                       className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
                       style={inviteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                      {r === "owner" ? "Совладелец" : "Помощник"}
+                      {r === "owner" ? "Совладелец" : "Организатор"}
                     </button>
                   ))}
                 </div>
@@ -229,7 +229,7 @@ export function TeamScreen() {
                 </div>
               )}
               <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-                <p className="text-xs text-blue-600 font-semibold">Доступ помощника включает:</p>
+                <p className="text-xs text-blue-600 font-semibold">Доступ организатора включает:</p>
                 <p className="text-xs text-blue-500 mt-0.5">Проверка и одобрение отправок · Просмотр статистики · Не может изменять настройки или корректировать жизни/очки</p>
               </div>
               <button onClick={generateInvite} disabled={loading}
@@ -274,7 +274,7 @@ export function TeamScreen() {
                   <div className="flex items-center gap-2 shrink-0">
                     <select value={member.role} onChange={e => changeRole(member.id, e.target.value as OrgRole)}
                       className="text-xs font-bold bg-muted border border-border rounded-lg px-2 py-1 outline-none cursor-pointer">
-                      <option value="helper">Помощник</option>
+                      <option value="helper">Организатор</option>
                       <option value="owner">Совладелец</option>
                     </select>
                     <button onClick={() => removeMember(member)}

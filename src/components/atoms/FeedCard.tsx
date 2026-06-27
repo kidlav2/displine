@@ -86,7 +86,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
             <button className="font-bold text-sm hover:underline leading-none" onClick={() => p && onViewParticipant(p.uid)}>
               {item.name}
             </button>
-            {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
+            {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ОРГ</span>}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{item.text}</p>
         </div>

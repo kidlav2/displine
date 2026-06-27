@@ -796,7 +796,7 @@ export async function promoteParticipantToTeam(
     });
   });
   if (actor) {
-    const roleLabel = role === "owner" ? "владельца" : "помощника";
+    const roleLabel = role === "owner" ? "владельца" : "организатора";
     await writeFeedSystemEvent(challengeId, actor, "system:promoted",
       `повысил ${name} до ${roleLabel}`);
   }

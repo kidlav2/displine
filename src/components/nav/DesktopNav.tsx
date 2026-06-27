@@ -47,7 +47,7 @@ export function DesktopNav() {
           <div>
             <p className="font-extrabold text-sm leading-none">Discipline</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
-              {userRole === "owner" ? "Владелец" : userRole === "helper" ? "Помощник" : "Участник"}
+              {userRole === "owner" ? "Владелец" : userRole === "helper" ? "Организатор" : "Участник"}
             </p>
           </div>
         </div>
