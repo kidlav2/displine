@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type React from "react";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import type { Achievement, ChallengeData, Participant, ScoringConfig, Task, UserRole } from "../types";
 import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
@@ -8,8 +8,8 @@ import { detectTz } from "../lib/timezone";
 import { challengeCurrentDay, todayRunDayInTz, todayISO } from "../lib/dates";
 import { useAuthContext } from "./AuthContext";
 import {
-  challengeRef, feedCol, participantsCol, tasksCol, teamCol, achievementsCol,
-  snapToParticipant, snapToFeedItem, snapToReviewItem, snapToTask, snapToTeamMember, snapToAchievement,
+  challengeRef, participantsCol, tasksCol, teamCol, achievementsCol,
+  snapToParticipant, snapToReviewItem, snapToTask, snapToTeamMember, snapToAchievement,
 } from "../lib/firestore";
 
 interface AppContextType {
@@ -144,14 +144,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (err) => console.error("[AppContext] participants subscription error:", err)
     );
 
-    const feedUnsub = onSnapshot(
-      query(feedCol(selectedId), orderBy("time", "desc")),
-      (snap) => {
-        const feed = snap.docs.map(snapToFeedItem);
-        setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, feed } : c));
-      },
-      (err) => console.error("[AppContext] feed subscription error:", err)
-    );
+    // Feed is loaded on-demand with pagination by CommunityScreen — no global subscription here.
 
     const taskUnsub = onSnapshot(
       query(tasksCol(selectedId), where("date", "==", todayISO())),
@@ -169,7 +162,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       participantsUnsub();
-      feedUnsub();
       taskUnsub();
       achUnsub();
     };

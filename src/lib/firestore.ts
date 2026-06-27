@@ -5,9 +5,10 @@
  */
 
 import {
-  collection, doc, getDoc, setDoc, updateDoc, deleteDoc,
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
   addDoc, arrayUnion, arrayRemove, increment, deleteField,
-  onSnapshot, Timestamp, runTransaction, serverTimestamp,
+  onSnapshot, query, orderBy, limit, startAfter,
+  Timestamp, runTransaction, serverTimestamp,
   type DocumentData,
   type QueryDocumentSnapshot,
   type Unsubscribe,
@@ -1045,6 +1046,58 @@ export async function joinChallengeAsParticipant(
   });
   // Register the challenge role in the user's profile
   await addChallengeRole(uid, challengeId, "participant");
+}
+
+// ── Feed pagination ───────────────────────────────────────────────────────────
+
+export const FEED_PAGE_SIZE = 20;
+
+/**
+ * Subscribe to the most recent FEED_PAGE_SIZE feed items, ordered newest-first.
+ * Used for real-time updates at the top of the activity feed.
+ * The callback receives both the converted items and the raw last QueryDocumentSnapshot
+ * so the caller can use it as a startAfter cursor when fetching older pages.
+ */
+export function subscribeToFeedFirstPage(
+  challengeId: string,
+  callback: (
+    items: FeedItem[],
+    lastDoc: QueryDocumentSnapshot<DocumentData> | null
+  ) => void
+): Unsubscribe {
+  const q = query(feedCol(challengeId), orderBy("time", "desc"), limit(FEED_PAGE_SIZE));
+  return onSnapshot(q, (snap) => {
+    callback(
+      snap.docs.map(snapToFeedItem),
+      snap.docs[snap.docs.length - 1] ?? null
+    );
+  });
+}
+
+/**
+ * Fetch the next page of feed items starting after the given cursor.
+ * Returns converted items, the new cursor, and whether more pages exist.
+ */
+export async function fetchNextFeedPage(
+  challengeId: string,
+  afterDoc: QueryDocumentSnapshot<DocumentData>
+): Promise<{
+  items: FeedItem[];
+  cursor: QueryDocumentSnapshot<DocumentData> | null;
+  hasMore: boolean;
+}> {
+  const q = query(
+    feedCol(challengeId),
+    orderBy("time", "desc"),
+    startAfter(afterDoc),
+    limit(FEED_PAGE_SIZE)
+  );
+  const snap = await getDocs(q);
+  return {
+    items:   snap.docs.map(snapToFeedItem),
+    cursor:  snap.docs[snap.docs.length - 1] ?? null,
+    hasMore: snap.docs.length === FEED_PAGE_SIZE,
+  };
 }
 
 /**

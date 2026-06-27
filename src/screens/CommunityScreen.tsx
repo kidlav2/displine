@@ -1,14 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { Av, Hearts, Card, Chip, FeedCard } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { toggleLike, addComment } from "../lib/firestore";
+import {
+  toggleLike, addComment,
+  subscribeToFeedFirstPage, fetchNextFeedPage, FEED_PAGE_SIZE,
+} from "../lib/firestore";
 import { checkAchievement } from "../lib/achievements";
-import type { CommTab, SortKey } from "../types";
+import type { CommTab, FeedItem, SortKey } from "../types";
+import type { QueryDocumentSnapshot, DocumentData } from "firebase/firestore";
 
 export function CommunityScreen() {
   const { challenge, isAdmin, isOwner, adminTz, scoring, achievements, meParticipant } = useAppContext();
@@ -18,6 +22,87 @@ export function CommunityScreen() {
   const [tab, setTab] = useState<CommTab>("feed");
   const [sort, setSort] = useState<SortKey>("score");
 
+  // ── Feed pagination state ────────────────────────────────────────────────────
+  // liveItems: real-time first page (onSnapshot, newest-first).
+  // olderItems: paginated pages loaded on scroll, appended in order.
+  const [liveItems, setLiveItems]   = useState<FeedItem[]>([]);
+  const [olderItems, setOlderItems] = useState<FeedItem[]>([]);
+  const [hasMore, setHasMore]       = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [feedReady, setFeedReady]   = useState(false);
+
+  // The cursor is frozen after the first onSnapshot fires so that pagination
+  // always starts from a stable point even as new posts arrive at the top.
+  const cursorRef = useRef<QueryDocumentSnapshot<DocumentData> | null>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  // Subscribe to the live first page whenever the challenge changes.
+  useEffect(() => {
+    if (!challenge?.id) return;
+    // Reset feed state when switching challenges.
+    setLiveItems([]);
+    setOlderItems([]);
+    setHasMore(true);
+    setFeedReady(false);
+    cursorRef.current = null;
+
+    const unsub = subscribeToFeedFirstPage(challenge.id, (items, lastDoc) => {
+      setLiveItems(items);
+      setFeedReady(true);
+      // Fix cursor on first fire; don't move it as new posts trickle in,
+      // so that startAfter pagination stays anchored to the original batch.
+      if (!cursorRef.current && lastDoc) {
+        cursorRef.current = lastDoc;
+        // If the first page wasn't full there's nothing more to load.
+        setHasMore(items.length >= FEED_PAGE_SIZE);
+      }
+    });
+    return unsub;
+  }, [challenge?.id]);
+
+  // Load the next page of older items.
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !cursorRef.current || !challenge?.id) return;
+    setLoadingMore(true);
+    try {
+      const { items, cursor, hasMore: more } = await fetchNextFeedPage(challenge.id, cursorRef.current);
+      if (items.length > 0) {
+        setOlderItems(prev => {
+          // Deduplicate against what's already loaded (shouldn't normally happen).
+          const existingIds = new Set(prev.map(i => i.id));
+          return [...prev, ...items.filter(i => !existingIds.has(i.id))];
+        });
+        if (cursor) cursorRef.current = cursor;
+      }
+      setHasMore(more);
+    } catch (err) {
+      console.error("[CommunityScreen] fetchNextFeedPage failed:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [challenge?.id, hasMore, loadingMore]);
+
+  // IntersectionObserver: trigger loadMore when sentinel enters the viewport.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) loadMore(); },
+      { rootMargin: "300px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [loadMore]);
+
+  // Merged feed: live items at top, then older items.
+  // Deduplicate in case a live-page update shifts items across the boundary.
+  const liveIds = new Set(liveItems.map(i => i.id));
+  const allFeedItems: FeedItem[] = [
+    ...liveItems,
+    ...olderItems.filter(i => !liveIds.has(i.id)),
+  ];
+
+  // ── Leaderboard ──────────────────────────────────────────────────────────────
   const sorted = [...challenge.participants].sort((a, b) =>
     sort === "score" ? calcScore(b.results, scoring) - calcScore(a.results, scoring) : b.km - a.km
   );
@@ -26,7 +111,7 @@ export function CommunityScreen() {
 
   const handleLike = async (id: string) => {
     if (!currentUser) return;
-    const item = challenge.feed.find(f => f.id === id);
+    const item = allFeedItems.find(f => f.id === id);
     if (!item) return;
     try {
       await toggleLike(challenge.id, id, currentUser.uid, item.likes.includes(currentUser.uid));
@@ -38,11 +123,7 @@ export function CommunityScreen() {
   const handleComment = async (id: string, text: string) => {
     if (!currentUser || !meParticipant) return;
     try {
-      await addComment(challenge.id, id, {
-        ini: meParticipant.ini,
-        name: meParticipant.name,
-        text,
-      });
+      await addComment(challenge.id, id, { ini: meParticipant.ini, name: meParticipant.name, text });
     } catch (err) {
       console.error("[CommunityScreen] addComment failed:", err);
     }
@@ -53,23 +134,57 @@ export function CommunityScreen() {
       <h2 className="font-extrabold text-xl mb-4">Сообщество</h2>
       <div className="flex gap-2 mb-5 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
         {(["feed", "leaderboard", "achievements"] as CommTab[]).map(t => (
-          <Chip key={t} label={t === "feed" ? "Активность" : t === "leaderboard" ? "Таблица лидеров" : "Достижения"}
+          <Chip key={t}
+            label={t === "feed" ? "Активность" : t === "leaderboard" ? "Таблица лидеров" : "Достижения"}
             active={tab === t} onClick={() => setTab(t)} />
         ))}
       </div>
 
       {tab === "feed" && (
         <div className="pb-4">
-          <p className="text-xs text-muted-foreground font-semibold mb-3">Все отправки — одобренные, отклонённые и ожидающие. Полная прозрачность.</p>
-          <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
-            {challenge.feed.map(f => (
-              <FeedCard key={f.id} item={f} onLike={handleLike} onComment={handleComment}
-                onViewParticipant={onViewParticipant} participants={challenge.participants}
-                isAdmin={isAdmin} adminTz={adminTz}
-                currentUserId={currentUser?.uid}
-                currentUserIni={meParticipant?.ini ?? "?"} />
-            ))}
-          </div>
+          <p className="text-xs text-muted-foreground font-semibold mb-3">
+            Все отправки — одобренные, отклонённые и ожидающие. Полная прозрачность.
+          </p>
+
+          {/* Initial loading skeleton */}
+          {!feedReady && (
+            <div className="flex justify-center py-10">
+              <Loader2 size={22} className="animate-spin text-muted-foreground" />
+            </div>
+          )}
+
+          {feedReady && allFeedItems.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              Активностей пока нет.
+            </p>
+          )}
+
+          {feedReady && allFeedItems.length > 0 && (
+            <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
+              {allFeedItems.map(f => (
+                <FeedCard key={f.id} item={f} onLike={handleLike} onComment={handleComment}
+                  onViewParticipant={onViewParticipant} participants={challenge.participants}
+                  isAdmin={isAdmin} adminTz={adminTz}
+                  currentUserId={currentUser?.uid}
+                  currentUserIni={meParticipant?.ini ?? "?"} />
+              ))}
+            </div>
+          )}
+
+          {/* Sentinel + states at the bottom of the feed */}
+          {feedReady && (
+            <div ref={sentinelRef} className="mt-4 flex justify-center py-3">
+              {loadingMore && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 size={14} className="animate-spin" />
+                  Загрузка…
+                </div>
+              )}
+              {!loadingMore && !hasMore && allFeedItems.length > 0 && (
+                <p className="text-xs text-muted-foreground">Всё загружено ✓</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -125,9 +240,7 @@ export function CommunityScreen() {
             </p>
           )}
           {achievements.map(a => {
-            const unlocked = meParticipant
-              ? checkAchievement(a, meParticipant, challenge)
-              : false;
+            const unlocked = meParticipant ? checkAchievement(a, meParticipant, challenge) : false;
             return (
               <Card key={a.id} className={`!p-4 ${!unlocked ? "opacity-40" : ""}`}>
                 <p className="text-2xl mb-2">{a.icon}</p>
