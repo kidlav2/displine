@@ -153,26 +153,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (err) => console.error("[AppContext] feed subscription error:", err)
     );
 
-    // FLAG: submissions collection needs a composite index on (status, submittedAt)
-    // if you want to also orderBy. For now, equality filter only — no index required.
-    const queueUnsub = onSnapshot(
-      query(collection(db, "challenges", selectedId, "submissions"), where("status", "==", "pending")),
-      (snap) => {
-        const queue = snap.docs.map(snapToReviewItem);
-        setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, queue } : c));
-      },
-      (err) => console.error("[AppContext] queue subscription error:", err)
-    );
-
-    const teamUnsub = onSnapshot(
-      query(teamCol(selectedId)),
-      (snap) => {
-        const team = snap.docs.map(snapToTeamMember);
-        setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, team } : c));
-      },
-      (err) => console.error("[AppContext] team subscription error:", err)
-    );
-
     const taskUnsub = onSnapshot(
       query(tasksCol(selectedId), where("date", "==", todayISO())),
       (snap) => {
@@ -190,8 +170,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       participantsUnsub();
       feedUnsub();
-      queueUnsub();
-      teamUnsub();
       taskUnsub();
       achUnsub();
     };
@@ -222,6 +200,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const isOwner = userRole === "owner";
 
   const scoring: ScoringConfig = challenge?.settings.scoring ?? DEFAULT_SCORING;
+
+  // ── Admin-only subscriptions (queue + team) ───────────────────────────────
+  // Runs only after participants load and isAdmin is resolved. Regular
+  // participants do not have read access to these collections.
+  useEffect(() => {
+    if (!selectedId || !currentUser || !isAdmin) return;
+
+    const queueUnsub = onSnapshot(
+      query(collection(db, "challenges", selectedId, "submissions"), where("status", "==", "pending")),
+      (snap) => {
+        const queue = snap.docs.map(snapToReviewItem);
+        setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, queue } : c));
+      },
+      (err) => console.error("[AppContext] queue subscription error:", err)
+    );
+
+    const teamUnsub = onSnapshot(
+      query(teamCol(selectedId)),
+      (snap) => {
+        const team = snap.docs.map(snapToTeamMember);
+        setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, team } : c));
+      },
+      (err) => console.error("[AppContext] team subscription error:", err)
+    );
+
+    return () => { queueUnsub(); teamUnsub(); };
+  }, [selectedId, currentUser, isAdmin]);
 
   // FLAG: updateChallenge only patches local React state. All production writes
   // should use the specific functions in src/lib/firestore.ts instead.
