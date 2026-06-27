@@ -171,6 +171,11 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, onInviteC
                 )}
                 Продолжить с Telegram
               </button>
+              <p className="text-[11px] text-muted-foreground text-center leading-relaxed max-w-[260px] mx-auto">
+                Нажмите кнопку → в браузере откроется окно Telegram → подтвердите вход → вернитесь на этот сайт.
+                <br />
+                <span className="font-semibold text-foreground">Писать боту не нужно.</span>
+              </p>
 
               {/* Google */}
               {onGoogleAuth && (
