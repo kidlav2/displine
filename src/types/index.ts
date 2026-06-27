@@ -188,6 +188,6 @@ export type EntryMode =
 
 export type OnboardStep = "telegram" | "phone" | "verify" | "profile";
 
-export type ErrorVariant = "no-invite" | "invite-invalid" | "challenge-ended";
+export type ErrorVariant = "no-invite" | "invite-invalid" | "challenge-ended" | "team-invite-expired" | "team-invite-used";
 
 export interface NavTab { id: AnyTab; Icon: React.ElementType; label: string; }

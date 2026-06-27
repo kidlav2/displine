@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle, Copy, Check } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
@@ -14,26 +14,37 @@ export function TeamScreen() {
   const navigate = useNavigate();
 
   const [showInvite, setShowInvite] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<OrgRole>("helper");
-  const [sent, setSent] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sendInvite = async () => {
-    if (!inviteEmail.trim() || loading) return;
+  const generateInvite = async () => {
+    if (loading) return;
     setLoading(true);
     setError(null);
     try {
-      await inviteTeamMember(challenge.id, inviteEmail.trim(), inviteEmail.split("@")[0], inviteRole);
-      setInviteEmail("");
-      setSent(true);
-      setTimeout(() => { setSent(false); setShowInvite(false); }, 2000);
+      const code = await inviteTeamMember(challenge.id, challenge.name, challenge.emoji, inviteRole);
+      setGeneratedLink(`${window.location.origin}/join?code=${code}`);
     } catch {
-      setError("Не удалось отправить приглашение. Попробуйте снова.");
+      setError("Не удалось создать ссылку. Попробуйте снова.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const copyLink = async () => {
+    if (!generatedLink) return;
+    await navigator.clipboard.writeText(generatedLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const resetInvite = () => {
+    setGeneratedLink(null);
+    setCopied(false);
+    setShowInvite(false);
   };
 
   const changeRole = async (id: string, role: OrgRole) => {
@@ -73,32 +84,41 @@ export function TeamScreen() {
 
       {showInvite && (
         <Card className="!p-4 mb-4 border-orange-100 bg-orange-50">
-          {sent ? (
-            <div className="flex items-center gap-2 py-2">
-              <CheckCircle2 size={18} className="text-green-500" />
-              <p className="font-bold text-sm text-green-700">Приглашение отправлено! Они получат письмо со ссылкой для установки пароля.</p>
+          {generatedLink ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={16} className="text-green-500 shrink-0" />
+                <p className="font-bold text-sm text-green-700">Ссылка создана!</p>
+              </div>
+              <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-2.5">
+                <p className="flex-1 text-xs font-mono text-muted-foreground truncate">{generatedLink}</p>
+                <button onClick={copyLink}
+                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  style={copied ? { background: "#22c55e", color: "#fff" } : { background: BRAND_COLOR, color: "#fff" }}>
+                  {copied ? <><Check size={12} /> Скопировано</> : <><Copy size={12} /> Копировать</>}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Действительна <strong>24 часа</strong> · Только <strong>один раз</strong>
+              </p>
+              <button onClick={resetInvite}
+                className="text-xs font-semibold text-muted-foreground underline">
+                Создать ещё одну ссылку
+              </button>
             </div>
           ) : (
             <div className="space-y-3">
-              <p className="font-bold text-sm">Пригласить участника</p>
-              <div className="lg:grid lg:grid-cols-2 lg:gap-3 space-y-3 lg:space-y-0">
-                <div>
-                  <SecLabel>Адрес эл. почты</SecLabel>
-                  <input type="email" placeholder="коллега@пример.рф" value={inviteEmail}
-                    onChange={e => setInviteEmail(e.target.value)}
-                    className="w-full mt-1.5 bg-card rounded-xl px-3 py-2.5 text-sm outline-none border border-border" />
-                </div>
-                <div>
-                  <SecLabel>Роль</SecLabel>
-                  <div className="flex gap-2 mt-1.5">
-                    {(["helper", "owner"] as OrgRole[]).map(r => (
-                      <button key={r} onClick={() => setInviteRole(r)}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
-                        style={inviteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                        {r === "owner" ? "Совладелец" : "Помощник"}
-                      </button>
-                    ))}
-                  </div>
+              <p className="font-bold text-sm">Создать ссылку-приглашение</p>
+              <div>
+                <SecLabel>Роль</SecLabel>
+                <div className="flex gap-2 mt-1.5">
+                  {(["helper", "owner"] as OrgRole[]).map(r => (
+                    <button key={r} onClick={() => setInviteRole(r)}
+                      className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
+                      style={inviteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
+                      {r === "owner" ? "Совладелец" : "Помощник"}
+                    </button>
+                  ))}
                 </div>
               </div>
               {inviteRole === "owner" && (
@@ -111,10 +131,10 @@ export function TeamScreen() {
                 <p className="text-xs text-blue-600 font-semibold">Доступ помощника включает:</p>
                 <p className="text-xs text-blue-500 mt-0.5">Проверка и одобрение отправок · Просмотр статистики · Не может изменять настройки или корректировать жизни/очки</p>
               </div>
-              <button onClick={sendInvite} disabled={!inviteEmail.trim() || loading}
+              <button onClick={generateInvite} disabled={loading}
                 className="w-full py-3 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
                 style={{ background: BRAND_COLOR }}>
-                {loading ? "Отправка…" : "Отправить приглашение"}
+                {loading ? "Создание…" : "Создать ссылку"}
               </button>
             </div>
           )}

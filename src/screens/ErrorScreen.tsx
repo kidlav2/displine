@@ -1,4 +1,4 @@
-import { Globe, Link2Off, Clock, Send, Mail } from "lucide-react";
+import { Globe, Link2Off, Clock, Send, Mail, Timer } from "lucide-react";
 import { useParams, useLocation } from "react-router";
 import type { ErrorVariant } from "../types";
 
@@ -20,6 +20,18 @@ const cfg = {
     title: "Этот челлендж завершён",
     sub: "Челлендж, на который вас пригласили, уже закончился. Свяжитесь с организатором, чтобы узнать о следующем.",
     action: "Связаться с организатором",
+  },
+  "team-invite-expired": {
+    icon: <Timer size={32} className="text-muted-foreground" />,
+    title: "Срок действия ссылки истёк",
+    sub: "Эта ссылка-приглашение в команду действовала 24 часа и уже недействительна. Попросите организатора создать новую.",
+    action: null,
+  },
+  "team-invite-used": {
+    icon: <Link2Off size={32} className="text-muted-foreground" />,
+    title: "Ссылка уже была использована",
+    sub: "Эта ссылка-приглашение в команду одноразовая и уже была использована. Попросите организатора создать новую.",
+    action: null,
   },
 } as const;
 

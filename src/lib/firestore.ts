@@ -28,6 +28,17 @@ export interface InviteData {
   inviteCode: string;
   startingLives: number;
   ownerTelegramUsername?: string;
+  /** "team" only set for role-embedding Path-B invites */
+  type?: "team";
+  role?: import("../types").OrgRole;
+}
+
+/** Thrown by resolveInviteCode / acceptTeamInvite when a team invite is expired or already used. */
+export class TeamInviteError extends Error {
+  constructor(public readonly reason: "used" | "expired") {
+    super(reason);
+    this.name = "TeamInviteError";
+  }
 }
 
 // ── Collection helpers ────────────────────────────────────────────────────────
@@ -487,21 +498,90 @@ export async function setParticipantLives(
   });
 }
 
-/** Invite a team member. Writes to challenges/{id}/team subcollection. */
+/**
+ * Generate a one-time team invite link. Stores the invite in invites/{code} with
+ * createdAt + usedAt:null. The team member doc is written when the invite is accepted.
+ * Returns the generated invite code.
+ */
 export async function inviteTeamMember(
   challengeId: string,
-  email: string,
-  name: string,
+  challengeName: string,
+  challengeEmoji: string,
   role: import("../types").OrgRole
-): Promise<void> {
-  await addDoc(teamCol(challengeId), {
-    email,
-    name,
+): Promise<string> {
+  const code = `T${Math.random().toString(36).slice(2, 9).toUpperCase()}`;
+  await setDoc(inviteRef(code), {
+    type:        "team",
+    challengeId,
+    name:        challengeName,
+    emoji:       challengeEmoji,
     role,
-    status:    "invited",
-    since:     serverTimestamp(),
-    invitedAt: serverTimestamp(),
+    createdAt:   serverTimestamp(),
+    usedAt:      null,
   });
+  return code;
+}
+
+/**
+ * Accept a team invite atomically. Validates the invite (single-use + 24 h expiry),
+ * marks it as used, and creates the participant doc with the correct role.
+ * Throws TeamInviteError if the invite is already used or expired.
+ */
+export async function acceptTeamInvite(
+  inviteCode: string,
+  uid: string,
+  profile: { name: string; ini: string; tz: string }
+): Promise<{ challengeId: string; role: import("../types").OrgRole }> {
+  const invRef = inviteRef(inviteCode);
+  let challengeId = "";
+  let role: import("../types").OrgRole = "helper";
+
+  await runTransaction(db, async (tx) => {
+    const invSnap = await tx.get(invRef);
+    if (!invSnap.exists()) throw new TeamInviteError("expired");
+
+    const d = invSnap.data();
+    if (d.usedAt !== null && d.usedAt !== undefined) throw new TeamInviteError("used");
+
+    const createdMs = d.createdAt instanceof Timestamp ? d.createdAt.toMillis() : 0;
+    if (Date.now() - createdMs > 24 * 60 * 60 * 1000) throw new TeamInviteError("expired");
+
+    challengeId = d.challengeId;
+    role = d.role ?? "helper";
+
+    const chalSnap = await tx.get(challengeRef(challengeId));
+    const startingLives = chalSnap.exists() ? (chalSnap.data()?.settings?.startingLives ?? 3) : 3;
+
+    tx.update(invRef, { usedAt: serverTimestamp() });
+
+    tx.set(participantRef(challengeId, uid), {
+      uid,
+      ini:      profile.ini,
+      name:     profile.name,
+      role,
+      lives:    startingLives,
+      km:       0,
+      active:   true,
+      isAdmin:  true,
+      joinDate: serverTimestamp(),
+      tz:       profile.tz,
+      results:  [],
+      penalties: [],
+    });
+
+    tx.set(doc(teamCol(challengeId), uid), {
+      email:     "",
+      name:      profile.name,
+      role,
+      uid,
+      status:    "active",
+      since:     serverTimestamp(),
+      invitedAt: serverTimestamp(),
+    });
+  });
+
+  await addChallengeRole(uid, challengeId, role);
+  return { challengeId, role };
 }
 
 /** Update team member role. */
@@ -530,6 +610,23 @@ export async function resolveInviteCode(code: string): Promise<InviteData | null
   const snap = await getDoc(inviteRef(code));
   if (!snap.exists()) return null;
   const d = snap.data();
+
+  if (d.type === "team") {
+    if (d.usedAt !== null && d.usedAt !== undefined) throw new TeamInviteError("used");
+    const createdMs = d.createdAt instanceof Timestamp ? d.createdAt.toMillis() : 0;
+    if (Date.now() - createdMs > 24 * 60 * 60 * 1000) throw new TeamInviteError("expired");
+    return {
+      challengeId:   d.challengeId ?? "",
+      name:          d.name        ?? "",
+      emoji:         d.emoji       ?? "🏃",
+      description:   "",
+      inviteCode:    code,
+      startingLives: 3,
+      type:          "team",
+      role:          d.role ?? "helper",
+    };
+  }
+
   return {
     challengeId:   d.challengeId   ?? "",
     name:          d.name          ?? "",

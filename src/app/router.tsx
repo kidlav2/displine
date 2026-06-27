@@ -4,7 +4,7 @@ import type { ConfirmationResult } from "firebase/auth";
 import { signInWithPhoneNumber, RecaptchaVerifier, signInWithCustomToken, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
-import { resolveInviteCode, joinChallengeAsParticipant, type InviteData } from "../lib/firestore";
+import { resolveInviteCode, joinChallengeAsParticipant, acceptTeamInvite, TeamInviteError, type InviteData } from "../lib/firestore";
 import { detectTz } from "../lib/timezone";
 import { useAuthContext } from "../contexts/AuthContext";
 import { AppShell } from "./AppShell";
@@ -203,7 +203,13 @@ function OnboardingLayout() {
         if (data) setInvite(data);
         else setInviteError("Эта ссылка-приглашение недействительна или устарела.");
       })
-      .catch(() => setInviteError("Не удалось загрузить челлендж. Проверьте подключение."))
+      .catch((err: unknown) => {
+        if (err instanceof TeamInviteError) {
+          navigate(`/error/team-invite-${err.reason}`, { replace: true });
+        } else {
+          setInviteError("Не удалось загрузить челлендж. Проверьте подключение.");
+        }
+      })
       .finally(() => setInviteLoading(false));
   }, [code]);
 
@@ -217,6 +223,19 @@ function OnboardingLayout() {
       if (alreadyJoined) {
         setSelectedId(invite.challengeId);
         navigate("/app/home", { replace: true });
+      } else if (invite.type === "team") {
+        acceptTeamInvite(code, currentUser.uid, {
+          name: userProfile.name,
+          ini:  userProfile.ini,
+          tz:   userProfile.timezone,
+        }).then(({ challengeId }) => {
+          setSelectedId(challengeId);
+          navigate("/app/home", { replace: true });
+        }).catch((err: unknown) => {
+          if (err instanceof TeamInviteError) {
+            navigate(`/error/team-invite-${err.reason}`, { replace: true });
+          }
+        });
       } else {
         joinChallengeAsParticipant(
           invite.challengeId,
@@ -278,13 +297,30 @@ function OnboardingLayout() {
 
   const handleProfileDone = async (data: { name: string; ini: string }) => {
     if (currentUser && invite) {
-      await joinChallengeAsParticipant(
-        invite.challengeId,
-        currentUser.uid,
-        { name: data.name, ini: data.ini, tz: detectTz() },
-        invite.startingLives
-      );
-      setSelectedId(invite.challengeId);
+      try {
+        if (invite.type === "team") {
+          const { challengeId } = await acceptTeamInvite(code, currentUser.uid, {
+            name: data.name,
+            ini:  data.ini,
+            tz:   detectTz(),
+          });
+          setSelectedId(challengeId);
+        } else {
+          await joinChallengeAsParticipant(
+            invite.challengeId,
+            currentUser.uid,
+            { name: data.name, ini: data.ini, tz: detectTz() },
+            invite.startingLives
+          );
+          setSelectedId(invite.challengeId);
+        }
+      } catch (err: unknown) {
+        if (err instanceof TeamInviteError) {
+          navigate(`/error/team-invite-${err.reason}`, { replace: true });
+          return;
+        }
+        throw err;
+      }
     }
     navigate("/app/home");
   };
