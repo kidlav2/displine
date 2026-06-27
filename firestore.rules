@@ -32,61 +32,121 @@ service cloud.firestore {
 
     match /invites/{code} {
       allow read: if true;
-      allow write: if isSignedIn();
+
+      // Create: challenge owner only. createChallenge writes the challenge doc
+      // first, so it exists by the time this write happens.
+      allow create: if isSignedIn() &&
+        exists(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId)) &&
+        get(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId))
+          .data.ownerUid == request.auth.uid;
+
+      // Update: only allow transitioning usedAt from null to a non-null timestamp.
+      // No other field may change. Expiry is enforced in the transaction.
+      allow update: if isSignedIn() &&
+        resource.data.usedAt == null &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["usedAt"]) &&
+        request.resource.data.usedAt != null;
     }
 
     // ── User profiles ──────────────────────────────────────────────────────
 
     match /users/{uid} {
-      // Users can read and write only their own profile
-      allow read, write: if isSignedIn() && request.auth.uid == uid;
+      // Any signed-in user may read a profile (bio, photo, social links are
+      // displayed on the participant profile screen to challenge members).
+      allow read: if isSignedIn();
+      // Only the profile owner may write their own document.
+      allow write: if isSignedIn() && request.auth.uid == uid;
     }
 
     // ── Challenges ─────────────────────────────────────────────────────────
 
     match /challenges/{challengeId} {
-      // Any participant (or organizer) can read the challenge
-      allow read: if isParticipant(challengeId);
-      // Only owners can create or update the top-level challenge doc
+      allow read:   if isParticipant(challengeId);
       allow create: if isSignedIn();
       allow update: if isOrganizer(challengeId);
       allow delete: if isOwner(challengeId);
 
       // ── Participants subcollection ───────────────────────────────────────
       match /participants/{uid} {
-        // Participants can read the full roster
-        allow read: if isParticipant(challengeId);
-        // Organizers can write (add/edit/remove participants)
+        allow read:  if isParticipant(challengeId);
         allow write: if isOrganizer(challengeId);
-        // Allow a user to create their own participant doc when joining
-        allow create: if isSignedIn() && request.auth.uid == uid;
+
+        // A user may create their own participant doc only with validated fields,
+        // via one of three legitimate paths:
+        allow create: if isSignedIn() && request.auth.uid == uid && (
+
+          // Path A — challenge owner self-registers immediately after creating
+          // the challenge doc (createChallenge writes challenge first, then participant).
+          (
+            get(/databases/$(database)/documents/challenges/$(challengeId))
+              .data.ownerUid == request.auth.uid &&
+            request.resource.data.role == "owner" &&
+            request.resource.data.isAdmin == true &&
+            request.resource.data.km == 0 &&
+            request.resource.data.results.size() == 0 &&
+            request.resource.data.penalties.size() == 0
+          ) ||
+
+          // Path B — regular participant joining via the challenge's public invite.
+          // Validates that initial stats are zeroed and lives match the configured
+          // starting amount (preventing a participant from granting themselves extra lives).
+          (
+            request.resource.data.role == "participant" &&
+            request.resource.data.isAdmin == false &&
+            request.resource.data.km == 0 &&
+            request.resource.data.active == true &&
+            request.resource.data.results.size() == 0 &&
+            request.resource.data.penalties.size() == 0 &&
+            request.resource.data.lives ==
+              get(/databases/$(database)/documents/challenges/$(challengeId))
+                .data.settings.startingLives
+          ) ||
+
+          // Path C — team invite acceptance. The invite code written into the
+          // participant doc is used to validate the invite is genuine, for this
+          // challenge, matches the role, and has not yet been used.
+          (
+            request.resource.data.isAdmin == true &&
+            request.resource.data.km == 0 &&
+            request.resource.data.active == true &&
+            request.resource.data.results.size() == 0 &&
+            request.resource.data.penalties.size() == 0 &&
+            request.resource.data.role in ["helper", "owner"] &&
+            "inviteCode" in request.resource.data &&
+            get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+              .data.type == "team" &&
+            get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+              .data.challengeId == challengeId &&
+            get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+              .data.role == request.resource.data.role &&
+            get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+              .data.usedAt == null
+          )
+        );
       }
 
       // ── Feed subcollection ───────────────────────────────────────────────
       match /feed/{postId} {
-        allow read: if isParticipant(challengeId);
+        allow read:   if isParticipant(challengeId);
         allow create: if isParticipant(challengeId);
-        // Organizers can update any field (approve/reject/comment).
-        // Participants can update any post but must not change immutable fields
-        // (submissionStatus, participantId, pointsEarned, type) — this allows
-        // likes and socialComments to be toggled/appended on any participant's post.
+        // Organizers may update any field (approve/reject/comment/score).
+        // Participants may only toggle likes or append/remove social comments.
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
-           request.resource.data.submissionStatus == resource.data.submissionStatus &&
-           request.resource.data.participantId == resource.data.participantId &&
-           request.resource.data.pointsEarned == resource.data.pointsEarned &&
-           request.resource.data.type == resource.data.type);
+           request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(["likes", "socialComments"]));
         allow delete: if isOrganizer(challengeId);
       }
 
       // ── Submissions subcollection ────────────────────────────────────────
       match /submissions/{submissionId} {
         allow read: if isOrganizer(challengeId) ||
-          // Participants can only read their own submissions
           resource.data.participantUid == request.auth.uid;
-        allow create: if isParticipant(challengeId);
-        // Organizers can approve/reject. Participants can add their result to
-        // their own checked-in submission (checked_in → pending transition only).
+        // Participant may only submit on their own behalf.
+        allow create: if isParticipant(challengeId) &&
+          request.resource.data.participantUid == request.auth.uid;
+        // Organizers approve/reject. Participants may attach their run result
+        // to a persisted check-in (checked_in → pending transition only).
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
            request.auth.uid == resource.data.participantUid &&
@@ -105,26 +165,32 @@ service cloud.firestore {
 
       // ── Achievements subcollection ───────────────────────────────────────
       match /achievements/{achievementId} {
-        allow read: if isParticipant(challengeId);
+        allow read:  if isParticipant(challengeId);
         allow write: if isOrganizer(challengeId);
       }
 
       // ── Team subcollection ───────────────────────────────────────────────
       match /team/{memberId} {
-        allow read: if isOrganizer(challengeId);
+        allow read:  if isOrganizer(challengeId);
         allow write: if isOwner(challengeId);
       }
 
       // ── Tasks subcollection ──────────────────────────────────────────────
       match /tasks/{taskId} {
-        allow read: if isParticipant(challengeId);
+        allow read:  if isParticipant(challengeId);
         allow write: if isOrganizer(challengeId);
       }
 
       // ── Task templates subcollection ─────────────────────────────────────
       match /taskTemplates/{templateId} {
-        allow read: if isParticipant(challengeId);
+        allow read:  if isParticipant(challengeId);
         allow write: if isOrganizer(challengeId);
+      }
+
+      // ── Organizer notes subcollection ────────────────────────────────────
+      // Private notes about participants; never visible to participants.
+      match /orgNotes/{participantUid} {
+        allow read, write: if isOrganizer(challengeId);
       }
     }
   }

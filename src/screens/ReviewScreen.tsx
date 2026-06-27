@@ -4,13 +4,15 @@ import { useNavigate } from "react-router";
 import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { findCity, utcLabel, localNow } from "../lib/timezone";
-import { fmtDate, dayToDate } from "../lib/dates";
+import { fmtDate, dayToDate, parseChallengeStartDate, todayISO } from "../lib/dates";
 import { useAppContext } from "../contexts/AppContext";
-import { reviewSubmission } from "../lib/firestore";
+import { useAuthContext } from "../contexts/AuthContext";
+import { reviewSubmission, createTask } from "../lib/firestore";
 import type { ReviewFilter, ReviewItem } from "../types";
 
 export function ReviewScreen() {
   const { challenge, adminTz } = useAppContext();
+  const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
   const [reviewDay, setReviewDay] = useState(challenge.currentDay);
@@ -20,14 +22,16 @@ export function ReviewScreen() {
   const [actLoading, setActLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [taskForm, setTaskForm] = useState({
-    date: fmtDate(dayToDate(challenge.currentDay)),
+    date: todayISO(),
     type: "checklist", title: "", desc: "", deadline: "23:59",
   });
   const [taskCreated, setTaskCreated] = useState(false);
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
-  const d = dayToDate(reviewDay);
+  const challengeStart = parseChallengeStartDate(challenge.startDate);
+  const d = dayToDate(reviewDay, challengeStart);
   const counts = {
     all:       challenge.queue.length,
     running:   challenge.queue.filter(q => q.type === "running").length,
@@ -61,10 +65,27 @@ export function ReviewScreen() {
     }
   };
 
-  const submitTask = () => {
-    if (!taskForm.title.trim()) return;
-    setTaskCreated(true);
-    setTimeout(() => { setShowCreate(false); setTaskCreated(false); setTaskForm(f => ({ ...f, title: "", desc: "" })); }, 1500);
+  const submitTask = async () => {
+    if (!taskForm.title.trim() || !currentUser) return;
+    setTaskError(null);
+    try {
+      await createTask(challenge.id, {
+        date:        taskForm.date,
+        title:       taskForm.title.trim(),
+        description: taskForm.desc.trim(),
+        deadline:    taskForm.deadline,
+        type:        taskForm.type as "running" | "checklist" | "freeform",
+        createdBy:   currentUser.uid,
+      }, currentUser.uid);
+      setTaskCreated(true);
+      setTimeout(() => {
+        setShowCreate(false);
+        setTaskCreated(false);
+        setTaskForm(f => ({ ...f, title: "", desc: "" }));
+      }, 1500);
+    } catch {
+      setTaskError("Не удалось создать задание. Попробуйте снова.");
+    }
   };
 
   const dateNav = (
@@ -232,6 +253,7 @@ export function ReviewScreen() {
             <div><SecLabel>Описание</SecLabel>
               <textarea placeholder="Инструкции…" value={taskForm.desc} onChange={e => setTaskForm(f => ({ ...f, desc: e.target.value }))} rows={2}
                 className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" /></div>
+            {taskError && <p className="text-xs font-bold text-red-500 text-center">{taskError}</p>}
             <button onClick={submitTask} disabled={!taskForm.title.trim()}
               className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>Создать задание</button>
           </div>

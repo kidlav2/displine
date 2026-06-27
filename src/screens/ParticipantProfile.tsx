@@ -7,7 +7,7 @@ import { BRAND_COLOR, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { findCity, localNow, utcLabel } from "../lib/timezone";
 import { useAppContext } from "../contexts/AppContext";
-import { removeLife, logPenalty, userRef } from "../lib/firestore";
+import { removeLife, logPenalty, userRef, getOrgNote, saveOrgNote } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
 import type { Penalty, UserProfile } from "../types";
 
@@ -24,16 +24,23 @@ export function ParticipantProfile() {
   const [penaltyAmount, setPenaltyAmount] = useState("5000");
   const [orgNoteSaved, setOrgNoteSaved]   = useState(false);
   const [orgNote, setOrgNote]             = useState("");
+  const [noteLoading, setNoteLoading]     = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [publicProfile, setPublicProfile] = useState<UserProfile | null>(null);
 
   // Fetch bio + social links from users/{uid}
   useEffect(() => {
     if (!uid) return;
-    getDoc(userRef(uid)).then(snap => {
-      if (snap.exists()) setPublicProfile({ uid, ...snap.data() } as UserProfile);
-    });
+    getDoc(userRef(uid))
+      .then(snap => { if (snap.exists()) setPublicProfile({ uid, ...snap.data() } as UserProfile); })
+      .catch(() => {});
   }, [uid]);
+
+  // Load any existing organizer note for this participant
+  useEffect(() => {
+    if (!isAdmin || !uid) return;
+    getOrgNote(challenge.id, uid).then(setOrgNote).catch(() => {});
+  }, [isAdmin, challenge.id, uid]);
 
   if (!participant) return (
     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Участник не найден.</div>
@@ -229,8 +236,21 @@ export function ParticipantProfile() {
                 : <div className="flex gap-2">
                     <textarea placeholder="Приватная заметка…" value={orgNote} onChange={e => setOrgNote(e.target.value)} rows={2}
                       className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-xs outline-none resize-none placeholder-muted-foreground" />
-                    <button onClick={() => { if (orgNote.trim()) { setOrgNoteSaved(true); setTimeout(() => setOrgNoteSaved(false), 2000); } }}
-                      className="self-end pb-0.5" style={{ color: BRAND_COLOR }}><Send size={17} /></button>
+                    <button
+                      disabled={noteLoading}
+                      onClick={async () => {
+                        if (!orgNote.trim() || noteLoading || !uid) return;
+                        setNoteLoading(true);
+                        try {
+                          await saveOrgNote(challenge.id, uid, orgNote.trim());
+                          setOrgNoteSaved(true);
+                          setTimeout(() => setOrgNoteSaved(false), 2000);
+                        } catch { /* silent — note save is non-critical */ }
+                        finally { setNoteLoading(false); }
+                      }}
+                      className="self-end pb-0.5 disabled:opacity-40" style={{ color: BRAND_COLOR }}>
+                      <Send size={17} />
+                    </button>
                   </div>
               }
             </div>

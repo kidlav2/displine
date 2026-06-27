@@ -1,7 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
-import type { ConfirmationResult } from "firebase/auth";
-import { signInWithPhoneNumber, RecaptchaVerifier, signInWithCustomToken, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithCustomToken, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
 import { resolveInviteCode, joinChallengeAsParticipant, acceptTeamInvite, TeamInviteError, type InviteData } from "../lib/firestore";
@@ -22,8 +21,6 @@ import { CreateChallengeScreen } from "../screens/CreateChallengeScreen";
 import { ParticipantProfile } from "../screens/ParticipantProfile";
 import { ErrorScreen } from "../screens/ErrorScreen";
 import { OrgLoginScreen } from "../screens/OrgLoginScreen";
-import { PhoneScreen } from "../screens/PhoneScreen";
-import { VerifyScreen } from "../screens/VerifyScreen";
 import { TelegramLoginScreen } from "../screens/TelegramLoginScreen";
 import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
 
@@ -179,13 +176,8 @@ function OnboardingLayout() {
   const [searchParams] = useSearchParams();
   const code = searchParams.get("code") ?? "";
 
-  const [step, setStep] = useState<"telegram" | "phone" | "verify" | "profile">("telegram");
+  const [step, setStep] = useState<"telegram" | "profile">("telegram");
   const [telegramData, setTelegramData] = useState<TelegramProfile | undefined>(undefined);
-
-  // Kept for potential phone-auth fallback — not used in the active flow
-  const [phone, setPhone] = useState("");
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-  const [resendVerifier, setResendVerifier] = useState<RecaptchaVerifier | null>(null);
 
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!code);
@@ -278,25 +270,6 @@ function OnboardingLayout() {
     setStep("profile");
   };
 
-  // ── Phone-auth helpers (kept, not exposed in UI) ──────────────────────────
-  const handlePhoneNext = (p: string, result: ConfirmationResult) => {
-    setPhone(p);
-    setConfirmationResult(result);
-    setStep("verify");
-  };
-
-  const handleResend = async () => {
-    const digits = phone.replace(/[^\d+]/g, "");
-    let verifier = resendVerifier;
-    if (!verifier) {
-      verifier = new RecaptchaVerifier(auth, "resend-recaptcha-container", { size: "invisible" });
-      setResendVerifier(verifier);
-    }
-    const result = await signInWithPhoneNumber(auth, digits, verifier);
-    setConfirmationResult(result);
-  };
-  // ─────────────────────────────────────────────────────────────────────────
-
   const handleProfileDone = async (data: { name: string; ini: string }) => {
     if (currentUser && invite) {
       try {
@@ -357,25 +330,11 @@ function OnboardingLayout() {
           {step === "telegram" && (
             <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} onGoogleAuth={handleGoogleAuthOnboarding} />
           )}
-          {/* Phone / Verify steps — inactive in current flow, kept for fallback */}
-          {step === "phone" && preview && (
-            <PhoneScreen challenge={preview} onNext={handlePhoneNext} />
-          )}
-          {step === "verify" && confirmationResult && (
-            <VerifyScreen
-              phone={phone}
-              confirmationResult={confirmationResult}
-              onVerify={() => setStep("profile")}
-              onBack={() => setStep("phone")}
-              onResend={handleResend}
-            />
-          )}
           {step === "profile" && (
             <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} />
           )}
         </div>
       </div>
-      <div id="resend-recaptcha-container" />
     </div>
   );
 }

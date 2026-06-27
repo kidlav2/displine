@@ -34,8 +34,7 @@ export function AppShell() {
   const { challenges, loading, challenge } = useAppContext();
 
   // Show the empty state only for real authenticated users whose join step
-  // failed — i.e. they have a profile but no challenge roles and no challenges
-  // loaded. Demo mode (currentUser = null) falls through to normal rendering.
+  // failed — i.e. they have a profile but no challenge roles and no challenges loaded.
   const showNoChallengeState =
     !loading &&
     !!currentUser &&

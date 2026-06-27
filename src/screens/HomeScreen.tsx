@@ -10,8 +10,8 @@ import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { checkInForRun, subscribeToTodayCheckIn, runCheckInSubId } from "../lib/firestore";
-import { localNow } from "../lib/timezone";
-import { todayISO } from "../lib/dates";
+import { localNow, detectTz } from "../lib/timezone";
+import { todayISOInTz } from "../lib/dates";
 import type { SortKey } from "../types";
 
 export function HomeScreen() {
@@ -31,12 +31,13 @@ export function HomeScreen() {
   // Subscribe to today's persisted check-in so state survives browser reloads.
   // On component mount, if a checked_in submission exists for today, restore
   // the checked-in UI immediately without re-uploading anything.
+  const participantTodayISO = todayISOInTz(meParticipant?.tz ?? detectTz());
   useEffect(() => {
     if (!challenge?.id || !currentUser?.uid || !isRunDay) return;
     return subscribeToTodayCheckIn(
       challenge.id,
       currentUser.uid,
-      todayISO(),
+      participantTodayISO,
       (data) => {
         if (data && !checkedIn) {
           setCheckedIn(true);
@@ -74,7 +75,7 @@ export function HomeScreen() {
     setCheckedIn(true);
     setCheckInLoading(true);
 
-    const subId = runCheckInSubId(currentUser.uid, todayISO());
+    const subId = runCheckInSubId(currentUser.uid, participantTodayISO);
     setCheckInSubId(subId);
 
     try {

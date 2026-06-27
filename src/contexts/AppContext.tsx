@@ -5,7 +5,7 @@ import { db } from "../lib/firebase";
 import type { Achievement, ChallengeData, Participant, ScoringConfig, Task, UserRole } from "../types";
 import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
 import { detectTz } from "../lib/timezone";
-import { getTodayRunDay, todayISO } from "../lib/dates";
+import { challengeCurrentDay, todayRunDayInTz, todayISO } from "../lib/dates";
 import { useAuthContext } from "./AuthContext";
 import {
   challengeRef, feedCol, participantsCol, tasksCol, teamCol, achievementsCol,
@@ -186,14 +186,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [selectedId, currentUser]);
 
   // ── Derived state ─────────────────────────────────────────────────────────
-  const challenge = challenges.find(c => c.id === selectedId) ?? challenges[0];
+  const rawChallenge = challenges.find(c => c.id === selectedId) ?? challenges[0];
+
+  // Compute currentDay dynamically from startDate so it is always accurate
+  // regardless of what value is stored in the Firestore challenge doc.
+  const challenge = rawChallenge
+    ? { ...rawChallenge, currentDay: challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration) }
+    : rawChallenge;
 
   const meParticipant: Participant | null = currentUser
     ? (challenge?.participants.find(p => p.uid === currentUser.uid) ?? null)
     : null;
 
-  const isRunDay = !!(challenge?.settings.runSchedule?.[getTodayRunDay()]);
-  const todayDeadline = challenge?.settings.runSchedule?.[getTodayRunDay()] ?? "06:00";
+  // Use participant's stored timezone so isRunDay and deadline are correct
+  // for their local time, not the browser's OS clock timezone.
+  const participantTz = meParticipant?.tz ?? detectTz();
+  const isRunDay = !!(challenge?.settings.runSchedule?.[todayRunDayInTz(participantTz)]);
+  const todayDeadline = challenge?.settings.runSchedule?.[todayRunDayInTz(participantTz)] ?? "06:00";
 
   const userRole: UserRole = meParticipant?.role ?? "participant";
 

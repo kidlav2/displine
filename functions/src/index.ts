@@ -32,17 +32,13 @@ const ALLOWED_ORIGINS = [
 export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
   const { id_token, nonce } = (request.data ?? {}) as VerifyTelegramPayload;
 
-  console.log("[verifyTelegramLogin] invoked — id_token present:", typeof id_token === "string" && id_token.length > 0, "nonce:", nonce ?? "(none)");
-
   if (typeof id_token !== "string" || !id_token) {
     throw new HttpsError("invalid-argument", "Missing id_token.");
   }
 
   const clientId = TELEGRAM_CLIENT_ID.value();
-  console.log("[verifyTelegramLogin] TELEGRAM_CLIENT_ID resolved to:", JSON.stringify(clientId));
-
   if (!clientId) {
-    console.error("[verifyTelegramLogin] TELEGRAM_CLIENT_ID is empty — check functions/.env or param config");
+    console.error("[verifyTelegramLogin] TELEGRAM_CLIENT_ID is empty");
     throw new HttpsError("internal", "Server misconfiguration: missing client ID.");
   }
 
@@ -54,7 +50,6 @@ export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (requ
       audience: clientId,
     });
     payload = result.payload as Record<string, unknown>;
-    console.log("[verifyTelegramLogin] JWT verified — iss:", payload.iss, "aud:", payload.aud, "sub:", payload.sub);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("[verifyTelegramLogin] jwtVerify failed:", msg);
@@ -63,14 +58,11 @@ export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (requ
 
   // Verify nonce to prevent replay attacks
   if (!nonce) {
-    console.error("[verifyTelegramLogin] No nonce in request — rejecting");
     throw new HttpsError("unauthenticated", "Missing nonce.");
   }
   if (payload.nonce !== nonce) {
-    console.error("[verifyTelegramLogin] Nonce mismatch — JWT nonce:", payload.nonce, "request nonce:", nonce);
     throw new HttpsError("unauthenticated", "Nonce mismatch.");
   }
-  console.log("[verifyTelegramLogin] Nonce OK");
 
   const telegramId = payload.id as number;
   if (!telegramId) {

@@ -20,7 +20,12 @@ export function ManageParticipantsScreen() {
 
   const adjustLives = async (uid: string, current: number, delta: number) => {
     const next = Math.max(0, Math.min(5, current + delta));
-    await setParticipantLives(challenge.id, uid, next);
+    setError(null);
+    try {
+      await setParticipantLives(challenge.id, uid, next);
+    } catch {
+      setError("Не удалось изменить жизни.");
+    }
   };
 
   const handlePromote = async (uid: string, name: string, role: OrgRole) => {

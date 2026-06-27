@@ -495,6 +495,9 @@ export async function reviewSubmission(
     if (!subSnap.exists()) throw new Error("Submission not found");
     const subData = subSnap.data();
 
+    // Idempotency guard: skip if already reviewed (prevents double-approval race).
+    if (subData.status !== "pending") return;
+
     tx.update(subRef, { status: decision, organizerComment: comment || null, pointsEarned: pts });
     tx.update(feedRef, { submissionStatus: decision, organizerComment: comment || null, pointsEarned: pts });
 
@@ -662,18 +665,21 @@ export async function acceptTeamInvite(
 
     tx.set(participantRef(challengeId, uid), {
       uid,
-      ini:      profile.ini,
-      name:     profile.name,
-      photoUrl: profile.photoUrl ?? null,
+      ini:        profile.ini,
+      name:       profile.name,
+      photoUrl:   profile.photoUrl ?? null,
       role,
-      lives:    startingLives,
-      km:       0,
-      active:   true,
-      isAdmin:  true,
-      joinDate: serverTimestamp(),
-      tz:       profile.tz,
-      results:  [],
-      penalties: [],
+      lives:      startingLives,
+      km:         0,
+      active:     true,
+      isAdmin:    true,
+      joinDate:   serverTimestamp(),
+      tz:         profile.tz,
+      results:    [],
+      penalties:  [],
+      // Stored so Firestore rules can validate the invite in Path C of the participant
+      // create rule without a separate server-side write.
+      inviteCode,
     });
 
     tx.set(doc(teamCol(challengeId), uid), {
@@ -889,4 +895,20 @@ export async function joinChallengeAsParticipant(
   });
   // Register the challenge role in the user's profile
   await addChallengeRole(uid, challengeId, "participant");
+}
+
+// ── Organizer notes ───────────────────────────────────────────────────────────
+
+export const orgNoteRef = (cid: string, uid: string) =>
+  doc(db, "challenges", cid, "orgNotes", uid);
+
+/** Read a private organizer note for a participant. Returns "" if none exists. */
+export async function getOrgNote(challengeId: string, participantUid: string): Promise<string> {
+  const snap = await getDoc(orgNoteRef(challengeId, participantUid));
+  return snap.exists() ? (snap.data()?.note ?? "") : "";
+}
+
+/** Persist a private organizer note for a participant. */
+export async function saveOrgNote(challengeId: string, participantUid: string, note: string): Promise<void> {
+  await setDoc(orgNoteRef(challengeId, participantUid), { note, updatedAt: serverTimestamp() }, { merge: true });
 }
