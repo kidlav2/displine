@@ -90,13 +90,16 @@ export function ProfileScreen() {
 
       {/* Bio + social links */}
       <Card className="!p-4 space-y-3">
-        <SecLabel>О себе</SecLabel>
+        <div className="flex items-baseline justify-between">
+          <SecLabel>О себе</SecLabel>
+          <span className="text-[10px] text-muted-foreground tabular-nums">{bio.length}/500</span>
+        </div>
         <textarea
           value={bio}
           onChange={e => setBio(e.target.value)}
           placeholder="Расскажите немного о себе…"
           rows={3}
-          maxLength={280}
+          maxLength={500}
           className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none placeholder-muted-foreground"
         />
         <div className="flex items-center gap-2">

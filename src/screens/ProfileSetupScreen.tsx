@@ -108,14 +108,17 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
         </div>
 
         <div className="mb-6">
-          <SecLabel>О себе <span className="font-normal text-muted-foreground">(необязательно)</span></SecLabel>
+          <div className="flex items-baseline justify-between mb-1.5">
+            <SecLabel>О себе <span className="font-normal text-muted-foreground">(необязательно)</span></SecLabel>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{bio.length}/500</span>
+          </div>
           <textarea
             placeholder="Расскажите немного о себе…"
             value={bio}
             onChange={e => setBio(e.target.value)}
             rows={2}
-            maxLength={280}
-            className="w-full mt-1.5 px-4 py-3 bg-card border border-border rounded-xl text-sm outline-none resize-none placeholder-muted-foreground"
+            maxLength={500}
+            className="w-full px-4 py-3 bg-card border border-border rounded-xl text-sm outline-none resize-none placeholder-muted-foreground"
           />
         </div>
 

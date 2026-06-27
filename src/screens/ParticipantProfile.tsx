@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck } from "lucide-react";
+import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck, ChevronDown, ChevronUp } from "lucide-react";
 import { useParams, useNavigate } from "react-router";
 import { getDoc } from "firebase/firestore";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -95,10 +95,7 @@ export function ParticipantProfile() {
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-1">Вступил {participant.joinDate}</p>
-        {/* Bio + social links — visible to all */}
-        {publicProfile?.bio && (
-          <p className="text-sm text-muted-foreground mt-2 max-w-[280px] leading-snug">{publicProfile.bio}</p>
-        )}
+        {/* Social links remain in the header; bio moves to its own card below */}
         {(publicProfile?.socialLinks?.instagram || publicProfile?.socialLinks?.other) && (
           <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
             {publicProfile.socialLinks.instagram && (
@@ -132,6 +129,9 @@ export function ParticipantProfile() {
           );
         })()}
       </div>
+
+      {/* About / bio — dedicated card, collapsible if long, before stats */}
+      {publicProfile?.bio && <BioBubble bio={publicProfile.bio} />}
 
       <Card className="!p-4">
         <div className="flex justify-between items-baseline mb-2.5">
@@ -303,5 +303,32 @@ export function ParticipantProfile() {
         </>
       )}
     </div>
+  );
+}
+
+// Preview threshold: bios longer than this get a collapse toggle.
+const BIO_PREVIEW_LEN = 100;
+
+function BioBubble({ bio }: { bio: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = bio.length > BIO_PREVIEW_LEN;
+  const displayed = isLong && !expanded ? bio.slice(0, BIO_PREVIEW_LEN).trimEnd() + "…" : bio;
+
+  return (
+    <Card className="!p-4">
+      <SecLabel>О себе</SecLabel>
+      <p className="text-sm leading-relaxed mt-2 whitespace-pre-wrap break-words">{displayed}</p>
+      {isLong && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className="mt-2 flex items-center gap-1 text-xs font-semibold"
+          style={{ color: "var(--muted-foreground)" }}
+        >
+          {expanded
+            ? <><ChevronUp size={12} /> Свернуть</>
+            : <><ChevronDown size={12} /> Показать полностью</>}
+        </button>
+      )}
+    </Card>
   );
 }

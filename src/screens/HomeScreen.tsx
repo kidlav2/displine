@@ -9,7 +9,7 @@ import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId, resetTodaySubmission } from "../lib/firestore";
+import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId, devResetMyData } from "../lib/firestore";
 import { localNow, detectTz } from "../lib/timezone";
 import { todayISOInTz } from "../lib/dates";
 import type { SortKey } from "../types";
@@ -400,16 +400,20 @@ export function HomeScreen() {
         challengeId={challenge.id}
         uid={currentUser?.uid ?? ""}
         dateStr={participantTodayISO}
+        startingLives={challenge.settings.startingLives}
         onReset={() => {
           setCheckedIn(false);
           setSubmittedToday(false);
           setRunApproved(false);
+          setRunStatusLoading(false);
           setThumb(null);
           setCheckinTime(null);
           setCheckInSubId(null);
           setTaskSubmittedToday(false);
           setTaskApproved(false);
           setTaskRejectedToday(false);
+          setTaskStatusLoading(false);
+          setCheckInLoading(false);
         }}
       />}
       {/* ── END DEV ONLY ───────────────────────────────────────────────────── */}
@@ -419,16 +423,21 @@ export function HomeScreen() {
 
 // ── DEV ONLY component — remove before launch ────────────────────────────────
 function DevResetButton({
-  challengeId, uid, dateStr, onReset,
-}: { challengeId: string; uid: string; dateStr: string; onReset: () => void }) {
+  challengeId, uid, dateStr, startingLives, onReset,
+}: {
+  challengeId: string; uid: string; dateStr: string;
+  startingLives: number; onReset: () => void;
+}) {
   const [loading, setLoading] = useState(false);
 
   const handleReset = async () => {
     if (!uid || !challengeId) return;
     setLoading(true);
     try {
-      await resetTodaySubmission(challengeId, uid, dateStr);
-      onReset();
+      // Clears: today's submission + feed docs, results[], km, penalties (array
+      // + subcollection docs), lives back to startingLives, treasury delta.
+      await devResetMyData(challengeId, uid, dateStr, startingLives);
+      onReset(); // instant local-state reset while Firestore subscription catches up
     } catch (e) {
       console.error("[DevReset] failed:", e);
     } finally {
@@ -443,7 +452,7 @@ function DevResetButton({
       className="w-full flex items-center justify-center gap-2 py-2 rounded-xl border border-dashed border-gray-300 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-400 transition-colors disabled:opacity-40"
     >
       <RotateCcw size={12} />
-      {loading ? "Сброс…" : "[DEV] Сбросить чек-ин на сегодня"}
+      {loading ? "Сброс…" : "[DEV] Сбросить мои тестовые данные"}
     </button>
   );
 }
