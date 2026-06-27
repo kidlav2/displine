@@ -304,7 +304,8 @@ export async function submitProof(
   let photoUrl: string | null = null;
 
   if (payload.photoFile) {
-    const storageRef = ref(storage, `challenges/${challengeId}/submissions/${Date.now()}_${payload.photoFile.name}`);
+    // Path must match storage.rules: challenges/{id}/submissions/{userId}/{fileName}
+    const storageRef = ref(storage, `challenges/${challengeId}/submissions/${participant.uid}/${Date.now()}_${payload.photoFile.name}`);
     await new Promise<void>((resolve, reject) => {
       const task = uploadBytesResumable(storageRef, payload.photoFile!);
       task.on(

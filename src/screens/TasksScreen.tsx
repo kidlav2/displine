@@ -23,6 +23,7 @@ export function TasksScreen() {
   const [status, setStatus] = useState<SubStatus>("idle");
   const [submitting, setSubmitting] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,6 +39,7 @@ export function TasksScreen() {
   const submit = async () => {
     if (!canSubmit || submitting || !currentUser || !meParticipant) return;
     setSubmitting(true);
+    setSubmitError(null);
     setUploadPct(0);
     try {
       const subType = type === "run" ? "running" : (todayTask?.type ?? "freeform");
@@ -78,6 +80,7 @@ export function TasksScreen() {
       setStatus("pending");
     } catch (err) {
       console.error("[TasksScreen] submitProof failed:", err);
+      setSubmitError("Не удалось отправить. Проверьте соединение и попробуйте снова.");
     } finally {
       setSubmitting(false);
     }
@@ -174,6 +177,10 @@ export function TasksScreen() {
         <div className="h-1.5 bg-muted rounded-full overflow-hidden">
           <div className="h-full rounded-full transition-all" style={{ width: `${uploadPct}%`, background: BRAND_COLOR }} />
         </div>
+      )}
+
+      {submitError && (
+        <p className="text-xs font-bold text-red-500 text-center">{submitError}</p>
       )}
 
       <button

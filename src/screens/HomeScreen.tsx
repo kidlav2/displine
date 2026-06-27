@@ -8,6 +8,7 @@ import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
+import { localNow } from "../lib/timezone";
 import type { SortKey } from "../types";
 
 export function HomeScreen() {
@@ -16,6 +17,7 @@ export function HomeScreen() {
 
   const [checkedIn, setCheckedIn] = useState(false);
   const [thumb, setThumb] = useState<string | null>(null);
+  const [checkinTime, setCheckinTime] = useState<string | null>(null);
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const cameraRef = useRef<HTMLInputElement>(null);
   const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
@@ -31,8 +33,10 @@ export function HomeScreen() {
   const handleCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setThumb(URL.createObjectURL(file)); setCheckedIn(true);
-  }, []);
+    setThumb(URL.createObjectURL(file));
+    setCheckinTime(localNow(meParticipant?.tz ?? "UTC"));
+    setCheckedIn(true);
+  }, [meParticipant?.tz]);
 
   const goSubmit = (t: "task" | "run") => navigate(`/app/tasks?type=${t}`);
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
@@ -135,7 +139,7 @@ export function HomeScreen() {
                   {thumb ? <img src={thumb} alt="check-in" className="w-full h-full object-cover" /> : <Camera size={18} className="text-green-600" />}
                 </div>
                 <div>
-                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-extrabold text-green-700">Отмечено в 05:48</span></div>
+                  <div className="flex items-center gap-1.5 mb-0.5"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-extrabold text-green-700">Отмечено в {checkinTime ?? "—"}</span></div>
                   <p className="text-[11px] text-green-600 flex items-center gap-1"><MapPin size={10} /> GPS + время записаны</p>
                 </div>
               </div>
