@@ -42,7 +42,12 @@ export function TasksScreen() {
     return subscribeToTodayTaskSubmission(
       challenge.id, currentUser.uid, participantTodayISO,
       (data) => {
-        if (!data) return;\n        if (data.status === \"approved\") {\n          setStatus(\"approved\");\n        } else if (data.status === \"pending\") {\n          setStatus(\"pending\");\n        } else if (data.status === \"rejected\") {
+        if (!data) return;
+        if (data.status === "approved") {
+          setStatus("approved");
+        } else if (data.status === "pending") {
+          setStatus("pending");
+        } else if (data.status === "rejected") {
           setStatus("idle"); // stay on form
           setSubmitError(
             data.organizerComment
