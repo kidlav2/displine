@@ -14,7 +14,8 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { db, storage } from "./firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, storage, functions } from "./firebase";
 import { todayISOInTz } from "./dates";
 import type {
   ChallengeData, ChallengeSettings, DayResult,
@@ -1129,9 +1130,8 @@ export async function markPenaltyPaid(
 
 /**
  * DEV ONLY — full reset of the current user's test data for one challenge day.
- * Deletes today's submission + feed docs, clears the participant's results /
- * km / penalties / lives, and removes all penalty subcollection docs.
- * This is intentionally destructive and must only run in import.meta.env.DEV.
+ * Delegates to a Cloud Function (Admin SDK) so it bypasses security rules.
+ * The button calling this is hidden behind import.meta.env.DEV on the client.
  */
 export async function devResetMyData(
   challengeId: string,
@@ -1139,58 +1139,11 @@ export async function devResetMyData(
   dateStr: string,
   startingLives: number,
 ): Promise<void> {
-  const runSubId    = runCheckInSubId(uid, dateStr);
-  const taskSubId   = taskSubmitSubId(uid, dateStr);
-  const runRef      = submissionRef(challengeId, runSubId);
-  const taskRef     = submissionRef(challengeId, taskSubId);
-  const runFeedRef  = feedDocRef(challengeId, runSubId);
-  const taskFeedRef = feedDocRef(challengeId, taskSubId);
-  const pRef        = participantRef(challengeId, uid);
-  const chalRef     = challengeRef(challengeId);
-
-  // Read participant doc first so we can compute the treasury delta.
-  const pSnap = await getDoc(pRef);
-  const existingPenalties: Array<Record<string, unknown>> = pSnap.exists()
-    ? (pSnap.data().penalties ?? [])
-    : [];
-  const totalPenaltyAmount = existingPenalties.reduce(
-    (sum, p) => sum + (((p.amount as number) ?? 0)), 0
-  );
-
-  await runTransaction(db, async (tx) => {
-    const runSnap      = await tx.get(runRef);
-    const taskSnap     = await tx.get(taskRef);
-    const runFeedSnap  = await tx.get(runFeedRef);
-    const taskFeedSnap = await tx.get(taskFeedRef);
-
-    if (runSnap.exists())      tx.delete(runRef);
-    if (taskSnap.exists())     tx.delete(taskRef);
-    if (runFeedSnap.exists())  tx.delete(runFeedRef);
-    if (taskFeedSnap.exists()) tx.delete(taskFeedRef);
-
-    if (pSnap.exists()) {
-      tx.update(pRef, {
-        results:   [],
-        km:        0,
-        penalties: [],
-        lives:     startingLives,
-        active:    true,
-      });
-    }
-
-    // Reverse any penalty amounts that were added to the treasury.
-    if (totalPenaltyAmount > 0) {
-      tx.update(chalRef, { totalTreasury: increment(-totalPenaltyAmount) });
-    }
-  });
-
-  // Delete all penalty subcollection docs for this user (outside transaction).
-  const penSnap = await getDocs(
-    query(penaltiesCol(challengeId), where("participantUid", "==", uid))
-  );
-  if (!penSnap.empty) {
-    await Promise.all(penSnap.docs.map(d => deleteDoc(d.ref)));
-  }
+  const fn = httpsCallable<
+    { challengeId: string; uid: string; dateStr: string; startingLives: number },
+    { success: boolean }
+  >(functions, "devResetMyData");
+  await fn({ challengeId, uid, dateStr, startingLives });
 }
 
 // ── Organizer notes ───────────────────────────────────────────────────────────

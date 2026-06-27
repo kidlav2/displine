@@ -91,6 +91,108 @@ export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (requ
   return { customToken, telegramId, telegramUsername, displayName, photoUrl };
 });
 
+// ── Dev reset (DEV ONLY — button is hidden in production builds) ─────────────
+// Resets the calling user's own test data for one challenge day using Admin SDK,
+// which bypasses security rules. Authorization is enforced server-side: the
+// caller may only reset their own participant record (uid must equal auth.uid).
+// No additional "dev account" gate is applied — the client-side import.meta.env.DEV
+// gate on the button is sufficient to keep this off production UIs; and since
+// the function only ever touches the caller's own records it is low-risk to leave
+// the endpoint open to any authenticated user.
+
+interface DevResetPayload {
+  challengeId: string;
+  uid: string;
+  dateStr: string;
+  startingLives: number;
+}
+
+export const devResetMyData = onCall({ cors: ALLOWED_ORIGINS }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "Must be signed in.");
+  }
+
+  const { challengeId, uid, dateStr, startingLives } = (request.data ?? {}) as DevResetPayload;
+
+  if (
+    typeof challengeId !== "string" || !challengeId ||
+    typeof uid !== "string" || !uid ||
+    typeof dateStr !== "string" || !dateStr ||
+    typeof startingLives !== "number" || startingLives < 0
+  ) {
+    throw new HttpsError("invalid-argument", "Missing or invalid arguments.");
+  }
+
+  // Server-side auth check: a user may only reset their own data.
+  if (request.auth.uid !== uid) {
+    throw new HttpsError("permission-denied", "You may only reset your own data.");
+  }
+
+  const db = getFirestore();
+
+  const runSubId     = `${uid}_${dateStr}`;
+  const taskSubId    = `${uid}_task_${dateStr}`;
+  const subBase      = `challenges/${challengeId}/submissions`;
+  const feedBase     = `challenges/${challengeId}/feed`;
+
+  const runRef       = db.doc(`${subBase}/${runSubId}`);
+  const taskRef      = db.doc(`${subBase}/${taskSubId}`);
+  const runFeedRef   = db.doc(`${feedBase}/${runSubId}`);
+  const taskFeedRef  = db.doc(`${feedBase}/${taskSubId}`);
+  const pRef         = db.doc(`challenges/${challengeId}/participants/${uid}`);
+  const chalRef      = db.doc(`challenges/${challengeId}`);
+
+  // Read participant doc outside the transaction to compute the treasury rollback.
+  const pSnap = await pRef.get();
+  const existingPenalties = (pSnap.exists
+    ? (pSnap.data()?.penalties ?? [])
+    : []) as Array<{ amount?: number }>;
+  const totalPenaltyAmount = existingPenalties.reduce((s, p) => s + (p.amount ?? 0), 0);
+
+  // Transaction: delete submission + feed docs, reset participant, rollback treasury.
+  await db.runTransaction(async (tx) => {
+    const [runSnap, taskSnap, runFeedSnap, taskFeedSnap] = await Promise.all([
+      tx.get(runRef),
+      tx.get(taskRef),
+      tx.get(runFeedRef),
+      tx.get(taskFeedRef),
+    ]);
+
+    if (runSnap.exists)     tx.delete(runRef);
+    if (taskSnap.exists)    tx.delete(taskRef);
+    if (runFeedSnap.exists) tx.delete(runFeedRef);
+    if (taskFeedSnap.exists) tx.delete(taskFeedRef);
+
+    if (pSnap.exists) {
+      tx.update(pRef, {
+        results:   [],
+        km:        0,
+        penalties: [],
+        lives:     startingLives,
+        active:    true,
+      });
+    }
+
+    if (totalPenaltyAmount > 0) {
+      tx.update(chalRef, { totalTreasury: FieldValue.increment(-totalPenaltyAmount) });
+    }
+  });
+
+  // Delete all penalty subcollection docs for this participant (outside transaction).
+  const penSnap = await db
+    .collection(`challenges/${challengeId}/penalties`)
+    .where("participantUid", "==", uid)
+    .get();
+
+  if (!penSnap.empty) {
+    const batch = db.batch();
+    penSnap.docs.forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+
+  return { success: true };
+});
+
 // ── Daily task generation ─────────────────────────────────────────────────────
 
 function todayUTCString(): string {
