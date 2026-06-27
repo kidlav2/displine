@@ -25,3 +25,18 @@ export function fmtDate(d: Date): string {
 export function fmtDateShort(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+/** Compute duration in whole days between two "YYYY-MM-DD" strings (inclusive of end date). */
+export function durationFromDates(startDate: string, endDate: string): number {
+  if (!startDate || !endDate) return 0;
+  const ms = new Date(endDate).getTime() - new Date(startDate).getTime();
+  if (ms < 0) return 0;
+  return Math.round(ms / 86_400_000) + 1; // +1 so start==end → 1 day
+}
+
+/** Add N days to a "YYYY-MM-DD" string, return new "YYYY-MM-DD". */
+export function addDays(dateStr: string, days: number): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}

@@ -2,13 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import type React from "react";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import type { ChallengeData, Participant, Task, UserRole } from "../types";
+import type { Achievement, ChallengeData, Participant, ScoringConfig, Task, UserRole } from "../types";
+import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
 import { detectTz } from "../lib/timezone";
 import { getTodayRunDay, todayISO } from "../lib/dates";
 import { useAuthContext } from "./AuthContext";
 import {
-  challengeRef, feedCol, participantsCol, tasksCol, teamCol,
-  snapToParticipant, snapToFeedItem, snapToReviewItem, snapToTask, snapToTeamMember,
+  challengeRef, feedCol, participantsCol, tasksCol, teamCol, achievementsCol,
+  snapToParticipant, snapToFeedItem, snapToReviewItem, snapToTask, snapToTeamMember, snapToAchievement,
 } from "../lib/firestore";
 
 interface AppContextType {
@@ -17,13 +18,11 @@ interface AppContextType {
   selectedId: string | null;
   setSelectedId: (id: string | null) => void;
   userRole: UserRole;
-  setUserRole: (role: UserRole) => void;
   adminTz: string;
   setAdminTz: (tz: string) => void;
   adminTzAuto: boolean;
   setAdminTzAuto: (auto: boolean) => void;
   isRunDay: boolean;
-  setIsRunDay: React.Dispatch<React.SetStateAction<boolean>>;
   loading: boolean;
   todayTask: Task | null;
   todayDeadline: string;
@@ -32,6 +31,8 @@ interface AppContextType {
   meParticipant: Participant | null;
   isAdmin: boolean;
   isOwner: boolean;
+  scoring: ScoringConfig;
+  achievements: Achievement[];
   updateChallenge: (id: string, update: Partial<ChallengeData>) => void;
 }
 
@@ -44,13 +45,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [adminTz, setAdminTz]       = useState<string>(detectTz);
   const [adminTzAuto, setAdminTzAuto] = useState(true);
-  const [isRunDayState, setIsRunDay] = useState(false);
   // Start true — we don't know yet whether there are challenges to load
   const [challengeLoading, setChallengeLoading] = useState(true);
   const [todayTask, setTodayTask]   = useState<Task | null>(null);
-
-  // DEV-only role override; in production role comes from meParticipant.
-  const [demoRole, setDemoRole] = useState<UserRole | null>(null);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
 
   // ── Load challenge metadata from Firestore ────────────────────────────────
   useEffect(() => {
@@ -83,14 +81,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             emoji:       d.emoji       ?? "🏃",
             description: d.description ?? "",
             startDate:   d.startDate   ?? "",
+            endDate:     d.endDate     ?? "",
             duration:    d.duration    ?? 30,
             currentDay:  d.currentDay  ?? 1,
             status:      d.status      ?? "active",
             inviteCode:  d.inviteCode  ?? "",
             totalTreasury: d.totalTreasury ?? 0,
-            settings: d.settings ?? {
-              runSchedule: {}, penaltyAmount: 0, currency: "KZT",
-              burpees: 0, startingLives: 3,
+            settings: {
+              runSchedule:   d.settings?.runSchedule   ?? {},
+              penaltyAmount: d.settings?.penaltyAmount ?? 0,
+              currency:      d.settings?.currency      ?? "KZT",
+              burpees:       d.settings?.burpees       ?? 0,
+              startingLives: d.settings?.startingLives ?? 3,
+              scoring: parseScoring(d.settings?.scoring),
             },
             // Preserve any subcollection data already loaded
             participants: existing?.participants ?? [],
@@ -161,12 +164,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    const achUnsub = onSnapshot(
+      query(achievementsCol(selectedId)),
+      (snap) => { setAchievements(snap.docs.map(snapToAchievement)); }
+    );
+
     return () => {
       participantsUnsub();
       feedUnsub();
       queueUnsub();
       teamUnsub();
       taskUnsub();
+      achUnsub();
     };
   }, [selectedId, currentUser]);
 
@@ -177,24 +186,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ? (challenge?.participants.find(p => p.uid === currentUser.uid) ?? null)
     : null;
 
-  // isRunDay: derived from the challenge's runSchedule setting in production.
-  // In DEV, setIsRunDay from DemoControls can override this.
-  const derivedIsRunDay = !!(challenge?.settings.runSchedule?.[getTodayRunDay()]);
-  const isRunDay = import.meta.env.DEV ? isRunDayState : derivedIsRunDay;
+  const isRunDay = !!(challenge?.settings.runSchedule?.[getTodayRunDay()]);
   const todayDeadline = challenge?.settings.runSchedule?.[getTodayRunDay()] ?? "06:00";
 
-  // In production, role comes from Firestore (meParticipant.role).
-  // In DEV, allow DemoControls to override via setUserRole.
-  const userRole: UserRole = (import.meta.env.DEV && demoRole)
-    ? demoRole
-    : (meParticipant?.role ?? "participant");
-
-  const setUserRole = (role: UserRole) => {
-    if (import.meta.env.DEV) setDemoRole(role);
-  };
+  const userRole: UserRole = meParticipant?.role ?? "participant";
 
   const isAdmin = userRole !== "participant";
   const isOwner = userRole === "owner";
+
+  const scoring: ScoringConfig = challenge?.settings.scoring ?? DEFAULT_SCORING;
 
   // FLAG: updateChallenge only patches local React state. All production writes
   // should use the specific functions in src/lib/firestore.ts instead.
@@ -210,13 +210,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       challenges, setChallenges,
       selectedId, setSelectedId,
-      userRole, setUserRole,
+      userRole,
       adminTz, setAdminTz,
       adminTzAuto, setAdminTzAuto,
-      isRunDay, setIsRunDay,
+      isRunDay,
       loading,
       todayTask, todayDeadline,
-      challenge, meParticipant, isAdmin, isOwner,
+      challenge, meParticipant, isAdmin, isOwner, scoring,
+      achievements,
       updateChallenge,
     }}>
       {children}

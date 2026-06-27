@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
 import type { ConfirmationResult } from "firebase/auth";
-import { signInWithPhoneNumber, RecaptchaVerifier, signInWithCustomToken } from "firebase/auth";
+import { signInWithPhoneNumber, RecaptchaVerifier, signInWithCustomToken, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
 import { resolveInviteCode, joinChallengeAsParticipant, type InviteData } from "../lib/firestore";
@@ -96,6 +96,11 @@ function RootLayout() {
     // AuthContext will fire → useEffect above will pick up the new user + profile state
   };
 
+  const handleGoogleAuth = async () => {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+    // AuthContext onAuthStateChanged fires → useEffect above routes the user
+  };
+
   const handleProfileDone = async (_data: { name: string; ini: string }) => {
     // After profile creation on root flow, user has no challenge yet
     setStep("no-challenges");
@@ -116,6 +121,7 @@ function RootLayout() {
           style={{ minHeight: "min(600px, 100vh)" }}>
           <TelegramLoginScreen
             onAuth={handleTelegramAuth}
+            onGoogleAuth={handleGoogleAuth}
             onInviteCode={code => navigate(`/join?code=${encodeURIComponent(code)}`)}
           />
         </div>
@@ -218,6 +224,12 @@ function OnboardingLayout() {
     setStep("profile");
   };
 
+  const handleGoogleAuthOnboarding = async () => {
+    await signInWithPopup(auth, new GoogleAuthProvider());
+    // Google auth resolves with name/photo in currentUser — profile step will read it
+    setStep("profile");
+  };
+
   // ── Phone-auth helpers (kept, not exposed in UI) ──────────────────────────
   const handlePhoneNext = (p: string, result: ConfirmationResult) => {
     setPhone(p);
@@ -276,7 +288,7 @@ function OnboardingLayout() {
         <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
           style={{ minHeight: "min(600px, 100vh)" }}>
           {step === "telegram" && (
-            <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} />
+            <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} onGoogleAuth={handleGoogleAuthOnboarding} />
           )}
           {/* Phone / Verify steps — inactive in current flow, kept for fallback */}
           {step === "phone" && preview && (

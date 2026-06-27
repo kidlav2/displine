@@ -6,7 +6,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { setParticipantLives } from "../lib/firestore";
 
 export function ManageParticipantsScreen() {
-  const { challenge } = useAppContext();
+  const { challenge, scoring } = useAppContext();
   const navigate = useNavigate();
 
   const adjustLives = async (uid: string, current: number, delta: number) => {
@@ -32,7 +32,7 @@ export function ManageParticipantsScreen() {
                   <p className="text-sm font-bold">{p.name}</p>
                   {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
                 </div>
-                <p className="text-xs text-muted-foreground">{calcScore(p.results)} оч.</p>
+                <p className="text-xs text-muted-foreground">{calcScore(p.results, scoring)} оч.</p>
               </div>
               <Hearts n={p.lives} sz={13} />
             </div>

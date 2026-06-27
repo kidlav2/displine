@@ -6,13 +6,12 @@ import {
 import { useNavigate } from "react-router";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
-import { SCORE } from "../constants/scoring";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import type { SortKey } from "../types";
 
 export function HomeScreen() {
-  const { challenge, isRunDay, meParticipant, todayTask, todayDeadline } = useAppContext();
+  const { challenge, isRunDay, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
   const navigate = useNavigate();
 
   const [checkedIn, setCheckedIn] = useState(false);
@@ -21,11 +20,11 @@ export function HomeScreen() {
   const cameraRef = useRef<HTMLInputElement>(null);
   const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
 
-  const myScore = calcScore(meParticipant?.results ?? []);
+  const myScore = calcScore(meParticipant?.results ?? [], scoring);
 
   const top3 = [...challenge.participants]
     .filter(p => p.active)
-    .sort((a, b) => lbSort === "score" ? calcScore(b.results) - calcScore(a.results) : b.km - a.km)
+    .sort((a, b) => lbSort === "score" ? calcScore(b.results, scoring) - calcScore(a.results, scoring) : b.km - a.km)
     .slice(0, 3);
 
   const handleCapture = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,6 +37,9 @@ export function HomeScreen() {
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
   const runDayLabels = Object.keys(challenge.settings.runSchedule).join(" / ") || "—";
+  const runOnTimePts = scoring.find(e => e.key === "running_on_time")?.points ?? 2;
+  const runLatePts   = scoring.find(e => e.key === "running_late")?.points    ?? 1;
+  const taskPts      = scoring.find(e => e.key === "task_completed")?.points  ?? 5;
 
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-4">
@@ -82,7 +84,7 @@ export function HomeScreen() {
           <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{todayTask.description}</p>
           <div className="flex items-center gap-2 mb-4">
             <Zap size={13} style={{ color: BRAND_COLOR }} />
-            <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} оч. за выполнение</span>
+            <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>+{taskPts} оч. за выполнение</span>
           </div>
           <button onClick={() => goSubmit("task")} className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
             Отправить подтверждение
@@ -106,9 +108,9 @@ export function HomeScreen() {
             <span className="ml-auto text-[11px] text-muted-foreground">{runDayLabels}</span>
           </div>
           <div className="flex items-center gap-3 mb-3 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Zap size={10} style={{ color: BRAND_COLOR }} /><span style={{ color: BRAND_COLOR }} className="font-bold">+{SCORE.running_on_time} оч.</span> вовремя</span>
+            <span className="flex items-center gap-1"><Zap size={10} style={{ color: BRAND_COLOR }} /><span style={{ color: BRAND_COLOR }} className="font-bold">+{runOnTimePts} оч.</span> вовремя</span>
             <span className="text-border">·</span>
-            <span className="flex items-center gap-1">+{SCORE.running_late} оч. с оп.</span>
+            <span className="flex items-center gap-1">+{runLatePts} оч. с оп.</span>
             <span className="text-border">·</span>
             <span className="flex items-center gap-1"><Clock size={10} /> до {todayDeadline}</span>
           </div>
@@ -190,7 +192,7 @@ export function HomeScreen() {
                   {p.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {lbSort === "score" ? `${calcScore(p.results)} оч.` : `${p.km} км`}
+                  {lbSort === "score" ? `${calcScore(p.results, scoring)} оч.` : `${p.km} км`}
                 </p>
               </div>
               <Hearts n={p.lives} sz={14} />

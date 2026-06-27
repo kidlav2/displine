@@ -1,20 +1,20 @@
-import { useState } from "react";
-import { ChevronLeft, Shield, Globe, Minus, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, Shield, Globe, Minus, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon } from "lucide-react";
 import { useParams, useNavigate } from "react-router";
+import { getDoc } from "firebase/firestore";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { findCity, localNow, utcLabel } from "../lib/timezone";
-import { fmtDateShort } from "../lib/dates";
 import { useAppContext } from "../contexts/AppContext";
-import { removeLife, logPenalty } from "../lib/firestore";
+import { removeLife, logPenalty, userRef } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
-import type { Penalty } from "../types";
+import type { Penalty, UserProfile } from "../types";
 
 export function ParticipantProfile() {
   const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
-  const { challenge, isAdmin, isOwner } = useAppContext();
+  const { challenge, isAdmin, isOwner, scoring } = useAppContext();
   const { currentUser } = useAuthContext();
 
   const participant = challenge.participants.find(p => p.uid === uid);
@@ -25,12 +25,21 @@ export function ParticipantProfile() {
   const [orgNoteSaved, setOrgNoteSaved]   = useState(false);
   const [orgNote, setOrgNote]             = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [publicProfile, setPublicProfile] = useState<UserProfile | null>(null);
+
+  // Fetch bio + social links from users/{uid}
+  useEffect(() => {
+    if (!uid) return;
+    getDoc(userRef(uid)).then(snap => {
+      if (snap.exists()) setPublicProfile({ uid, ...snap.data() } as UserProfile);
+    });
+  }, [uid]);
 
   if (!participant) return (
     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Участник не найден.</div>
   );
 
-  const score = calcScore(participant.results);
+  const score = calcScore(participant.results, scoring);
 
   const onRemoveLife = async () => {
     setActionLoading(true);
@@ -67,6 +76,28 @@ export function ParticipantProfile() {
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-1">Вступил {participant.joinDate}</p>
+        {/* Bio + social links — visible to all */}
+        {publicProfile?.bio && (
+          <p className="text-sm text-muted-foreground mt-2 max-w-[280px] leading-snug">{publicProfile.bio}</p>
+        )}
+        {(publicProfile?.socialLinks?.instagram || publicProfile?.socialLinks?.other) && (
+          <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
+            {publicProfile.socialLinks.instagram && (
+              <a href={publicProfile.socialLinks.instagram.startsWith("http") ? publicProfile.socialLinks.instagram : `https://${publicProfile.socialLinks.instagram}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 hover:underline">
+                <Instagram size={13} /> Instagram
+              </a>
+            )}
+            {publicProfile.socialLinks.other && (
+              <a href={publicProfile.socialLinks.other.startsWith("http") ? publicProfile.socialLinks.other : `https://${publicProfile.socialLinks.other}`}
+                target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 hover:underline">
+                <LinkIcon size={13} /> Ссылка
+              </a>
+            )}
+          </div>
+        )}
         {isAdmin && (() => {
           const c = findCity(participant.tz);
           const now = localNow(participant.tz);

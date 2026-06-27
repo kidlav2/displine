@@ -31,6 +31,11 @@ export const DEFAULT_SETTINGS: ChallengeSettings = {
   runSchedule: { Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" },
   penaltyAmount: 5000, currency: "₸", burpees: 20,
   startingLives: 5,
+  scoring: [
+    { key: "running_on_time", label: "Пробежка вовремя", points: 2 },
+    { key: "running_late",    label: "Пробежка с оп.",   points: 1 },
+    { key: "task_completed",  label: "Задание выполнено", points: 5 },
+  ],
 };
 
 // ── Participant activity histories ──
@@ -150,7 +155,7 @@ export const INIT_TEAM: TeamMember[] = [
 const MAIN_CHALLENGE: ChallengeData = {
   id: "ch1", name: "50-Day Discipline", emoji: "🔥",
   description: "Daily tasks, morning runs, zero excuses.",
-  startDate: "Jun 14, 2026", duration: 50, currentDay: 12,
+  startDate: "Jun 14, 2026", endDate: "Aug 2, 2026", duration: 50, currentDay: 12,
   status: "active", inviteCode: "DISC-7X4K",
   participants: INIT_PARTICIPANTS,
   feed: INIT_FEED, queue: INIT_QUEUE,
@@ -164,7 +169,7 @@ export const INIT_CHALLENGES: ChallengeData[] = [
   {
     id: "ch2", name: "Winter Grind", emoji: "❄️",
     description: "30 days of cold showers, reading, and runs.",
-    startDate: "Jan 1, 2026", duration: 30, currentDay: 30,
+    startDate: "Jan 1, 2026", endDate: "Jan 30, 2026", duration: 30, currentDay: 30,
     status: "completed", inviteCode: "WGND-2P9R",
     participants: [
       { uid: "u10", ini: "АМ", name: "Алия М.",  role: "owner",       lives: 4, km: 28.0, active: true,  isAdmin: true,  joinDate: "Jan 1", tz: "Asia/Almaty",   penalties: [], results: [] },
@@ -179,7 +184,7 @@ export const INIT_CHALLENGES: ChallengeData[] = [
   {
     id: "ch3", name: "Autumn Reset", emoji: "🍂",
     description: "40 days. Digital detox, journaling, and walks.",
-    startDate: "Sep 15, 2026", duration: 40, currentDay: 0,
+    startDate: "Sep 15, 2026", endDate: "Oct 24, 2026", duration: 40, currentDay: 0,
     status: "upcoming", inviteCode: "ARST-5H1Q",
     participants: [],
     feed: [], queue: [],

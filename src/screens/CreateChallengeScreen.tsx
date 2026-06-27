@@ -1,11 +1,13 @@
 import { useState } from "react";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Plus, X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, ALL_DAYS, CURRENCIES, bc } from "../constants/design";
-import { SCORE } from "../constants/scoring";
+import { DEFAULT_SCORING } from "../constants/scoring";
 import { useAuthContext } from "../contexts/AuthContext";
 import { createChallenge } from "../lib/firestore";
+import { durationFromDates, addDays } from "../lib/dates";
+import type { ScoringEntry } from "../types";
 
 const EMOJIS = ["🔥", "❄️", "🍂", "💪", "🧘", "📚", "🏃", "⚡", "🎯", "🌟"];
 
@@ -17,13 +19,14 @@ export function CreateChallengeScreen() {
   const [name, setName] = useState("");
   const [emoji, setEmoji] = useState("🔥");
   const [desc, setDesc] = useState("");
-  const [startDate, setStartDate] = useState("Jul 1, 2026");
-  const [duration, setDuration] = useState("50");
+  const [startDate, setStartDate] = useState("2026-07-01");
+  const [endDate, setEndDate]     = useState("2026-08-19"); // 50 days from Jul 1
   const [runSchedule, setRunSchedule] = useState<Record<string, string>>({ Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" });
   const [penaltyAmount, setPenaltyAmount] = useState("5000");
   const [currency, setCurrency] = useState("KZT");
   const [burpees, setBurpees] = useState("20");
   const [startingLives, setStartingLives] = useState(5);
+  const [scoring, setScoring] = useState<ScoringEntry[]>([...DEFAULT_SCORING]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,10 +52,10 @@ export function CreateChallengeScreen() {
       const inviteCode = `${name.slice(0, 4).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       await createChallenge(
         currentUser.uid,
-        { name: userProfile.name, ini: userProfile.ini, timezone: userProfile.timezone },
+        { name: userProfile.name, ini: userProfile.ini, timezone: userProfile.timezone, telegramUsername: userProfile.telegramUsername },
         {
           name: name.trim(), emoji, description: desc.trim(),
-          startDate, duration: parseInt(duration) || 50, currentDay: 0,
+          startDate, endDate, duration: durationFromDates(startDate, endDate) || 50, currentDay: 0,
           status: "upcoming", inviteCode,
           settings: {
             runSchedule,
@@ -60,6 +63,7 @@ export function CreateChallengeScreen() {
             currency: currencySymbol,
             burpees: parseInt(burpees) || 20,
             startingLives,
+            scoring,
           },
         }
       );
@@ -113,16 +117,35 @@ export function CreateChallengeScreen() {
 
       <Card className="!p-4 space-y-3">
         <p className="font-bold text-sm">Расписание</p>
-        <div>
-          <SecLabel>Дата начала</SecLabel>
-          <input value={startDate} onChange={e => setStartDate(e.target.value)}
-            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <SecLabel>Дата начала</SecLabel>
+            <input
+              type="date" value={startDate}
+              onChange={e => {
+                setStartDate(e.target.value);
+                if (e.target.value && endDate && e.target.value > endDate)
+                  setEndDate(addDays(e.target.value, 49));
+              }}
+              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+              style={bc}
+            />
+          </div>
+          <div>
+            <SecLabel>Дата окончания</SecLabel>
+            <input
+              type="date" value={endDate} min={startDate}
+              onChange={e => setEndDate(e.target.value)}
+              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+              style={bc}
+            />
+          </div>
         </div>
-        <div>
-          <SecLabel>Продолжительность (дни)</SecLabel>
-          <input type="number" value={duration} onChange={e => setDuration(e.target.value)}
-            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
-        </div>
+        {startDate && endDate && (
+          <p className="text-xs text-muted-foreground">
+            Продолжительность: <span className="font-bold" style={{ color: BRAND_COLOR }}>{durationFromDates(startDate, endDate)} дн.</span>
+          </p>
+        )}
         <div>
           <SecLabel>Дни пробежек и дедлайны</SecLabel>
           <div className="mt-2 space-y-2">
@@ -189,10 +212,42 @@ export function CreateChallengeScreen() {
         </div>
       </Card>
 
+      <Card className="!p-4 space-y-3">
+        <p className="font-bold text-sm">Формула очков</p>
+        {scoring.map((entry, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={entry.label}
+              onChange={e => setScoring(s => { const n = [...s]; n[i] = { ...n[i], label: e.target.value }; return n; })}
+              placeholder="Описание…"
+              className="flex-1 bg-muted rounded-lg px-2.5 py-1.5 text-sm outline-none min-w-0"
+            />
+            <div className="flex items-center gap-0.5 shrink-0">
+              <span className="text-xs text-muted-foreground">+</span>
+              <input
+                type="number" min={0} value={entry.points}
+                onChange={e => setScoring(s => { const n = [...s]; n[i] = { ...n[i], points: parseInt(e.target.value) || 0 }; return n; })}
+                className="w-14 bg-muted rounded-lg px-2 py-1.5 text-sm font-bold outline-none text-center"
+                style={bc}
+              />
+              <span className="text-xs text-muted-foreground">оч.</span>
+            </div>
+            <button onClick={() => setScoring(s => s.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-400 transition-colors shrink-0">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        <button onClick={() => setScoring(s => [...s, { key: `custom_${Date.now()}`, label: "", points: 0 }])}
+          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+          <Plus size={12} /> Добавить строку
+        </button>
+        <div className="flex items-center justify-between pt-1 border-t border-border">
+          <span className="text-sm text-muted-foreground">Пропущено</span>
+          <span className="text-sm font-bold text-gray-400">0 оч. (всегда)</span>
+        </div>
+      </Card>
+
       <div className="pb-2">
-        <p className="text-[10px] text-muted-foreground mb-3 font-semibold px-1">
-          Очки: пробежка вовремя = {SCORE.running_on_time} · с оп. = {SCORE.running_late} · задание = {SCORE.task_completed} · пропуск = {SCORE.missed}
-        </p>
         {error && <p className="text-xs font-bold text-red-500 mb-3">{error}</p>}
         <button onClick={submit} disabled={!name.trim() || loading}
           className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"

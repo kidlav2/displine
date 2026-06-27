@@ -2,7 +2,6 @@ import { Outlet, useNavigate } from "react-router";
 import { Loader2 } from "lucide-react";
 import { DesktopNav } from "../components/nav/DesktopNav";
 import { TabBar } from "../components/nav/TabBar";
-import { DemoControls } from "../components/nav/DemoControls";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
 import { BRAND_COLOR } from "../constants/design";
@@ -79,11 +78,6 @@ export function AppShell() {
       <DesktopNav />
 
       <div className="flex-1 min-h-screen flex flex-col min-w-0 lg:ml-60">
-        {/* Mobile demo bar */}
-        <div className="lg:hidden border-b border-border bg-card px-4 py-2 overflow-x-hidden">
-          <DemoControls />
-        </div>
-
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20 lg:pb-8" style={{ scrollbarWidth: "none" }}>
           {inner}

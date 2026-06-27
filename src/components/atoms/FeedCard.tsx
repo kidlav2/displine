@@ -13,9 +13,9 @@ import type { FeedItem, Participant } from "../../types";
 
 interface FeedCardProps {
   item: FeedItem;
-  onLike: (id: number) => void;
-  onComment: (id: number, text: string) => void;
-  onViewParticipant: (id: number) => void;
+  onLike: (id: string) => void;
+  onComment: (id: string, text: string) => void;
+  onViewParticipant: (uid: string) => void;
   participants: Participant[];
   isAdmin: boolean;
   adminTz: string;
@@ -25,7 +25,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
   const [inputOpen, setInputOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const MAX = 60;
-  const p = participants.find(x => x.id === item.participantId);
+  const p = participants.find(x => x.uid === item.participantId);
 
   const typeIcon: Record<string, React.ReactNode> = {
     running:    <Activity size={12} className="text-blue-400 shrink-0" />,
@@ -46,11 +46,11 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
   return (
     <Card className="overflow-hidden">
       <div className="px-3.5 pt-3.5 pb-2.5 flex items-start gap-2.5">
-        <Av ini={item.ini} sz="sm" admin={item.isAdmin} onClick={() => p && onViewParticipant(p.id)} />
+        <Av ini={item.ini} sz="sm" admin={item.isAdmin} onClick={() => p && onViewParticipant(p.uid)} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
             {typeIcon[item.type]}
-            <button className="font-bold text-sm hover:underline leading-none" onClick={() => p && onViewParticipant(p.id)}>
+            <button className="font-bold text-sm hover:underline leading-none" onClick={() => p && onViewParticipant(p.uid)}>
               {item.name}
             </button>
             {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}

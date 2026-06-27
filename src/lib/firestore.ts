@@ -27,6 +27,7 @@ export interface InviteData {
   description: string;
   inviteCode: string;
   startingLives: number;
+  ownerTelegramUsername?: string;
 }
 
 // ── Collection helpers ────────────────────────────────────────────────────────
@@ -115,13 +116,17 @@ export function snapToReviewItem(snap: QueryDocumentSnapshot<DocumentData>): Rev
   const resultT = resultTRaw instanceof Timestamp
     ? resultTRaw.toDate().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
     : (resultTRaw ?? "—");
+  const isLate: boolean = d.isLate ?? false;
+  const type = (d.type ?? "checklist") as "running" | "checklist" | "freeform";
+  const scoreKey: import("../types").ScoreKey = d.scoreKey
+    ?? (type === "running" ? (isLate ? "running_late" : "running_on_time") : "task_completed");
   return {
     id:              snap.id,
     participantId:   d.participantUid   ?? d.participantId ?? "",
     ini:             d.ini              ?? "??",
     name:            d.name             ?? "",
     isAdmin:         d.isAdmin          ?? false,
-    type:            d.type             ?? "checklist",
+    type,
     task:            d.taskTitle        ?? d.task ?? "",
     checkIn,
     resultT,
@@ -129,6 +134,10 @@ export function snapToReviewItem(snap: QueryDocumentSnapshot<DocumentData>): Rev
     status:          d.status           ?? "pending",
     km:              d.km               ?? null,
     organizerComment:d.organizerComment ?? null,
+    isLate,
+    scoreKey,
+    text:            d.text             ?? "",
+    photoUrl:        d.photoUrl         ?? null,
   };
 }
 
@@ -178,6 +187,18 @@ export function snapToTaskTemplate(snap: QueryDocumentSnapshot<DocumentData>): T
   };
 }
 
+export function snapToAchievement(snap: QueryDocumentSnapshot<DocumentData>): import("../types").Achievement {
+  const d = snap.data();
+  return {
+    id:                 snap.id,
+    icon:               d.icon               ?? "⭐",
+    title:              d.title              ?? "",
+    desc:               d.desc               ?? "",
+    conditionType:      d.conditionType      ?? "custom",
+    conditionThreshold: d.conditionThreshold,
+  };
+}
+
 // ── Write actions ─────────────────────────────────────────────────────────────
 
 /** Create or update the user's profile document after onboarding. */
@@ -208,7 +229,7 @@ export async function addChallengeRole(
 /** Create a new challenge document and add the creator as owner-participant. */
 export async function createChallenge(
   ownerUid: string,
-  ownerProfile: Pick<UserProfile, "name" | "ini" | "timezone">,
+  ownerProfile: Pick<UserProfile, "name" | "ini" | "timezone" | "telegramUsername">,
   data: Omit<ChallengeData, "id" | "participants" | "feed" | "queue" | "team" | "totalTreasury">
 ): Promise<string> {
   const challengeDocRef = doc(collection(db, "challenges"));
@@ -229,6 +250,7 @@ export async function createChallenge(
     description:   data.description,
     inviteCode:    data.inviteCode,
     startingLives: data.settings.startingLives,
+    ...(ownerProfile.telegramUsername ? { ownerTelegramUsername: ownerProfile.telegramUsername } : {}),
   });
 
   // Add owner as a participant with owner role
@@ -343,10 +365,13 @@ export async function reviewSubmission(
   const feedRef = feedDocRef(challengeId, submissionId);
   const pRef    = participantRef(challengeId, participantUid);
 
-  const pointsMap: Record<string, number> = {
-    running_on_time: 2, running_late: 1, task_completed: 5, missed: 0,
-  };
-  const pts = decision === "approved" ? (pointsMap[scoreKey] ?? 0) : 0;
+  // Read per-challenge scoring config from Firestore, fall back to defaults
+  const chalSnap = await getDoc(challengeRef(challengeId));
+  const rawScoring = chalSnap.exists() ? chalSnap.data()?.settings?.scoring : null;
+  const { parseScoring } = await import("../constants/scoring");
+  const scoring = parseScoring(rawScoring);
+  const entry = scoring.find(e => e.key === scoreKey);
+  const pts = decision === "approved" ? (entry?.points ?? 0) : 0;
 
   await runTransaction(db, async (tx) => {
     const subSnap = await tx.get(subRef);
@@ -512,10 +537,26 @@ export async function resolveInviteCode(code: string): Promise<InviteData | null
     description:   d.description   ?? "",
     inviteCode:    d.inviteCode    ?? code,
     startingLives: d.startingLives ?? 3,
+    ...(d.ownerTelegramUsername ? { ownerTelegramUsername: d.ownerTelegramUsername } : {}),
   };
 }
 
 /** Create a one-off task for a specific date. */
+export async function createAchievementDoc(
+  challengeId: string,
+  ach: Omit<import("../types").Achievement, "id">
+): Promise<string> {
+  const ref = await addDoc(achievementsCol(challengeId), {
+    icon:               ach.icon,
+    title:              ach.title,
+    desc:               ach.desc,
+    conditionType:      ach.conditionType,
+    ...(ach.conditionThreshold !== undefined ? { conditionThreshold: ach.conditionThreshold } : {}),
+    createdAt:          serverTimestamp(),
+  });
+  return ref.id;
+}
+
 export async function createTask(
   challengeId: string,
   task: Omit<Task, "id">,

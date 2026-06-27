@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { ChevronLeft, CheckCircle2 } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Plus, X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, ALL_DAYS, CURRENCIES, bc } from "../constants/design";
-import { SCORE } from "../constants/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { updateChallengeDoc } from "../lib/firestore";
-import type { ChallengeSettings } from "../types";
+import { durationFromDates, addDays } from "../lib/dates";
+import type { ChallengeSettings, ScoringEntry } from "../types";
 
 function toInputDate(s: string): string {
   const d = new Date(s);
@@ -28,33 +28,51 @@ export function ChallengeSettingsScreen() {
 
   const [s, setS] = useState<ChallengeSettings>(challenge.settings);
   const [startDate, setStartDate] = useState(toInputDate(challenge.startDate));
-  const [duration, setDuration] = useState(String(challenge.duration));
+  const [endDate, setEndDate]     = useState(
+    challenge.endDate
+      ? toInputDate(challenge.endDate)
+      : (challenge.startDate ? addDays(toInputDate(challenge.startDate), challenge.duration - 1) : "")
+  );
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const toggleDay = (d: string) => setS(p => {
     const next = { ...p, runSchedule: { ...p.runSchedule } };
-    if (d in next.runSchedule) {
-      delete next.runSchedule[d];
-    } else {
-      next.runSchedule[d] = "06:00";
-    }
+    if (d in next.runSchedule) delete next.runSchedule[d];
+    else next.runSchedule[d] = "06:00";
     return next;
   });
 
   const setDayTime = (d: string, time: string) =>
     setS(p => ({ ...p, runSchedule: { ...p.runSchedule, [d]: time } }));
 
-  // Find the currency code from the stored symbol
+  const updateEntry = (i: number, patch: Partial<ScoringEntry>) =>
+    setS(p => {
+      const scoring = [...p.scoring];
+      scoring[i] = { ...scoring[i], ...patch };
+      return { ...p, scoring };
+    });
+
+  const removeEntry = (i: number) =>
+    setS(p => ({ ...p, scoring: p.scoring.filter((_, j) => j !== i) }));
+
+  const addEntry = () =>
+    setS(p => ({
+      ...p,
+      scoring: [...p.scoring, { key: `custom_${Date.now()}`, label: "", points: 0 }],
+    }));
+
   const currentCode = CURRENCIES.find(c => c.symbol === s.currency)?.code ?? "KZT";
 
   const handleSave = async () => {
     setLoading(true);
     try {
+      const dur = (startDate && endDate) ? durationFromDates(startDate, endDate) : challenge.duration;
       await updateChallengeDoc(challenge.id, {
         settings: s,
         ...(startDate ? { startDate: fromInputDate(startDate) } : {}),
-        duration: parseInt(duration) || challenge.duration,
+        ...(endDate   ? { endDate:   fromInputDate(endDate)   } : {}),
+        duration: dur || challenge.duration,
       });
       setSaved(true);
       setTimeout(() => { setSaved(false); navigate(-1); }, 1000);
@@ -73,31 +91,55 @@ export function ChallengeSettingsScreen() {
       </div>
 
       <div className="lg:grid lg:grid-cols-2 lg:gap-4 space-y-4 lg:space-y-0">
+        {/* Challenge info — dates + starting lives */}
         <Card className="!p-4 space-y-3">
           <p className="font-bold text-sm">Информация о челлендже</p>
-          <div>
-            <SecLabel>Дата начала</SecLabel>
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
-              style={bc}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <SecLabel>Дата начала</SecLabel>
+              <input
+                type="date" value={startDate}
+                onChange={e => {
+                  setStartDate(e.target.value);
+                  if (e.target.value && endDate && e.target.value > endDate)
+                    setEndDate(addDays(e.target.value, challenge.duration - 1));
+                }}
+                className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+                style={bc}
+              />
+            </div>
+            <div>
+              <SecLabel>Дата окончания</SecLabel>
+              <input
+                type="date" value={endDate} min={startDate}
+                onChange={e => setEndDate(e.target.value)}
+                className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
+                style={bc}
+              />
+            </div>
           </div>
+          {startDate && endDate && (
+            <p className="text-xs text-muted-foreground">
+              Продолжительность: <span className="font-bold" style={{ color: BRAND_COLOR }}>{durationFromDates(startDate, endDate)} дн.</span>
+            </p>
+          )}
           <div>
-            <SecLabel>Продолжительность (дни)</SecLabel>
-            <input
-              type="number"
-              value={duration}
-              onChange={e => setDuration(e.target.value)}
-              min={1}
-              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
-              style={bc}
-            />
+            <SecLabel>Начальные жизни</SecLabel>
+            <div className="flex items-center gap-4 mt-2">
+              <button onClick={() => setS(p => ({ ...p, startingLives: Math.max(1, p.startingLives - 1) }))} className="w-10 h-10 rounded-xl border-2 border-border flex items-center justify-center font-bold text-xl">−</button>
+              <div className="flex-1 flex justify-center">
+                <div className="flex gap-0.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <span key={i} className={`text-2xl ${i < s.startingLives ? "opacity-100" : "opacity-20"}`}>❤️</span>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => setS(p => ({ ...p, startingLives: Math.min(5, p.startingLives + 1) }))} className="w-10 h-10 rounded-xl border-2 border-border flex items-center justify-center font-bold text-xl">+</button>
+            </div>
           </div>
         </Card>
 
+        {/* Run schedule */}
         <Card className="!p-4 space-y-3">
           <p className="font-bold text-sm">Дни пробежек и дедлайны</p>
           <div className="space-y-2">
@@ -125,6 +167,7 @@ export function ChallengeSettingsScreen() {
           </div>
         </Card>
 
+        {/* Penalties */}
         <Card className="!p-4 space-y-3">
           <p className="font-bold text-sm">Штрафы</p>
           <div>
@@ -151,28 +194,38 @@ export function ChallengeSettingsScreen() {
           </div>
         </Card>
 
-        <Card className="!p-4">
-          <p className="font-bold text-sm mb-3">Начальные жизни</p>
-          <div className="flex items-center gap-4">
-            <button onClick={() => setS(p => ({ ...p, startingLives: Math.max(1, p.startingLives - 1) }))} className="w-10 h-10 rounded-xl border-2 border-border flex items-center justify-center font-bold text-xl">−</button>
-            <div className="flex-1 flex justify-center">
-              <div className="flex gap-0.5">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <span key={i} className={`text-2xl ${i < s.startingLives ? "opacity-100" : "opacity-20"}`}>❤️</span>
-                ))}
+        {/* Scoring formula — dynamic list */}
+        <Card className="!p-4 space-y-3">
+          <p className="font-bold text-sm">Формула очков</p>
+          {s.scoring.map((entry, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <input
+                value={entry.label}
+                onChange={e => updateEntry(i, { label: e.target.value })}
+                placeholder="Описание…"
+                className="flex-1 bg-muted rounded-lg px-2.5 py-1.5 text-sm outline-none min-w-0"
+              />
+              <div className="flex items-center gap-0.5 shrink-0">
+                <span className="text-xs text-muted-foreground">+</span>
+                <input
+                  type="number" min={0} value={entry.points}
+                  onChange={e => updateEntry(i, { points: parseInt(e.target.value) || 0 })}
+                  className="w-14 bg-muted rounded-lg px-2 py-1.5 text-sm font-bold outline-none text-center"
+                  style={bc}
+                />
+                <span className="text-xs text-muted-foreground">оч.</span>
               </div>
+              <button onClick={() => removeEntry(i)} className="text-muted-foreground hover:text-red-400 transition-colors shrink-0">
+                <X size={14} />
+              </button>
             </div>
-            <button onClick={() => setS(p => ({ ...p, startingLives: Math.min(5, p.startingLives + 1) }))} className="w-10 h-10 rounded-xl border-2 border-border flex items-center justify-center font-bold text-xl">+</button>
-          </div>
-        </Card>
-
-        <Card className="!p-4">
-          <p className="font-bold text-sm mb-2">Формула очков</p>
-          <div className="space-y-1.5 text-sm text-muted-foreground">
-            <div className="flex justify-between"><span>Пробежка вовремя</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.running_on_time} оч.</span></div>
-            <div className="flex justify-between"><span>Пробежка с оп.</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.running_late} оч.</span></div>
-            <div className="flex justify-between"><span>Задание выполнено</span><span className="font-bold" style={{ color: BRAND_COLOR }}>+{SCORE.task_completed} оч.</span></div>
-            <div className="flex justify-between"><span>Пропущено</span><span className="font-bold text-gray-400">0 оч.</span></div>
+          ))}
+          <button onClick={addEntry} className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+            <Plus size={12} /> Добавить строку
+          </button>
+          <div className="flex items-center justify-between pt-1 border-t border-border">
+            <span className="text-sm text-muted-foreground">Пропущено</span>
+            <span className="text-sm font-bold text-gray-400">0 оч. (всегда)</span>
           </div>
         </Card>
       </div>

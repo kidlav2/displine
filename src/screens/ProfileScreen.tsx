@@ -1,16 +1,43 @@
-import { Globe } from "lucide-react";
+import { useState } from "react";
+import { Globe, Instagram, Link, CheckCircle2 } from "lucide-react";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
-import { SCORE } from "../constants/scoring";
 import { TimezoneSettings } from "../components/atoms";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
+import { useAuthContext } from "../contexts/AuthContext";
+import { writeUserProfile } from "../lib/firestore";
 
 export function ProfileScreen() {
-  const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto } = useAppContext();
+  const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto, scoring } = useAppContext();
+  const { currentUser, userProfile } = useAuthContext();
+
+  const [bio, setBio]               = useState(userProfile?.bio ?? "");
+  const [instagram, setInstagram]   = useState(userProfile?.socialLinks?.instagram ?? "");
+  const [otherLink, setOtherLink]   = useState(userProfile?.socialLinks?.other ?? "");
+  const [saving, setSaving]         = useState(false);
+  const [saved, setSaved]           = useState(false);
+
+  const saveBio = async () => {
+    if (!currentUser || saving) return;
+    setSaving(true);
+    try {
+      await writeUserProfile(currentUser.uid, {
+        ...(userProfile ?? { name: "", ini: "", timezone: "UTC", challengeRoles: {} }),
+        bio: bio.trim() || undefined,
+        socialLinks: (instagram.trim() || otherLink.trim())
+          ? { instagram: instagram.trim() || undefined, other: otherLink.trim() || undefined }
+          : undefined,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const results = meParticipant?.results ?? [];
-  const myScore = calcScore(results);
+  const myScore = calcScore(results, scoring);
   const pct = Math.round((challenge.currentDay / challenge.duration) * 100);
 
   return (
@@ -33,18 +60,16 @@ export function ProfileScreen() {
       </Card>
 
       <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: "Очки в челлендже", value: myScore, unit: "очков всего" },
-          { label: "Разбивка", value: `${results.filter(r => r.scoreKey !== "missed").length}/${results.length}`, unit: "заданий выполнено" },
-          { label: "Очки за бег", value: results.filter(r => r.type === "running").reduce((a, r) => a + SCORE[r.scoreKey], 0), unit: `+${SCORE.running_on_time} вовремя / +${SCORE.running_late} с оп.` },
-          { label: "Очки за задания", value: results.filter(r => r.type === "task").reduce((a, r) => a + SCORE[r.scoreKey], 0), unit: `+${SCORE.task_completed} за задание` },
-        ].map(s => (
-          <Card key={s.label} className="!p-4">
-            <SecLabel>{s.label}</SecLabel>
-            <p style={{ ...bc, fontSize: 30, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{s.value}</p>
-            <p className="text-xs text-muted-foreground mt-1">{s.unit}</p>
-          </Card>
-        ))}
+        <Card className="!p-4">
+          <SecLabel>Очки в челлендже</SecLabel>
+          <p style={{ ...bc, fontSize: 30, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{myScore}</p>
+          <p className="text-xs text-muted-foreground mt-1">очков всего</p>
+        </Card>
+        <Card className="!p-4">
+          <SecLabel>Дистанция</SecLabel>
+          <p style={{ ...bc, fontSize: 30, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{meParticipant?.km ?? 0}</p>
+          <p className="text-xs text-muted-foreground mt-1">км пробежано</p>
+        </Card>
       </div>
 
       <Card className="!p-4">
@@ -52,6 +77,45 @@ export function ProfileScreen() {
         <div className="flex gap-3 justify-center py-3">
           <Hearts n={meParticipant?.lives ?? 0} sz={28} />
         </div>
+      </Card>
+
+      {/* Bio + social links */}
+      <Card className="!p-4 space-y-3">
+        <SecLabel>О себе</SecLabel>
+        <textarea
+          value={bio}
+          onChange={e => setBio(e.target.value)}
+          placeholder="Расскажите немного о себе…"
+          rows={3}
+          maxLength={280}
+          className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none placeholder-muted-foreground"
+        />
+        <div className="flex items-center gap-2">
+          <Instagram size={14} className="text-muted-foreground shrink-0" />
+          <input
+            value={instagram}
+            onChange={e => setInstagram(e.target.value)}
+            placeholder="instagram.com/username"
+            className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm outline-none placeholder-muted-foreground"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Link size={14} className="text-muted-foreground shrink-0" />
+          <input
+            value={otherLink}
+            onChange={e => setOtherLink(e.target.value)}
+            placeholder="Другая ссылка (сайт, LinkedIn…)"
+            className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm outline-none placeholder-muted-foreground"
+          />
+        </div>
+        <button
+          onClick={saveBio}
+          disabled={saving}
+          className="w-full py-2.5 rounded-xl font-bold text-sm text-white disabled:opacity-40 flex items-center justify-center gap-2"
+          style={{ background: BRAND_COLOR }}
+        >
+          {saved ? <><CheckCircle2 size={14} /> Сохранено</> : saving ? "Сохранение…" : "Сохранить профиль"}
+        </button>
       </Card>
 
       <Card className="!p-4">

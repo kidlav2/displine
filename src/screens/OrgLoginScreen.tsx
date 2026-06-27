@@ -8,7 +8,6 @@ import { auth } from "../lib/firebase";
 import { SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import type { UserRole } from "../types";
 
 function authErrMsg(err: AuthError): string {
   switch (err.code) {
@@ -22,7 +21,7 @@ function authErrMsg(err: AuthError): string {
 }
 
 export function OrgLoginScreen() {
-  const { setUserRole, setSelectedId } = useAppContext();
+  const { setSelectedId } = useAppContext();
   const navigate = useNavigate();
 
   const [email, setEmail]       = useState("");
@@ -30,14 +29,7 @@ export function OrgLoginScreen() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
-  // DEV-only: pick which role to simulate when logging in with the test account.
-  // In production, the role comes from userProfile.challengeRoles in Firestore.
-  const [demoRole, setDemoRole] = useState<"owner" | "helper">("owner");
-
-  const handleSuccess = (role: UserRole) => {
-    if (import.meta.env.DEV) {
-      setUserRole(role);
-    }
+  const handleSuccess = () => {
     setSelectedId(null);
     navigate("/challenges");
   };
@@ -48,7 +40,7 @@ export function OrgLoginScreen() {
     setError(null);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      handleSuccess(demoRole);
+      handleSuccess();
     } catch (err) {
       setError(authErrMsg(err as AuthError));
     } finally {
@@ -62,7 +54,7 @@ export function OrgLoginScreen() {
     setError(null);
     try {
       await signInWithPopup(auth, new GoogleAuthProvider());
-      handleSuccess(demoRole);
+      handleSuccess();
     } catch (err) {
       setError(authErrMsg(err as AuthError));
     } finally {
@@ -117,22 +109,6 @@ export function OrgLoginScreen() {
 
         {error && (
           <p className="text-xs font-bold text-red-500">{error}</p>
-        )}
-
-        {/* Demo role picker — DEV only */}
-        {import.meta.env.DEV && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <p className="text-[10px] font-extrabold tracking-widest uppercase text-amber-600 mb-2">Демо: войти как</p>
-            <div className="flex gap-2">
-              {(["owner", "helper"] as const).map(r => (
-                <button key={r} onClick={() => setDemoRole(r)}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold border-2 capitalize transition-colors"
-                  style={demoRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                  {r === "owner" ? "Владелец (полный доступ)" : "Помощник (только проверка)"}
-                </button>
-              ))}
-            </div>
-          </div>
         )}
 
         <button onClick={emailLogin} disabled={!email.trim() || !password || loading}

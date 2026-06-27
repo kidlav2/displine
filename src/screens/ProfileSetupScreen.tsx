@@ -19,10 +19,10 @@ function toIni(name: string): string {
 
 export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenProps) {
   const { currentUser } = useAuthContext();
-  // Pre-populate name from Telegram if available; user can still edit it
-  const [name, setName]       = useState(telegramData?.displayName ?? "");
-  // Pre-populate photo thumbnail from Telegram
-  const [thumb, setThumb]     = useState<string | null>(telegramData?.photoUrl ?? null);
+  // Pre-populate name from Telegram or Google; user can still edit it
+  const [name, setName]       = useState(telegramData?.displayName ?? currentUser?.displayName ?? "");
+  // Pre-populate photo thumbnail from Telegram or Google
+  const [thumb, setThumb]     = useState<string | null>(telegramData?.photoUrl ?? currentUser?.photoURL ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);

@@ -2,7 +2,6 @@ import { Home, CheckSquare, Users, User, Settings, ChevronLeft } from "lucide-re
 import { useLocation, useNavigate } from "react-router";
 import { BRAND_COLOR } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
-import { DemoControls } from "./DemoControls";
 import type { UserRole } from "../../types";
 
 type TabDef = { path: string; Icon: React.ElementType; label: string };
@@ -79,9 +78,6 @@ export function DesktopNav() {
         })}
       </nav>
 
-      <div className="px-3 pb-4 border-t border-border pt-3">
-        <DemoControls />
-      </div>
     </aside>
   );
 }

@@ -9,7 +9,8 @@ import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, ALL_DAYS, bc } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { createTask, createTaskTemplate } from "../lib/firestore";
+import { createTask, createTaskTemplate, createAchievementDoc } from "../lib/firestore";
+import type { AchievementConditionType } from "../types";
 import { todayISO } from "../lib/dates";
 import type { Task, TaskTemplate } from "../types";
 
@@ -427,7 +428,12 @@ export function ManageScreen() {
   const navigate = useNavigate();
 
   const [showCreateTask, setShowCreateTask] = useState(false);
-  const [achForm, setAchForm] = useState({ icon: "⭐", name: "", condition: "" });
+  const [achForm, setAchForm] = useState({
+    icon: "⭐", name: "", desc: "",
+    conditionType: "tasks_total" as AchievementConditionType,
+    conditionThreshold: "7",
+  });
+  const [achSaving, setAchSaving] = useState(false);
   const [showCreateAch, setShowCreateAch] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
@@ -453,6 +459,35 @@ export function ManageScreen() {
     <CreateTaskShell challengeId={challenge.id} onDone={() => setShowCreateTask(false)} />
   );
 
+  const COND_TYPES: { type: AchievementConditionType; label: string; hasThreshold: boolean; placeholder: string }[] = [
+    { type: "tasks_total", label: "Заданий выполнено",  hasThreshold: true,  placeholder: "7"  },
+    { type: "km_total",    label: "Км набегано",        hasThreshold: true,  placeholder: "25" },
+    { type: "streak",      label: "Серия без пропусков",hasThreshold: true,  placeholder: "10" },
+    { type: "first_week",  label: "Первая неделя (7 дней)", hasThreshold: false, placeholder: "" },
+    { type: "days_half",   label: "Полпути пройдено",   hasThreshold: false, placeholder: "" },
+    { type: "custom",      label: "Ручная отметка",     hasThreshold: false, placeholder: "" },
+  ];
+
+  const saveAch = async () => {
+    if (!achForm.name.trim() || achSaving) return;
+    setAchSaving(true);
+    try {
+      const ct = achForm.conditionType;
+      const needsThreshold = COND_TYPES.find(c => c.type === ct)?.hasThreshold ?? false;
+      await createAchievementDoc(challenge.id, {
+        icon: achForm.icon,
+        title: achForm.name.trim(),
+        desc: achForm.desc.trim(),
+        conditionType: ct,
+        ...(needsThreshold ? { conditionThreshold: parseInt(achForm.conditionThreshold) || 1 } : {}),
+      });
+      setAchForm({ icon: "⭐", name: "", desc: "", conditionType: "tasks_total", conditionThreshold: "7" });
+      setShowCreateAch(false);
+    } finally {
+      setAchSaving(false);
+    }
+  };
+
   if (showCreateAch) return (
     <div className="px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 max-w-[600px] mx-auto">
       <div className="flex items-center gap-3">
@@ -465,7 +500,7 @@ export function ManageScreen() {
         <div>
           <SecLabel>Значок</SecLabel>
           <div className="flex gap-2 mt-2 flex-wrap">
-            {["⭐", "🔥", "🏆", "💪", "🎯", "🌟", "⚡", "🦁"].map(ico => (
+            {["⭐", "🔥", "🏆", "💪", "🎯", "🌟", "⚡", "🦁", "🏃", "❤️"].map(ico => (
               <button key={ico} onClick={() => setAchForm(f => ({ ...f, icon: ico }))}
                 className={`text-2xl w-12 h-12 rounded-xl border-2 ${achForm.icon === ico ? "border-orange-400 bg-orange-50" : "border-border bg-muted"}`}>{ico}</button>
             ))}
@@ -473,17 +508,40 @@ export function ManageScreen() {
         </div>
         <div>
           <SecLabel>Название</SecLabel>
-          <input placeholder="напр. Король возрождения" value={achForm.name} onChange={e => setAchForm(f => ({ ...f, name: e.target.value }))}
+          <input placeholder="напр. Клуб 25 км" value={achForm.name} onChange={e => setAchForm(f => ({ ...f, name: e.target.value }))}
+            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
+        </div>
+        <div>
+          <SecLabel>Описание</SecLabel>
+          <input placeholder="напр. Пробежали 25 км суммарно" value={achForm.desc} onChange={e => setAchForm(f => ({ ...f, desc: e.target.value }))}
             className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
         </div>
         <div>
           <SecLabel>Условие разблокировки</SecLabel>
-          <textarea placeholder="напр. Выполнить 3 задания подряд после потери жизни" value={achForm.condition} onChange={e => setAchForm(f => ({ ...f, condition: e.target.value }))} rows={3}
-            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
+          <div className="mt-1.5 space-y-1">
+            {COND_TYPES.map(ct => (
+              <button key={ct.type} onClick={() => setAchForm(f => ({ ...f, conditionType: ct.type }))}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl border text-sm text-left"
+                style={achForm.conditionType === ct.type
+                  ? { background: BRAND_COLOR + "15", borderColor: BRAND_COLOR, color: BRAND_COLOR, fontWeight: 700 }
+                  : { borderColor: "var(--border)", color: "var(--muted-foreground)" }}>
+                <span className={`w-3 h-3 rounded-full border-2 shrink-0 ${achForm.conditionType === ct.type ? "border-current bg-current" : "border-current"}`} />
+                {ct.label}
+              </button>
+            ))}
+          </div>
         </div>
-        <button onClick={() => setShowCreateAch(false)} disabled={!achForm.name.trim()}
+        {COND_TYPES.find(c => c.type === achForm.conditionType)?.hasThreshold && (
+          <div>
+            <SecLabel>Порог</SecLabel>
+            <input type="number" min={1} value={achForm.conditionThreshold}
+              onChange={e => setAchForm(f => ({ ...f, conditionThreshold: e.target.value }))}
+              className="mt-1.5 w-28 bg-muted rounded-xl px-3 py-2 text-sm font-bold outline-none text-center" />
+          </div>
+        )}
+        <button onClick={saveAch} disabled={!achForm.name.trim() || achSaving}
           className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>
-          Создать достижение
+          {achSaving ? "Сохранение…" : "Создать достижение"}
         </button>
       </Card>
     </div>
