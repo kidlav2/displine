@@ -601,29 +601,31 @@ export const manualSyncStrava = onCall(
       throw new HttpsError("failed-precondition", "Strava not connected.");
     }
 
-    // Use challengeRoles from the user doc — same source AppContext uses on the client.
-    // Avoids a status-filtered query that misses challenges lacking a "status" field.
-    const challengeRoles = (userSnap.data()?.challengeRoles ?? {}) as Record<string, string>;
-    const challengeIds = Object.keys(challengeRoles);
+    // Collection group query — finds all participant docs for this user across every
+    // challenge without relying on the challengeRoles map (which may be missing for
+    // users added via admin flows or before the field was introduced).
+    const participantsSnap = await db.collectionGroup("participants")
+      .where("uid", "==", uid)
+      .get();
+
+    console.log(`[manualSyncStrava] uid=${uid} found ${participantsSnap.size} participant docs`);
 
     const results: Array<{ challengeId: string } & SyncStatus> = [];
 
-    for (const challengeId of challengeIds) {
+    for (const pDoc of participantsSnap.docs) {
+      const challengeId = pDoc.ref.parent.parent!.id;
       try {
-        const [chalSnap, pSnap] = await Promise.all([
-          db.doc(`challenges/${challengeId}`).get(),
-          db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
-        ]);
-        if (!chalSnap.exists || !pSnap.exists) continue;
+        const chalSnap = await db.doc(`challenges/${challengeId}`).get();
+        if (!chalSnap.exists) continue;
 
         // Treat missing status field as "active" — same default as the client app.
-        const status = chalSnap.data()?.status ?? "active";
-        if (status !== "active") continue;
+        const chalStatus = chalSnap.data()?.status ?? "active";
+        if (chalStatus !== "active") continue;
 
         const result = await processSingleParticipant(
           db, clientId, clientSecret,
           uid, challengeId,
-          pSnap.data()!,
+          pDoc.data(),
           chalSnap.data()!,
           { skipDeadline: true },
         );
