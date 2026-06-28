@@ -64,31 +64,42 @@ export function TasksScreen() {
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challenge?.id, currentUser?.uid, type, participantTodayISO]);
+  const [syncError, setSyncError] = useState(false);
+
   const handleManualSync = async () => {
     if (syncing) return;
     setSyncing(true);
     setSyncMsg(null);
+    setSyncError(false);
     try {
       const fn = httpsCallable<unknown, { results: Array<{ status: string; km?: number }> }>(
         getFunctions(undefined, "us-central1"),
         "manualSyncStrava"
       );
       const { data } = await fn({});
-      const synced = data.results.find(r => r.status === "synced");
+      const synced     = data.results.find(r => r.status === "synced");
       const alreadyDone = data.results.find(r => r.status === "already_submitted");
-      const noRun = data.results.find(r => r.status === "no_run_today");
+      const noRun      = data.results.find(r => r.status === "no_run_today");
+      const notRunDay  = data.results.find(r => r.status === "not_a_run_day");
       if (synced) {
         setSyncMsg(`Синхронизировано: ${synced.km} км`);
         setStatus("pending");
       } else if (alreadyDone) {
         setSyncMsg("Пробежка уже загружена сегодня");
       } else if (noRun) {
+        setSyncError(true);
         setSyncMsg("Пробежка в Strava за сегодня не найдена");
+      } else if (notRunDay) {
+        setSyncMsg("Сегодня не день пробежки по расписанию челленджа");
+      } else if (data.results.length === 0) {
+        setSyncError(true);
+        setSyncMsg("Челлендж не найден. Убедитесь, что вы участник активного челленджа.");
       } else {
-        setSyncMsg("Синхронизация завершена");
+        setSyncMsg("Готово");
       }
-    } catch {
-      setSyncMsg("Ошибка синхронизации. Попробуйте снова.");
+    } catch (err) {
+      setSyncError(true);
+      setSyncMsg(`Ошибка: ${err instanceof Error ? err.message : "попробуйте снова"}`);
     } finally {
       setSyncing(false);
     }
@@ -249,7 +260,7 @@ export function TasksScreen() {
             <button
               onClick={handleManualSync}
               disabled={syncing}
-              className="w-full py-3 rounded-xl border-2 border-orange-400 bg-orange-50 flex items-center justify-center gap-2 font-semibold text-sm text-orange-600 disabled:opacity-60"
+              className="w-full py-3 rounded-xl border-2 border-green-400 bg-green-50 flex items-center justify-center gap-2 font-semibold text-sm text-green-700 disabled:opacity-60"
             >
               {syncing
                 ? <><Loader2 size={14} className="animate-spin" /> Синхронизация…</>
@@ -265,7 +276,9 @@ export function TasksScreen() {
             </button>
           )}
           {syncMsg && (
-            <p className="text-xs text-center font-semibold text-orange-600">{syncMsg}</p>
+            <p className={`text-xs text-center font-semibold ${syncError ? "text-red-500" : "text-green-700"}`}>
+              {syncMsg}
+            </p>
           )}
         </>
       )}
