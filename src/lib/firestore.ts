@@ -425,11 +425,14 @@ export async function submitProof(
     km?: number;
     isLate?: boolean;
     pointsEarned: number;
+    stravaSource?: boolean;
+    stravaActivityId?: number | null;
+    stravaPhotoUrl?: string | null;
   },
   onProgress?: (pct: number) => void,
   existingSubId?: string
 ): Promise<string> {
-  let photoUrl: string | null = null;
+  let photoUrl: string | null = payload.stravaPhotoUrl ?? null;
 
   if (payload.photoFile) {
     // Path must match storage.rules: challenges/{id}/submissions/{userId}/{fileName}
@@ -469,6 +472,8 @@ export async function submitProof(
       status:           "pending",
       organizerComment: null,
       pointsEarned:     0,
+      ...(payload.stravaSource ? { stravaSource: true } : {}),
+      ...(payload.stravaActivityId ? { stravaActivityId: payload.stravaActivityId } : {}),
     }, { merge: true });
 
     // Read back the check-in photo URL so it can be propagated to the feed doc
@@ -502,6 +507,8 @@ export async function submitProof(
       status:           "pending",
       organizerComment: null,
       pointsEarned:     0,
+      ...(payload.stravaSource ? { stravaSource: true } : {}),
+      ...(payload.stravaActivityId ? { stravaActivityId: payload.stravaActivityId } : {}),
     }, { merge: true });
   }
 
@@ -524,6 +531,8 @@ export async function submitProof(
     organizerComment: null,
     likes:            [],
     socialComments:   [],
+    ...(payload.stravaSource ? { stravaSource: true } : {}),
+    ...(payload.stravaActivityId ? { stravaActivityId: payload.stravaActivityId } : {}),
   }, { merge: true });
 
   return submissionId;

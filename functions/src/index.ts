@@ -611,12 +611,22 @@ async function processSingleParticipant(
 }
 
 // ── manualSyncStrava ──────────────────────────────────────────────────────────
-// Called by the user from the TasksScreen when they want to pull in a run they
-// already completed. Skips the deadline check so it works any time of day.
+// Fetches the latest run from Strava and returns its data to the client so the
+// user can review it and press "Отправить" themselves. Does NOT write to Firestore.
+// The actual submission goes through the normal submitProof flow (status: pending).
+
+interface FetchStravaResult {
+  found: boolean;
+  km?: number;
+  durationMin?: number;
+  photoUrl?: string | null;
+  activityId?: number;
+  activityName?: string;
+}
 
 export const manualSyncStrava = onCall(
   { cors: ALLOWED_ORIGINS, secrets: [STRAVA_CLIENT_SECRET] },
-  async (request) => {
+  async (request): Promise<FetchStravaResult> => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
 
     const db           = getFirestore();
@@ -629,57 +639,63 @@ export const manualSyncStrava = onCall(
       throw new HttpsError("failed-precondition", "Strava not connected.");
     }
 
-    const results: Array<{ challengeId: string } & SyncStatus> = [];
-
-    // Primary: challengeRoles map on user doc (populated when joining via standard flow)
+    // Get participant timezone to determine "today"
     const challengeRoles = (userSnap.data()?.challengeRoles ?? {}) as Record<string, string>;
-    let challengeIds = Object.keys(challengeRoles);
-
-    // Fallback: collection group query (requires index -- try if challengeRoles is empty)
-    if (challengeIds.length === 0) {
+    let tz = "UTC";
+    const challengeIds = Object.keys(challengeRoles);
+    if (challengeIds.length > 0) {
       try {
-        const participantsSnap = await db.collectionGroup("participants")
-          .where("uid", "==", uid)
-          .get();
-        challengeIds = participantsSnap.docs.map(d => d.ref.parent.parent!.id);
-        console.log(`[manualSyncStrava] uid=${uid} collectionGroup fallback: ${challengeIds.length} challenges`);
-      } catch (indexErr) {
-        console.warn(`[manualSyncStrava] collectionGroup failed (index building?):`, indexErr);
-      }
+        const pSnap = await db.doc(`challenges/${challengeIds[0]}/participants/${uid}`).get();
+        tz = pSnap.data()?.tz ?? "UTC";
+      } catch { /* use UTC fallback */ }
     }
 
-    console.log(`[manualSyncStrava] uid=${uid} challengeIds=${JSON.stringify(challengeIds)}`);
+    const now     = new Date();
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: tz });
 
-    for (const challengeId of challengeIds) {
-      try {
-        const [chalSnap, pSnap] = await Promise.all([
-          db.doc(`challenges/${challengeId}`).get(),
-          db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
-        ]);
-        console.log(`[manualSyncStrava] challenge=${challengeId} chalExists=${chalSnap.exists} pExists=${pSnap.exists} chalStatus=${chalSnap.data()?.status}`);
-        if (!chalSnap.exists || !pSnap.exists) continue;
+    const accessToken = await getStravaAccessToken(db, uid, clientId, clientSecret);
 
-        const chalStatus = chalSnap.data()?.status ?? "active";
-        if (chalStatus === "finished" || chalStatus === "cancelled") {
-          console.log(`[manualSyncStrava] skipping challenge=${challengeId} status="${chalStatus}"`);
-          continue;
+    // Fetch activities from the last 48h to cover all timezones
+    const after = Math.floor(Date.now() / 1000) - 172800;
+    const activitiesRes = await fetch(
+      `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=30`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (!activitiesRes.ok) {
+      throw new HttpsError("internal", `Strava API error: ${activitiesRes.status}`);
+    }
+
+    const activities = await activitiesRes.json() as StravaActivity[];
+
+    // Most recent run today (Strava returns newest-first)
+    const run = activities.find(a =>
+      (a.type === "Run" || a.sport_type === "Run") &&
+      (a.start_date_local ?? "").startsWith(dateStr)
+    );
+
+    if (!run) return { found: false };
+
+    const km          = Math.round((run.distance / 1000) * 100) / 100;
+    const durationMin = Math.floor((run.moving_time ?? 0) / 60);
+
+    // Fetch activity photos
+    let photoUrl: string | null = null;
+    try {
+      const photosRes = await fetch(
+        `https://www.strava.com/api/v3/activities/${run.id}/photos?size=2048&photo_sources=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      if (photosRes.ok) {
+        const photos = await photosRes.json() as Array<{ urls?: Record<string, string> }>;
+        const first = photos.find(p => p.urls && Object.keys(p.urls).length > 0);
+        if (first?.urls) {
+          const sizes = Object.keys(first.urls).map(Number).sort((a, b) => b - a);
+          photoUrl = first.urls[String(sizes[0])] ?? null;
         }
-
-        const result = await processSingleParticipant(
-          db, clientId, clientSecret,
-          uid, challengeId,
-          pSnap.data()!,
-          chalSnap.data()!,
-          { skipDeadline: true },
-        );
-        results.push({ challengeId, ...result });
-      } catch (err) {
-        console.error(`[manualSyncStrava] uid=${uid} challenge=${challengeId}:`, err);
-        results.push({ challengeId, status: "no_run_today" });
       }
-    }
+    } catch { /* photos are optional */ }
 
-    return { results };
+    return { found: true, km, durationMin, photoUrl, activityId: run.id, activityName: run.name };
   }
 );
 

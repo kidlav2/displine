@@ -275,7 +275,7 @@ export function HomeScreen() {
             <CalendarDays size={15} className="text-muted-foreground" />
             <SecLabel>Задание на сегодня</SecLabel>
           </div>
-          <p className="text-sm text-muted-foreground">На сегодня задание не запланировано. Проверьте позже или свяжитесь с организатором.</p>
+          <p className="text-sm text-muted-foreground">На сегодня задание не запланировано.</p>
         </Card>
       ) : null}
 

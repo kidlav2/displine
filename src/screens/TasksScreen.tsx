@@ -33,6 +33,7 @@ export function TasksScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [stravaActivityId, setStravaActivityId] = useState<number | null>(null);
   // For tasks: deterministic daily subId so resubmits update same doc
   const participantTodayISO = meParticipant ? todayISOInTz(meParticipant.tz) : "";
   const taskSubId = (type === "task" && currentUser && participantTodayISO)
@@ -72,31 +73,21 @@ export function TasksScreen() {
     setSyncMsg(null);
     setSyncError(false);
     try {
-      const fn = httpsCallable<unknown, { results: Array<{ status: string; km?: number }> }>(
+      const fn = httpsCallable<unknown, { found: boolean; km?: number; durationMin?: number; photoUrl?: string | null; activityId?: number; activityName?: string }>(
         getFunctions(undefined, "us-central1"),
         "manualSyncStrava"
       );
       const { data } = await fn({});
-      const synced     = data.results.find(r => r.status === "synced");
-      const alreadyDone = data.results.find(r => r.status === "already_submitted");
-      const noRun      = data.results.find(r => r.status === "no_run_today");
-      const notRunDay  = data.results.find(r => r.status === "not_a_run_day");
-      if (synced) {
-        setSyncMsg(`Синхронизировано: ${synced.km} км`);
-        setStatus("pending");
-      } else if (alreadyDone) {
-        setSyncMsg("Пробежка уже загружена сегодня");
-      } else if (noRun) {
+      if (!data.found) {
         setSyncError(true);
         setSyncMsg("Пробежка в Strava за сегодня не найдена");
-      } else if (notRunDay) {
-        setSyncMsg("Сегодня не день пробежки по расписанию челленджа");
-      } else if (data.results.length === 0) {
-        setSyncError(true);
-        setSyncMsg("Челлендж не найден. Убедитесь, что вы участник активного челленджа.");
-      } else {
-        setSyncMsg("Готово");
+        return;
       }
+      // Pre-fill the form with Strava data — user still presses "Отправить"
+      if (data.km) setDist(String(data.km));
+      if (data.photoUrl) setPhotoPreview(data.photoUrl);
+      if (data.activityId) setStravaActivityId(data.activityId);
+      setSyncMsg(`Найдено: ${data.km} км за ${data.durationMin} мин${data.activityName ? ` — ${data.activityName}` : ""}. Нажмите «Отправить».`);
     } catch (err) {
       setSyncError(true);
       setSyncMsg(`Ошибка: ${err instanceof Error ? err.message : "попробуйте снова"}`);
@@ -121,7 +112,8 @@ export function TasksScreen() {
     e.target.value = "";
   }, []);
 
-  const canSubmit = !!photoFile && (type === "task" || dist.length > 0);
+  const hasPhoto = !!photoFile || !!photoPreview;
+  const canSubmit = hasPhoto && (type === "task" || dist.length > 0);
 
   const submit = async () => {
     if (!canSubmit || submitting || !currentUser || !meParticipant) return;
@@ -154,16 +146,19 @@ export function TasksScreen() {
           tz:      meParticipant.tz,
         },
         {
-          type:        subType as "running" | "checklist" | "freeform",
-          taskTitle:   type === "run" ? "Утренняя пробежка" : (todayTask?.title ?? "Задание"),
-          text:        comment.trim(),
+          type:             subType as "running" | "checklist" | "freeform",
+          taskTitle:        type === "run" ? "Утренняя пробежка" : (todayTask?.title ?? "Задание"),
+          text:             comment.trim(),
           photoFile,
-          km:          type === "run" ? (parseFloat(dist) || undefined) : undefined,
-          isLate:      type === "run" ? isLate : false,
-          pointsEarned: pts,
+          km:               type === "run" ? (parseFloat(dist) || undefined) : undefined,
+          isLate:           type === "run" ? isLate : false,
+          pointsEarned:     pts,
+          stravaSource:     stravaActivityId ? true : undefined,
+          stravaActivityId: stravaActivityId ?? undefined,
+          stravaPhotoUrl:   !photoFile && photoPreview ? photoPreview : undefined,
         },
         (pct) => setUploadPct(pct),
-        effectiveSubId  // updates the persisted doc (run check-in or task's daily ID)
+        effectiveSubId
       );
       setStatus("pending");
     } catch (err) {
