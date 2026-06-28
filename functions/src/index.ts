@@ -440,6 +440,13 @@ export const disconnectStrava = onCall(
 // If the deadline has passed and no submission exists yet, fetches Strava
 // activities and auto-creates an approved submission + feed entry.
 
+type SyncStatus =
+  | { status: "not_a_run_day" }
+  | { status: "before_deadline" }
+  | { status: "already_submitted" }
+  | { status: "no_run_today" }
+  | { status: "synced"; km: number; isLate: boolean };
+
 async function processSingleParticipant(
   db: ReturnType<typeof getFirestore>,
   clientId: string,
@@ -448,9 +455,10 @@ async function processSingleParticipant(
   challengeId: string,
   participantData: FirebaseFirestore.DocumentData,
   challengeData: FirebaseFirestore.DocumentData,
-): Promise<void> {
+  options: { skipDeadline?: boolean } = {},
+): Promise<SyncStatus> {
   const runSchedule: Record<string, string> = challengeData.settings?.runSchedule ?? {};
-  if (Object.keys(runSchedule).length === 0) return;
+  if (Object.keys(runSchedule).length === 0) return { status: "not_a_run_day" };
 
   const participantTz: string = participantData.tz ?? "UTC";
   const now = new Date();
@@ -461,21 +469,23 @@ async function processSingleParticipant(
 
   // Check if today is a run day
   const deadline = runSchedule[weekday];
-  if (!deadline) return;
+  if (!deadline) return { status: "not_a_run_day" };
 
-  // Only sync after the deadline has passed in the participant's timezone
-  const currentLocalTime = now.toLocaleTimeString("en-US", {
-    timeZone:  participantTz,
-    hour:      "2-digit",
-    minute:    "2-digit",
-    hour12:    false,
-  }).substring(0, 5); // "HH:MM"
-  if (currentLocalTime <= deadline) return;
+  // Only sync after the deadline has passed (unless caller explicitly skips this)
+  if (!options.skipDeadline) {
+    const currentLocalTime = now.toLocaleTimeString("en-US", {
+      timeZone:  participantTz,
+      hour:      "2-digit",
+      minute:    "2-digit",
+      hour12:    false,
+    }).substring(0, 5); // "HH:MM"
+    if (currentLocalTime <= deadline) return { status: "before_deadline" };
+  }
 
   // Idempotency: skip if a submission already exists for today
   const subId  = `${uid}_${dateStr}`;
   const subRef = db.doc(`challenges/${challengeId}/submissions/${subId}`);
-  if ((await subRef.get()).exists) return;
+  if ((await subRef.get()).exists) return { status: "already_submitted" };
 
   // Get a valid Strava access token (refreshes if needed)
   const accessToken = await getStravaAccessToken(db, uid, clientId, clientSecret);
@@ -497,7 +507,7 @@ async function processSingleParticipant(
     (a.type === "Run" || a.sport_type === "Run") &&
     (a.start_date_local ?? "").startsWith(dateStr)
   );
-  if (!run) return; // Participant hasn't run today on Strava
+  if (!run) return { status: "no_run_today" };
 
   // Determine on-time vs late by comparing local start time to deadline
   const startTimeLocal = (run.start_date_local ?? "").substring(11, 16); // "HH:MM"
@@ -569,7 +579,57 @@ async function processSingleParticipant(
   await batch.commit();
 
   console.log(`[syncStrava] uid=${uid} challenge=${challengeId}: ${km}km ${isLate ? "late" : "on-time"} (activityId=${run.id})`);
+  return { status: "synced", km, isLate };
 }
+
+// ── manualSyncStrava ──────────────────────────────────────────────────────────
+// Called by the user from the TasksScreen when they want to pull in a run they
+// already completed. Skips the deadline check so it works any time of day.
+
+export const manualSyncStrava = onCall(
+  { cors: ALLOWED_ORIGINS, secrets: [STRAVA_CLIENT_SECRET] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+    const db           = getFirestore();
+    const uid          = request.auth.uid;
+    const clientId     = STRAVA_CLIENT_ID.value();
+    const clientSecret = STRAVA_CLIENT_SECRET.value();
+
+    const userSnap = await db.doc(`users/${uid}`).get();
+    if (!userSnap.exists || !userSnap.data()?.stravaConnected) {
+      throw new HttpsError("failed-precondition", "Strava not connected.");
+    }
+
+    const challengeRoles = (userSnap.data()?.challengeRoles ?? {}) as Record<string, string>;
+    const results: Array<{ challengeId: string } & SyncStatus> = [];
+
+    for (const challengeId of Object.keys(challengeRoles)) {
+      try {
+        const [chalSnap, pSnap] = await Promise.all([
+          db.doc(`challenges/${challengeId}`).get(),
+          db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
+        ]);
+        if (!chalSnap.exists || !pSnap.exists) continue;
+        if (chalSnap.data()?.status !== "active") continue;
+
+        const result = await processSingleParticipant(
+          db, clientId, clientSecret,
+          uid, challengeId,
+          pSnap.data()!,
+          chalSnap.data()!,
+          { skipDeadline: true },
+        );
+        results.push({ challengeId, ...result });
+      } catch (err) {
+        console.error(`[manualSyncStrava] uid=${uid} challenge=${challengeId}:`, err);
+        results.push({ challengeId, status: "no_run_today" });
+      }
+    }
+
+    return { results };
+  }
+);
 
 export const syncStravaActivities = onSchedule(
   { schedule: "0 */4 * * *", timeZone: "UTC", secrets: [STRAVA_CLIENT_SECRET] },
@@ -606,6 +666,7 @@ export const syncStravaActivities = onSchedule(
             uid, challengeId,
             pSnap.data()!,
             chalSnap.data()!,
+            { skipDeadline: false },
           );
         } catch (err) {
           console.error(`[syncStrava] uid=${uid} challenge=${challengeId} error:`, err);

@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2 } from "lucide-react";
+import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { useSearchParams, useNavigate } from "react-router";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
@@ -30,6 +31,8 @@ export function TasksScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   // For tasks: deterministic daily subId so resubmits update same doc
   const participantTodayISO = meParticipant ? todayISOInTz(meParticipant.tz) : "";
   const taskSubId = (type === "task" && currentUser && participantTodayISO)
@@ -61,6 +64,36 @@ export function TasksScreen() {
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [challenge?.id, currentUser?.uid, type, participantTodayISO]);
+  const handleManualSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const fn = httpsCallable<unknown, { results: Array<{ status: string; km?: number }> }>(
+        getFunctions(undefined, "us-central1"),
+        "manualSyncStrava"
+      );
+      const { data } = await fn({});
+      const synced = data.results.find(r => r.status === "synced");
+      const alreadyDone = data.results.find(r => r.status === "already_submitted");
+      const noRun = data.results.find(r => r.status === "no_run_today");
+      if (synced) {
+        setSyncMsg(`Синхронизировано: ${synced.km} км`);
+        setStatus("pending");
+      } else if (alreadyDone) {
+        setSyncMsg("Пробежка уже загружена сегодня");
+      } else if (noRun) {
+        setSyncMsg("Пробежка в Strava за сегодня не найдена");
+      } else {
+        setSyncMsg("Синхронизация завершена");
+      }
+    } catch {
+      setSyncMsg("Ошибка синхронизации. Попробуйте снова.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,21 +236,26 @@ export function TasksScreen() {
 
       {type === "run" && (
         <>
-          <div className="grid grid-cols-2 gap-3">
-            <Card className="!p-4">
-              <SecLabel>Дистанция</SecLabel>
-              <div className="flex items-end gap-1.5 mt-2">
-                <input type="number" placeholder="5.0" value={dist} onChange={e => setDist(e.target.value)}
-                  className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
-                  style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 36, fontWeight: 900, lineHeight: 1 }} />
-                <span className="text-base font-bold text-muted-foreground mb-0.5">км</span>
-              </div>
-            </Card>
-          </div>
-          {stravaConnected ? (
-            <div className="w-full py-3 rounded-xl border-2 border-orange-400 bg-orange-50 flex items-center justify-center gap-2 font-semibold text-sm text-orange-600">
-              <ExternalLink size={14} /> Strava подключена — авто-синхронизация включена
+          <Card className="!p-4">
+            <SecLabel>Дистанция</SecLabel>
+            <div className="flex items-end gap-1.5 mt-2">
+              <input type="number" placeholder="5.0" value={dist} onChange={e => setDist(e.target.value)}
+                className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
+                style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 36, fontWeight: 900, lineHeight: 1 }} />
+              <span className="text-base font-bold text-muted-foreground mb-0.5">км</span>
             </div>
+          </Card>
+          {stravaConnected ? (
+            <button
+              onClick={handleManualSync}
+              disabled={syncing}
+              className="w-full py-3 rounded-xl border-2 border-orange-400 bg-orange-50 flex items-center justify-center gap-2 font-semibold text-sm text-orange-600 disabled:opacity-60"
+            >
+              {syncing
+                ? <><Loader2 size={14} className="animate-spin" /> Синхронизация…</>
+                : <><RefreshCw size={14} /> Загрузить из Strava</>
+              }
+            </button>
           ) : (
             <button
               onClick={() => navigate("/app/profile")}
@@ -225,6 +263,9 @@ export function TasksScreen() {
             >
               <ExternalLink size={14} /> Подключить Strava
             </button>
+          )}
+          {syncMsg && (
+            <p className="text-xs text-center font-semibold text-orange-600">{syncMsg}</p>
           )}
         </>
       )}
