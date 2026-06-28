@@ -531,6 +531,25 @@ async function processSingleParticipant(
   const startTimestamp = Timestamp.fromDate(new Date(run.start_date));
   const text = `${km} км за ${durationMin} мин • Strava`;
 
+  // Fetch the first photo attached to this Strava activity (if any)
+  let stravaPhotoUrl: string | null = null;
+  try {
+    const photosRes = await fetch(
+      `https://www.strava.com/api/v3/activities/${run.id}/photos?size=2048&photo_sources=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    if (photosRes.ok) {
+      const photos = await photosRes.json() as Array<{ urls?: Record<string, string> }>;
+      const first = photos.find(p => p.urls && Object.keys(p.urls).length > 0);
+      if (first?.urls) {
+        const sizes = Object.keys(first.urls).map(Number).sort((a, b) => b - a);
+        stravaPhotoUrl = first.urls[String(sizes[0])] ?? null;
+      }
+    }
+  } catch (e) {
+    console.warn(`[syncStrava] photos fetch failed for activity ${run.id}:`, e);
+  }
+
   const submissionData = {
     participantUid:   uid,
     ini:              participantData.ini     ?? "??",
@@ -540,7 +559,7 @@ async function processSingleParticipant(
     type:             "running",
     taskTitle:        "Утренняя пробежка",
     text,
-    photoUrl:         null,
+    photoUrl:         stravaPhotoUrl,
     checkInPhotoUrl:  null,
     km,
     isLate,
@@ -564,7 +583,7 @@ async function processSingleParticipant(
     text,
     time:             FieldValue.serverTimestamp(),
     checkInPhotoUrl:  null,
-    photoUrl:         null,
+    photoUrl:         stravaPhotoUrl,
     km,
     isLate,
     pointsEarned:     pts,
