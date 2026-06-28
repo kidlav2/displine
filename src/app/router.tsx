@@ -23,6 +23,7 @@ import { ErrorScreen } from "../screens/ErrorScreen";
 import { OrgLoginScreen } from "../screens/OrgLoginScreen";
 import { TelegramLoginScreen } from "../screens/TelegramLoginScreen";
 import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
+import { StravaCallbackScreen } from "../screens/StravaCallbackScreen";
 
 import { useAppContext } from "../contexts/AppContext";
 import { jk } from "../constants/design";
@@ -462,6 +463,9 @@ export const router = createBrowserRouter([
 
   // Onboarding — requires ?code=XXX to join a challenge
   { path: "/join", element: <OnboardingLayout /> },
+
+  // Strava OAuth callback — no auth wrapper needed; screen handles unauthenticated state
+  { path: "/strava-callback", element: <StravaCallbackScreen /> },
 
   // Org login (unauthenticated)
   { path: "/org-login", element: <OrgLoginLayout /> },

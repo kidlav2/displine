@@ -56,6 +56,11 @@ service cloud.firestore {
       allow read: if isSignedIn();
       // Only the profile owner may write their own document.
       allow write: if isSignedIn() && request.auth.uid == uid;
+
+      // Strava tokens and other third-party credentials — server-only via Admin SDK.
+      match /integrations/{service} {
+        allow read, write: if false;
+      }
     }
 
     // ── Challenges ─────────────────────────────────────────────────────────

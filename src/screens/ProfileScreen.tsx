@@ -1,16 +1,21 @@
 import { useState } from "react";
-import { Globe, Instagram, Link, CheckCircle2, LogOut } from "lucide-react";
+import { Globe, Instagram, Link, CheckCircle2, LogOut, Loader2 } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { updateDoc } from "firebase/firestore";
 import { useNavigate } from "react-router";
+import { httpsCallable } from "firebase/functions";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
 import { TimezoneSettings } from "../components/atoms";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { auth } from "../lib/firebase";
+import { auth, functions } from "../lib/firebase";
 import { writeUserProfile, participantRef } from "../lib/firestore";
+
+const disconnectStravaFn = httpsCallable<Record<string, never>, { success: boolean }>(
+  functions, "disconnectStrava"
+);
 
 export function ProfileScreen() {
   const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto, scoring } = useAppContext();
@@ -24,6 +29,7 @@ export function ProfileScreen() {
   const [saved, setSaved]           = useState(false);
   const [tzSaved, setTzSaved]       = useState(false);
   const [tzSaving, setTzSaving]     = useState(false);
+  const [stravaLoading, setStravaLoading] = useState(false);
 
   const handleTzChange = async (tz: string) => {
     setAdminTz(tz);
@@ -50,6 +56,25 @@ export function ProfileScreen() {
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/login", { replace: true });
+  };
+
+  const handleConnectStrava = () => {
+    const clientId   = import.meta.env.VITE_STRAVA_CLIENT_ID as string | undefined;
+    const redirectUri = encodeURIComponent(`${window.location.origin}/strava-callback`);
+    const url = `https://www.strava.com/oauth/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=activity:read_all&approval_prompt=auto`;
+    window.location.href = url;
+  };
+
+  const handleDisconnectStrava = async () => {
+    if (!confirm("Отключить Strava? Автосинхронизация пробежек прекратится.")) return;
+    setStravaLoading(true);
+    try {
+      await disconnectStravaFn({});
+    } catch (e) {
+      console.error("[ProfileScreen] disconnectStrava failed:", e);
+    } finally {
+      setStravaLoading(false);
+    }
   };
 
   const saveBio = async () => {
@@ -177,6 +202,43 @@ export function ProfileScreen() {
           <p className="text-[11px] text-muted-foreground mt-3 leading-snug">
             Влияет на расчёт дней пробежки и дедлайнов. Уже отправленные задания не пересчитываются при смене часового пояса.
           </p>
+        )}
+      </Card>
+
+      {/* Strava integration */}
+      <Card className="!p-4">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FC4C02" }}>
+            <span className="text-white font-extrabold text-sm">S</span>
+          </div>
+          <div className="flex-1">
+            <SecLabel>Strava</SecLabel>
+            {userProfile?.stravaConnected ? (
+              <p className="text-xs text-green-600 font-semibold mt-0.5">
+                Подключено · {userProfile.stravaAthleteName ?? `Атлет #${userProfile.stravaAthleteId}`}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-0.5">Пробежки синхронизируются автоматически</p>
+            )}
+          </div>
+        </div>
+        {userProfile?.stravaConnected ? (
+          <button
+            onClick={handleDisconnectStrava}
+            disabled={stravaLoading}
+            className="w-full py-2.5 rounded-xl font-bold text-sm text-destructive border border-destructive/30 hover:bg-destructive/5 transition-colors disabled:opacity-40 flex items-center justify-center gap-2"
+          >
+            {stravaLoading ? <Loader2 size={14} className="animate-spin" /> : null}
+            Отключить Strava
+          </button>
+        ) : (
+          <button
+            onClick={handleConnectStrava}
+            className="w-full py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2"
+            style={{ background: "#FC4C02" }}
+          >
+            Подключить Strava
+          </button>
         )}
       </Card>
 

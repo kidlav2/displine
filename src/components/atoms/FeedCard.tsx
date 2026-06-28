@@ -145,6 +145,11 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
               </span>
             )}
             {item.isLate && <span className="text-xs font-bold text-orange-400">Опоздание</span>}
+            {item.stravaSource && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC4C02" }}>
+                Strava
+              </span>
+            )}
             <ScorePill scoreKey={item.submissionStatus === "approved"
               ? (item.type === "running" ? (item.isLate ? "running_late" : "running_on_time") : "task_completed")
               : null} />

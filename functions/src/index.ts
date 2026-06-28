@@ -1,9 +1,9 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { defineString } from "firebase-functions/params";
+import { defineString, defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
+import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 initializeApp();
@@ -270,3 +270,347 @@ export const generateDailyTasks = onSchedule("every day 00:05", async () => {
 
   await Promise.all(writes);
 });
+
+// ── Strava integration ────────────────────────────────────────────────────────
+// Set via: firebase functions:params:set STRAVA_CLIENT_ID=<your numeric client id>
+// Set via: firebase functions:secrets:set STRAVA_CLIENT_SECRET
+const STRAVA_CLIENT_ID     = defineString("STRAVA_CLIENT_ID");
+const STRAVA_CLIENT_SECRET = defineSecret("STRAVA_CLIENT_SECRET");
+
+interface StravaTokenResponse {
+  access_token:  string;
+  refresh_token: string;
+  expires_at:    number;
+  athlete: {
+    id:        number;
+    firstname: string;
+    lastname:  string;
+  };
+}
+
+interface StravaActivity {
+  id:               number;
+  type:             string;   // legacy field: "Run"
+  sport_type?:      string;   // newer field: "Run"
+  start_date:       string;   // UTC ISO: "2024-01-15T00:45:00Z"
+  start_date_local: string;   // local time ISO (despite the Z suffix): "2024-01-15T05:45:00Z"
+  distance:         number;   // metres
+  moving_time:      number;   // seconds
+  name:             string;
+}
+
+/** Refresh the Strava access token if it expires within 5 minutes; return valid token. */
+async function getStravaAccessToken(
+  db: ReturnType<typeof getFirestore>,
+  uid: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<string> {
+  const snap = await db.doc(`users/${uid}/integrations/strava`).get();
+  if (!snap.exists) throw new Error(`No Strava integration for uid=${uid}`);
+
+  const { accessToken, refreshToken, expiresAt } = snap.data() as {
+    accessToken: string; refreshToken: string; expiresAt: number;
+  };
+
+  // Return existing token if it has more than 5 minutes left
+  if (expiresAt > Math.floor(Date.now() / 1000) + 300) return accessToken;
+
+  // Refresh
+  const res = await fetch("https://www.strava.com/oauth/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_id:     clientId,
+      client_secret: clientSecret,
+      grant_type:    "refresh_token",
+      refresh_token: refreshToken,
+    }),
+  });
+  if (!res.ok) throw new Error(`Strava token refresh failed: ${res.status} ${await res.text()}`);
+
+  const data = await res.json() as StravaTokenResponse;
+  await db.doc(`users/${uid}/integrations/strava`).update({
+    accessToken:  data.access_token,
+    refreshToken: data.refresh_token,
+    expiresAt:    data.expires_at,
+  });
+  return data.access_token;
+}
+
+/** Points for a score key, falling back to defaults when the challenge has no custom scoring. */
+function stravaPoints(scoring: Array<{ key: string; points: number }>, key: string): number {
+  const defaults: Record<string, number> = { running_on_time: 2, running_late: 1 };
+  return scoring.find(e => e.key === key)?.points ?? defaults[key] ?? 0;
+}
+
+// ── connectStrava ─────────────────────────────────────────────────────────────
+
+interface ConnectStravaPayload { code: string; }
+
+export const connectStrava = onCall(
+  { cors: ALLOWED_ORIGINS, secrets: [STRAVA_CLIENT_SECRET] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+    const { code } = (request.data ?? {}) as ConnectStravaPayload;
+    if (typeof code !== "string" || !code) {
+      throw new HttpsError("invalid-argument", "Missing code.");
+    }
+
+    const res = await fetch("https://www.strava.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id:     STRAVA_CLIENT_ID.value(),
+        client_secret: STRAVA_CLIENT_SECRET.value(),
+        code,
+        grant_type:    "authorization_code",
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      console.error("[connectStrava] token exchange failed:", body);
+      throw new HttpsError("internal", `Strava token exchange failed: ${res.status}`);
+    }
+
+    const data = await res.json() as StravaTokenResponse;
+    const db  = getFirestore();
+    const uid = request.auth.uid;
+    const athleteName = `${data.athlete.firstname} ${data.athlete.lastname}`.trim();
+
+    // Store tokens in server-only subcollection (rules: allow read,write: if false)
+    await db.doc(`users/${uid}/integrations/strava`).set({
+      accessToken:  data.access_token,
+      refreshToken: data.refresh_token,
+      expiresAt:    data.expires_at,
+      athleteId:    data.athlete.id,
+      connectedAt:  FieldValue.serverTimestamp(),
+    });
+
+    // Surface the connection flag on the public user profile
+    await db.doc(`users/${uid}`).update({
+      stravaConnected:   true,
+      stravaAthleteId:   data.athlete.id,
+      stravaAthleteName: athleteName,
+    });
+
+    return { success: true, athleteId: data.athlete.id, athleteName };
+  }
+);
+
+// ── disconnectStrava ──────────────────────────────────────────────────────────
+
+export const disconnectStrava = onCall(
+  { cors: ALLOWED_ORIGINS, secrets: [STRAVA_CLIENT_SECRET] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Must be signed in.");
+
+    const db  = getFirestore();
+    const uid = request.auth.uid;
+
+    const integSnap = await db.doc(`users/${uid}/integrations/strava`).get();
+    if (integSnap.exists) {
+      // Best-effort deauthorize on Strava's side so future tokens are invalidated
+      const { accessToken } = integSnap.data() as { accessToken: string };
+      try {
+        await fetch("https://www.strava.com/oauth/deauthorize", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      } catch (e) {
+        console.warn("[disconnectStrava] deauthorize failed (ignoring):", e);
+      }
+      await db.doc(`users/${uid}/integrations/strava`).delete();
+    }
+
+    await db.doc(`users/${uid}`).update({
+      stravaConnected:   false,
+      stravaAthleteId:   FieldValue.delete(),
+      stravaAthleteName: FieldValue.delete(),
+    });
+
+    return { success: true };
+  }
+);
+
+// ── syncStravaActivities ──────────────────────────────────────────────────────
+// Runs every 4 hours. For each Strava-connected user, checks if today is a run
+// day for any of their active challenges (in the participant's own timezone).
+// If the deadline has passed and no submission exists yet, fetches Strava
+// activities and auto-creates an approved submission + feed entry.
+
+async function processSingleParticipant(
+  db: ReturnType<typeof getFirestore>,
+  clientId: string,
+  clientSecret: string,
+  uid: string,
+  challengeId: string,
+  participantData: FirebaseFirestore.DocumentData,
+  challengeData: FirebaseFirestore.DocumentData,
+): Promise<void> {
+  const runSchedule: Record<string, string> = challengeData.settings?.runSchedule ?? {};
+  if (Object.keys(runSchedule).length === 0) return;
+
+  const participantTz: string = participantData.tz ?? "UTC";
+  const now = new Date();
+
+  // "Today" in the participant's local timezone
+  const dateStr = now.toLocaleDateString("en-CA", { timeZone: participantTz }); // "YYYY-MM-DD"
+  const weekday = now.toLocaleDateString("en-US", { weekday: "short", timeZone: participantTz }); // "Mon"
+
+  // Check if today is a run day
+  const deadline = runSchedule[weekday];
+  if (!deadline) return;
+
+  // Only sync after the deadline has passed in the participant's timezone
+  const currentLocalTime = now.toLocaleTimeString("en-US", {
+    timeZone:  participantTz,
+    hour:      "2-digit",
+    minute:    "2-digit",
+    hour12:    false,
+  }).substring(0, 5); // "HH:MM"
+  if (currentLocalTime <= deadline) return;
+
+  // Idempotency: skip if a submission already exists for today
+  const subId  = `${uid}_${dateStr}`;
+  const subRef = db.doc(`challenges/${challengeId}/submissions/${subId}`);
+  if ((await subRef.get()).exists) return;
+
+  // Get a valid Strava access token (refreshes if needed)
+  const accessToken = await getStravaAccessToken(db, uid, clientId, clientSecret);
+
+  // Fetch activities from the last 24 hours (covers all timezones)
+  const after = Math.floor(Date.now() / 1000) - 86400;
+  const activitiesRes = await fetch(
+    `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=30`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!activitiesRes.ok) {
+    throw new Error(`Strava activities API error: ${activitiesRes.status}`);
+  }
+
+  const activities = await activitiesRes.json() as StravaActivity[];
+
+  // Find a Run that started today in the participant's local timezone
+  const run = activities.find(a =>
+    (a.type === "Run" || a.sport_type === "Run") &&
+    (a.start_date_local ?? "").startsWith(dateStr)
+  );
+  if (!run) return; // Participant hasn't run today on Strava
+
+  // Determine on-time vs late by comparing local start time to deadline
+  const startTimeLocal = (run.start_date_local ?? "").substring(11, 16); // "HH:MM"
+  const isLate  = startTimeLocal > deadline;
+  const scoreKey = isLate ? "running_late" : "running_on_time";
+  const km       = Math.round((run.distance / 1000) * 100) / 100;
+  const durationMin = Math.floor((run.moving_time ?? 0) / 60);
+  const pts = stravaPoints(
+    (challengeData.settings?.scoring ?? []) as Array<{ key: string; points: number }>,
+    scoreKey,
+  );
+
+  const startTimestamp = Timestamp.fromDate(new Date(run.start_date));
+  const text = `${km} км за ${durationMin} мин • Strava`;
+
+  const submissionData = {
+    participantUid:   uid,
+    ini:              participantData.ini     ?? "??",
+    name:             participantData.name    ?? "",
+    isAdmin:          participantData.isAdmin ?? false,
+    participantTz,
+    type:             "running",
+    taskTitle:        "Утренняя пробежка",
+    text,
+    photoUrl:         null,
+    checkInPhotoUrl:  null,
+    km,
+    isLate,
+    scoreKey,
+    status:           "approved",
+    checkIn:          startTimestamp,
+    submittedAt:      FieldValue.serverTimestamp(),
+    organizerComment: null,
+    pointsEarned:     pts,
+    stravaSource:     true,
+    stravaActivityId: run.id,
+  };
+
+  const feedData = {
+    participantId:    uid,
+    ini:              participantData.ini     ?? "??",
+    name:             participantData.name    ?? "",
+    isAdmin:          participantData.isAdmin ?? false,
+    type:             "running",
+    taskTitle:        "Утренняя пробежка",
+    text,
+    time:             FieldValue.serverTimestamp(),
+    checkInPhotoUrl:  null,
+    photoUrl:         null,
+    km,
+    isLate,
+    pointsEarned:     pts,
+    submissionStatus: "approved",
+    organizerComment: null,
+    likes:            [],
+    socialComments:   [],
+    stravaSource:     true,
+    stravaActivityId: run.id,
+  };
+
+  // Atomic batch: submission + feed + participant km/results
+  const batch = db.batch();
+  batch.set(subRef, submissionData);
+  batch.set(db.doc(`challenges/${challengeId}/feed/${subId}`), feedData, { merge: true });
+  batch.update(db.doc(`challenges/${challengeId}/participants/${uid}`), {
+    results: FieldValue.arrayUnion({ type: "running", scoreKey }),
+    km:      FieldValue.increment(km),
+  });
+  await batch.commit();
+
+  console.log(`[syncStrava] uid=${uid} challenge=${challengeId}: ${km}km ${isLate ? "late" : "on-time"} (activityId=${run.id})`);
+}
+
+export const syncStravaActivities = onSchedule(
+  { schedule: "0 */4 * * *", timeZone: "UTC", secrets: [STRAVA_CLIENT_SECRET] },
+  async () => {
+    const db           = getFirestore();
+    const clientId     = STRAVA_CLIENT_ID.value();
+    const clientSecret = STRAVA_CLIENT_SECRET.value();
+
+    const usersSnap = await db.collection("users")
+      .where("stravaConnected", "==", true)
+      .get();
+
+    if (usersSnap.empty) {
+      console.log("[syncStrava] No Strava-connected users.");
+      return;
+    }
+
+    for (const userDoc of usersSnap.docs) {
+      const uid           = userDoc.id;
+      const userData      = userDoc.data();
+      const challengeRoles = (userData.challengeRoles ?? {}) as Record<string, string>;
+
+      for (const challengeId of Object.keys(challengeRoles)) {
+        try {
+          const [chalSnap, pSnap] = await Promise.all([
+            db.doc(`challenges/${challengeId}`).get(),
+            db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
+          ]);
+          if (!chalSnap.exists || !pSnap.exists) continue;
+          if (chalSnap.data()?.status !== "active") continue;
+
+          await processSingleParticipant(
+            db, clientId, clientSecret,
+            uid, challengeId,
+            pSnap.data()!,
+            chalSnap.data()!,
+          );
+        } catch (err) {
+          console.error(`[syncStrava] uid=${uid} challenge=${challengeId} error:`, err);
+        }
+      }
+    }
+  }
+);

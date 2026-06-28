@@ -61,6 +61,7 @@ export interface FeedItem {
   pointsEarned: number;
   likes: string[];         // array of UIDs who liked (use .length for count, .includes(uid) for liked)
   socialComments: SocialComment[];
+  stravaSource?: boolean;
 }
 
 export interface ReviewItem {
@@ -77,6 +78,7 @@ export interface ReviewItem {
   text: string;
   checkInPhotoUrl?: string | null;
   photoUrl: string | null;
+  stravaSource?: boolean;
 }
 
 /** Per-challenge scoring config — an ordered list of scoring entries. */
@@ -159,6 +161,10 @@ export interface UserProfile {
   socialLinks?: { instagram?: string; other?: string };
   // Map of challengeId → role. Used to query which challenges this user belongs to.
   challengeRoles: Record<string, UserRole>;
+  // Strava integration
+  stravaConnected?: boolean;
+  stravaAthleteId?: number;
+  stravaAthleteName?: string;
 }
 
 // ── Scoring ───────────────────────────────────────────────────────────────────

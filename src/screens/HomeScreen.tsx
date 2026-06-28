@@ -16,7 +16,8 @@ import type { SortKey } from "../types";
 
 export function HomeScreen() {
   const { challenge, isRunDay, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
-  const { currentUser } = useAuthContext();
+  const { currentUser, userProfile } = useAuthContext();
+  const stravaConnected = !!userProfile?.stravaConnected;
   const navigate = useNavigate();
 
   const [checkedIn, setCheckedIn] = useState(false);
@@ -190,7 +191,7 @@ export function HomeScreen() {
       </Card>
 
       {/* Unpaid penalty warnings — only shown until organizer marks them as paid */}
-      {meParticipant?.penalties?.filter(p => !p.paid && p.amount > 0).map((p, i) => (
+      {meParticipant?.penalties?.filter(p => !p.paid && (p.amount > 0 || (p.burpees ?? 0) > 0 || (p.livesLost ?? 0) > 0)).map((p, i) => (
         <Card key={i} className="!p-4 border-2 border-orange-200 bg-orange-50">
           <div className="flex items-center gap-3">
             <AlertCircle size={16} className="text-orange-500 shrink-0" />
@@ -283,6 +284,11 @@ export function HomeScreen() {
           <div className="flex items-center gap-2 mb-3">
             <Activity size={14} style={{ color: BRAND_COLOR }} />
             <SecLabel>Утренняя пробежка</SecLabel>
+            {stravaConnected && (
+              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC4C02" }}>
+                Strava
+              </span>
+            )}
             <span className="ml-auto text-[11px] text-muted-foreground">{runDayLabels}</span>
           </div>
           <div className="flex items-center gap-3 mb-3 text-xs text-muted-foreground">
@@ -304,6 +310,17 @@ export function HomeScreen() {
                 <p className="text-[11px] text-blue-500">Ожидает проверки организатора</p>
               </div>
             </div>
+          ) : stravaConnected ? (
+            /* Strava connected — no manual check-in needed */
+            <div className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FC4C02" }}>
+                <span className="text-white font-extrabold text-xs">S</span>
+              </div>
+              <div>
+                <p className="text-xs font-extrabold text-orange-700">Strava подключена</p>
+                <p className="text-[11px] text-orange-600">Пробежка зачтётся автоматически после дедлайна</p>
+              </div>
+            </div>
           ) : !checkedIn ? (
             <>
               <button
@@ -313,9 +330,13 @@ export function HomeScreen() {
               >
                 <Camera size={16} /> Фото и отметиться
               </button>
-              <p className="text-center text-[11px] text-muted-foreground mt-2 flex items-center justify-center gap-1">
-                <MapPin size={11} /> геолокация и время добавятся автоматически
-              </p>
+              <button
+                onClick={() => navigate("/app/profile")}
+                className="w-full py-2 rounded-xl text-[11px] font-semibold text-muted-foreground border border-border flex items-center justify-center gap-1.5 hover:bg-muted transition-colors"
+              >
+                <span className="w-4 h-4 rounded flex items-center justify-center text-white text-[9px] font-extrabold shrink-0" style={{ background: "#FC4C02" }}>S</span>
+                Подключить Strava для автосинхронизации
+              </button>
             </>
           ) : (
             <>
@@ -339,7 +360,7 @@ export function HomeScreen() {
                 onClick={() => goSubmit("run")}
                 className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm"
               >
-                <ExternalLink size={14} /> Загрузить результат / Подключить Strava
+                <ExternalLink size={14} /> Загрузить результат
               </button>
             </>
           )}

@@ -58,13 +58,13 @@ export function ReviewScreen() {
         item.scoreKey,
         latePenalty
       );
-      if (latePenalty && status === "approved" && currentUser && meParticipant) {
-        const actor: FeedActor = {
+      if (latePenalty && status === "approved" && currentUser) {
+        const actor: FeedActor | undefined = meParticipant ? {
           uid: currentUser.uid,
           name: meParticipant.name,
           ini: meParticipant.ini,
           isAdmin: meParticipant.isAdmin,
-        };
+        } : undefined;
         await logPenalty(
           challenge.id,
           item.participantId,
@@ -185,6 +185,11 @@ export function ReviewScreen() {
                   </p>
                 </div>
               </div>
+              {item.stravaSource && (
+                <span className="mt-1 inline-flex px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC4C02" }}>
+                  Strava
+                </span>
+              )}
               {item.text && <p className="text-xs text-muted-foreground leading-snug">{item.text}</p>}
             </div>
           </div>

@@ -123,6 +123,7 @@ export function snapToFeedItem(snap: QueryDocumentSnapshot<DocumentData>): FeedI
     pointsEarned:      d.pointsEarned      ?? 0,
     likes:             (d.likes ?? []) as string[],
     socialComments:    (d.socialComments ?? []) as SocialComment[],
+    stravaSource:      d.stravaSource      ?? undefined,
   };
 }
 
@@ -159,6 +160,7 @@ export function snapToReviewItem(snap: QueryDocumentSnapshot<DocumentData>): Rev
     text:            d.text             ?? "",
     checkInPhotoUrl: d.checkInPhotoUrl  ?? null,
     photoUrl:        d.photoUrl         ?? null,
+    stravaSource:    d.stravaSource     ?? undefined,
   };
 }
 
