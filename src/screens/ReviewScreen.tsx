@@ -500,8 +500,9 @@ function PostponementItem({
   onAct: (p: PostponementRequest, decision: "approved" | "rejected") => void;
 }) {
   const fmt = (iso: string) => {
-    try { return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
-    catch { return iso; }
+    if (!iso || iso.length < 10) return iso;
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y}`;
   };
   const typeLabel = p.type === "running" ? "Пробежка" : "Задание";
 

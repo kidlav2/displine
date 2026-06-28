@@ -1282,3 +1282,15 @@ export async function getOrgNote(challengeId: string, participantUid: string): P
 export async function saveOrgNote(challengeId: string, participantUid: string, note: string): Promise<void> {
   await setDoc(orgNoteRef(challengeId, participantUid), { note, updatedAt: serverTimestamp() }, { merge: true });
 }
+
+/** Return all tasks on or after fromDateISO, sorted by date ascending. */
+export async function getUpcomingTasks(challengeId: string, fromDateISO: string): Promise<Task[]> {
+  const q = query(tasksCol(challengeId), where("date", ">=", fromDateISO), orderBy("date", "asc"));
+  const snap = await getDocs(q);
+  return snap.docs.map(d => ({ id: d.id, ...d.data() } as Task));
+}
+
+/** Permanently delete a task document. */
+export async function deleteTask(challengeId: string, taskId: string): Promise<void> {
+  await deleteDoc(doc(db, "challenges", challengeId, "tasks", taskId));
+}

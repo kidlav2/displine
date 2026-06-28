@@ -591,8 +591,9 @@ function PostponeSection({
   onSubmit: () => void;
 }) {
   const fmt = (iso: string) => {
-    try { return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
-    catch { return iso; }
+    if (!iso || iso.length < 10) return iso;
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y}`;
   };
 
   if (postponement?.status === "pending") {
@@ -718,8 +719,9 @@ function PostponedCard({
   };
 
   const fmt = (iso: string) => {
-    try { return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" }); }
-    catch { return iso; }
+    if (!iso || iso.length < 10) return iso;
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y}`;
   };
 
   return (

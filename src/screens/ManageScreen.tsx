@@ -1,14 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   CalendarDays, Award, Sliders, UserCheck, Users, ChevronRight,
-  Copy, CheckCircle2, ChevronLeft,
+  Copy, CheckCircle2, ChevronLeft, Loader2, Trash2, Clock,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import { createAchievementDoc } from "../lib/firestore";
-import type { AchievementConditionType } from "../types";
+import { createAchievementDoc, getUpcomingTasks, deleteTask } from "../lib/firestore";
+import type { AchievementConditionType, Task } from "../types";
 import { CreateTaskShell } from "../components/CreateTaskShell";
 
 // ── Main ManageScreen ─────────────────────────────────────────────────────────
@@ -18,6 +18,12 @@ export function ManageScreen() {
   const navigate = useNavigate();
 
   const [showCreateTask, setShowCreateTask] = useState(false);
+  const [showUpcomingTasks, setShowUpcomingTasks] = useState(false);
+  const [upcomingTasks, setUpcomingTasks] = useState<Task[]>([]);
+  const [upcomingLoading, setUpcomingLoading] = useState(false);
+  const [upcomingError, setUpcomingError] = useState<string | null>(null);
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [achForm, setAchForm] = useState({
     icon: "⭐", name: "", desc: "",
     conditionType: "tasks_total" as AchievementConditionType,
@@ -33,6 +39,29 @@ export function ManageScreen() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
+  useEffect(() => {
+    if (!showUpcomingTasks) return;
+    setUpcomingLoading(true);
+    setUpcomingError(null);
+    const todayISO = new Date().toISOString().slice(0, 10);
+    getUpcomingTasks(challenge.id, todayISO)
+      .then(tasks => { setUpcomingTasks(tasks); setUpcomingLoading(false); })
+      .catch(() => { setUpcomingError("Не удалось загрузить задания"); setUpcomingLoading(false); });
+  }, [showUpcomingTasks, challenge.id]);
+
+  const handleDeleteTask = async (task: Task) => {
+    if (!window.confirm(`Удалить задание «${task.title}»?`)) return;
+    setDeletingTaskId(task.id);
+    try {
+      await deleteTask(challenge.id, task.id);
+      setUpcomingTasks(prev => prev.filter(t => t.id !== task.id));
+    } catch {
+      alert("Не удалось удалить задание");
+    } finally {
+      setDeletingTaskId(null);
+    }
+  };
+
   const ownerItems = userRole === "owner" ? [
     { icon: <Sliders size={20} />,     label: "Настройки челленджа",   sub: "Дни, штрафы, жизни, дедлайн",                                                         action: () => navigate("/app/settings") },
     { icon: <UserCheck size={20} />,   label: "Управление участниками", sub: "Настроить жизни, зафиксировать штрафы",                                                action: () => navigate("/app/participants") },
@@ -41,14 +70,106 @@ export function ManageScreen() {
   ] : [];
 
   const menuItems = [
-    { icon: <CalendarDays size={20} />, label: "Создать задание",    sub: "Запланировать новое задание", action: () => setShowCreateTask(true) },
-    { icon: <Award size={20} />,        label: "Создать достижение", sub: "Добавить значок или веху",    action: () => setShowCreateAch(true) },
+    { icon: <CalendarDays size={20} />, label: "Создать задание",         sub: "Запланировать новое задание",           action: () => setShowCreateTask(true) },
+    { icon: <Clock size={20} />,        label: "Запланированные задания",  sub: "Просмотр и удаление будущих заданий",   action: () => setShowUpcomingTasks(true) },
+    { icon: <Award size={20} />,        label: "Создать достижение",       sub: "Добавить значок или веху",              action: () => setShowCreateAch(true) },
     ...ownerItems,
   ];
 
   if (showCreateTask) return (
     <CreateTaskShell challengeId={challenge.id} onDone={() => setShowCreateTask(false)} />
   );
+
+  if (showUpcomingTasks) {
+    const fmtDate = (iso: string) => {
+      if (!iso || iso.length < 10) return iso;
+      const [y, m, d] = iso.split("-");
+      return `${d}.${m}.${y}`;
+    };
+    const TYPE_LABELS: Record<string, string> = { running: "Пробежка", checklist: "Чеклист", freeform: "Свободный" };
+    return (
+      <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-4 max-w-[600px] mx-auto">
+        <div className="flex items-center gap-3 mb-4">
+          <button onClick={() => setShowUpcomingTasks(false)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
+            ← Назад
+          </button>
+          <p className="font-extrabold text-lg">Запланированные задания</p>
+        </div>
+        {upcomingLoading && (
+          <div className="flex items-center justify-center py-10">
+            <Loader2 size={24} className="animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {upcomingError && (
+          <p className="text-sm text-red-500 text-center py-6">{upcomingError}</p>
+        )}
+        {!upcomingLoading && !upcomingError && upcomingTasks.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-10">Нет запланированных заданий</p>
+        )}
+        {!upcomingLoading && !upcomingError && upcomingTasks.length > 0 && (
+          <div className="space-y-2">
+            {upcomingTasks.map(task => {
+              const isExpanded = expandedTaskId === task.id;
+              return (
+                <Card key={task.id} className="!p-0 overflow-hidden">
+                  <button
+                    className="w-full text-left px-4 py-3 flex items-center gap-3"
+                    onClick={() => setExpandedTaskId(isExpanded ? null : task.id)}
+                  >
+                    <div className="w-8 h-8 rounded-xl bg-muted flex items-center justify-center shrink-0" style={{ color: BRAND_COLOR }}>
+                      <CalendarDays size={14} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-sm truncate">{task.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-muted-foreground font-semibold">{fmtDate(task.date)}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground">
+                          {TYPE_LABELS[task.type] ?? task.type}
+                        </span>
+                        {task.deadline && (
+                          <span className="text-[10px] text-muted-foreground">до {task.deadline}</span>
+                        )}
+                      </div>
+                    </div>
+                    <ChevronRight size={14} className={`text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                  </button>
+                  {isExpanded && (
+                    <div className="border-t border-border px-4 py-3 space-y-3">
+                      {task.description ? (
+                        <p className="text-sm text-muted-foreground">{task.description}</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Нет описания</p>
+                      )}
+                      {task.checklistItems && task.checklistItems.length > 0 && (
+                        <ul className="space-y-1">
+                          {task.checklistItems.map((item, i) => (
+                            <li key={i} className="text-xs text-muted-foreground flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground shrink-0" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <button
+                        onClick={() => handleDeleteTask(task)}
+                        disabled={deletingTaskId === task.id}
+                        className="flex items-center gap-1.5 text-xs font-bold text-red-500 disabled:opacity-40"
+                      >
+                        {deletingTaskId === task.id
+                          ? <Loader2 size={12} className="animate-spin" />
+                          : <Trash2 size={12} />}
+                        Удалить задание
+                      </button>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const COND_TYPES: { type: AchievementConditionType; label: string; hasThreshold: boolean; placeholder: string }[] = [
     { type: "tasks_total", label: "Заданий выполнено",       hasThreshold: true,  placeholder: "7"  },

@@ -166,8 +166,8 @@ service cloud.firestore {
 
       match /postponements/{postponementId} {
         allow read: if isOrganizer(challengeId) ||
-          (isParticipant(challengeId) &&
-           resource != null &&
+          (resource == null && isParticipant(challengeId)) ||
+          (resource != null && isParticipant(challengeId) &&
            resource.data.participantUid == request.auth.uid);
         allow create: if isParticipant(challengeId) &&
           request.resource.data.participantUid == request.auth.uid &&
