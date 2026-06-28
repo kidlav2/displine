@@ -163,6 +163,19 @@ service cloud.firestore {
       match /orgNotes/{participantUid} {
         allow read, write: if isOrganizer(challengeId);
       }
+
+      match /postponements/{postponementId} {
+        allow read: if isOrganizer(challengeId) ||
+          (isParticipant(challengeId) &&
+           resource != null &&
+           resource.data.participantUid == request.auth.uid);
+        allow create: if isParticipant(challengeId) &&
+          request.resource.data.participantUid == request.auth.uid &&
+          request.resource.data.status == "pending";
+        allow update: if isOrganizer(challengeId) &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["status", "organizerNote", "resolvedAt"]);
+      }
     }
   }
 }

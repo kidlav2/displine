@@ -19,7 +19,7 @@ import { db, storage, functions } from "./firebase";
 import { todayISOInTz } from "./dates";
 import type {
   ChallengeData, ChallengeSettings, DayResult,
-  FeedItem, Participant, Penalty, ReviewItem,
+  FeedItem, Participant, Penalty, PostponementRequest, ReviewItem,
   SocialComment, Task, TaskTemplate, TeamMember, UserProfile, UserRole,
 } from "../types";
 
@@ -1166,6 +1166,111 @@ export async function devResetMyData(
 
 export const orgNoteRef = (cid: string, uid: string) =>
   doc(db, "challenges", cid, "orgNotes", uid);
+
+// ── Postponements ─────────────────────────────────────────────────────────────
+
+export const postponementsCol = (cid: string) =>
+  collection(db, "challenges", cid, "postponements");
+export const postponementRef = (cid: string, pid: string) =>
+  doc(db, "challenges", cid, "postponements", pid);
+
+function snapToPostponement(snap: QueryDocumentSnapshot<DocumentData>): PostponementRequest {
+  const d = snap.data();
+  const toStr = (ts: unknown): string => {
+    if (!ts) return "";
+    if (typeof ts === "string") return ts;
+    if (ts instanceof Timestamp) return ts.toDate().toISOString();
+    return "";
+  };
+  return {
+    id:              snap.id,
+    participantUid:  d.participantUid  ?? "",
+    participantName: d.participantName ?? "",
+    participantIni:  d.participantIni  ?? "??",
+    type:            d.type            ?? "task",
+    taskId:          d.taskId          ?? null,
+    taskTitle:       d.taskTitle       ?? "",
+    dateISO:         d.dateISO         ?? "",
+    targetDateISO:   d.targetDateISO   ?? "",
+    status:          d.status          ?? "pending",
+    reason:          d.reason          ?? "",
+    requestedAt:     toStr(d.requestedAt),
+    resolvedAt:      toStr(d.resolvedAt) || undefined,
+    organizerNote:   d.organizerNote   ?? undefined,
+  };
+}
+
+export async function requestPostponement(
+  challengeId: string,
+  participant: Pick<Participant, "uid" | "ini" | "name">,
+  payload: {
+    type: "task" | "running";
+    taskId: string | null;
+    taskTitle: string;
+    dateISO: string;
+    targetDateISO: string;
+    reason: string;
+  }
+): Promise<string> {
+  const ref = await addDoc(postponementsCol(challengeId), {
+    participantUid:  participant.uid,
+    participantName: participant.name,
+    participantIni:  participant.ini,
+    type:            payload.type,
+    taskId:          payload.taskId,
+    taskTitle:       payload.taskTitle,
+    dateISO:         payload.dateISO,
+    targetDateISO:   payload.targetDateISO,
+    status:          "pending",
+    reason:          payload.reason,
+    requestedAt:     serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export function subscribeToMyPostponements(
+  challengeId: string,
+  uid: string,
+  callback: (items: PostponementRequest[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    query(postponementsCol(challengeId), where("participantUid", "==", uid)),
+    (snap) => {
+      const items = snap.docs
+        .map(snapToPostponement)
+        .sort((a, b) => (a.requestedAt < b.requestedAt ? 1 : -1));
+      callback(items);
+    }
+  );
+}
+
+export function subscribeToPostponementQueue(
+  challengeId: string,
+  callback: (items: PostponementRequest[]) => void
+): Unsubscribe {
+  return onSnapshot(
+    query(postponementsCol(challengeId), where("status", "==", "pending")),
+    (snap) => {
+      const items = snap.docs
+        .map(snapToPostponement)
+        .sort((a, b) => (a.requestedAt > b.requestedAt ? 1 : -1));
+      callback(items);
+    }
+  );
+}
+
+export async function resolvePostponement(
+  challengeId: string,
+  postponementId: string,
+  decision: "approved" | "rejected",
+  organizerNote?: string
+): Promise<void> {
+  await updateDoc(postponementRef(challengeId, postponementId), {
+    status:       decision,
+    organizerNote: organizerNote ?? null,
+    resolvedAt:   serverTimestamp(),
+  });
+}
 
 /** Read a private organizer note for a participant. Returns "" if none exists. */
 export async function getOrgNote(challengeId: string, participantUid: string): Promise<string> {

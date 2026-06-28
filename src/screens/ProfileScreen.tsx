@@ -208,8 +208,10 @@ export function ProfileScreen() {
       {/* Strava integration */}
       <Card className="!p-4">
         <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FC4C02" }}>
-            <span className="text-white font-extrabold text-sm">S</span>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: "#FC5200" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+            </svg>
           </div>
           <div className="flex-1">
             <SecLabel>Strava</SecLabel>
@@ -234,10 +236,13 @@ export function ProfileScreen() {
         ) : (
           <button
             onClick={handleConnectStrava}
-            className="w-full py-2.5 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2"
-            style={{ background: "#FC4C02" }}
+            className="w-full py-3 rounded-xl font-extrabold text-sm text-white flex items-center justify-center gap-2"
+            style={{ background: "#FC5200" }}
           >
-            Подключить Strava
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+            </svg>
+            Connect with Strava
           </button>
         )}
       </Card>

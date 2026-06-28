@@ -9,10 +9,10 @@ import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId, devResetMyData } from "../lib/firestore";
+import { checkInForRun, subscribeToTodayCheckIn, subscribeToTodayTaskSubmission, runCheckInSubId, taskSubmitSubId, devResetMyData, subscribeToMyPostponements, requestPostponement } from "../lib/firestore";
 import { localNow, detectTz } from "../lib/timezone";
-import { todayISOInTz } from "../lib/dates";
-import type { SortKey } from "../types";
+import { todayISOInTz, addDays } from "../lib/dates";
+import type { PostponementRequest, SortKey } from "../types";
 
 export function HomeScreen() {
   const { challenge, isRunDay, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
@@ -33,6 +33,12 @@ export function HomeScreen() {
   const [taskApproved, setTaskApproved] = useState(false);
   const [taskRejectedToday, setTaskRejectedToday] = useState(false);
   const [lbSort, setLbSort] = useState<SortKey>("score");
+  const [myPostponements, setMyPostponements] = useState<PostponementRequest[]>([]);
+  const [showPostponeForm, setShowPostponeForm] = useState<"task" | "running" | null>(null);
+  const [postponeReason, setPostponeReason] = useState("");
+  const [postponeTargetDate, setPostponeTargetDate] = useState("");
+  const [postponeLoading, setPostponeLoading] = useState(false);
+  const [postponeError, setPostponeError] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const pct = (challenge.duration > 0 && !isNaN(challenge.currentDay))
     ? Math.round((challenge.currentDay / challenge.duration) * 100)
@@ -110,6 +116,12 @@ export function HomeScreen() {
     }
   }, [challenge?.id, currentUser?.uid, meParticipant]);
 
+  // Subscribe to the current user's postponement requests for this challenge
+  useEffect(() => {
+    if (!challenge?.id || !currentUser?.uid) return;
+    return subscribeToMyPostponements(challenge.id, currentUser.uid, setMyPostponements);
+  }, [challenge?.id, currentUser?.uid]);
+
   // Subscribe to today's task submission to persist status across reloads
   useEffect(() => {
     if (!todayTask || !challenge?.id || !currentUser?.uid) { setTaskStatusLoading(false); return; }
@@ -139,18 +151,63 @@ export function HomeScreen() {
   };
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
+  // ── Postponement derived state ─────────────────────────────────────────────
+  const tomorrowISO = addDays(participantTodayISO, 1);
+
+  const todayTaskPostponement = todayTask
+    ? (myPostponements.find(p => p.type === "task" && p.dateISO === participantTodayISO && p.taskId === todayTask.id) ?? null)
+    : null;
+
+  const todayRunPostponement = isRunDay
+    ? (myPostponements.find(p => p.type === "running" && p.dateISO === participantTodayISO) ?? null)
+    : null;
+
+  const activeApprovedPostponements = myPostponements.filter(p =>
+    p.status === "approved" &&
+    p.dateISO < participantTodayISO &&
+    p.targetDateISO >= participantTodayISO
+  );
+
+  const nowTimeStr = new Date().toLocaleTimeString("en-US", {
+    timeZone: meParticipant?.tz ?? detectTz(),
+    hour: "2-digit", minute: "2-digit", hour12: false,
+  });
+  const isTaskPastDeadline = !!todayTask?.deadline && nowTimeStr > todayTask.deadline;
+
+  const handlePostponeRequest = async (type: "task" | "running") => {
+    if (postponeLoading || !meParticipant || !challenge?.id) return;
+    setPostponeLoading(true);
+    setPostponeError(null);
+    try {
+      const targetDate = postponeTargetDate || tomorrowISO;
+      await requestPostponement(challenge.id, {
+        uid: meParticipant.uid,
+        ini: meParticipant.ini,
+        name: meParticipant.name,
+      }, {
+        type,
+        taskId: type === "task" ? (todayTask?.id ?? null) : null,
+        taskTitle: type === "task" ? (todayTask?.title ?? "Задание") : "Утренняя пробежка",
+        dateISO: participantTodayISO,
+        targetDateISO: targetDate,
+        reason: postponeReason.trim(),
+      });
+      setShowPostponeForm(null);
+      setPostponeReason("");
+      setPostponeTargetDate("");
+    } catch {
+      setPostponeError("Не удалось отправить запрос. Попробуйте снова.");
+    } finally {
+      setPostponeLoading(false);
+    }
+  };
+
   const runDayLabels = Object.keys(challenge.settings.runSchedule).map(d => DAY_LABELS[d] ?? d).join(" / ") || "—";
   const runOnTimePts = scoring.find(e => e.key === "running_on_time")?.points ?? 2;
   const runLatePts   = scoring.find(e => e.key === "running_late")?.points    ?? 1;
   const taskPts      = scoring.find(e => e.key === "task_completed")?.points  ?? 5;
 
-  // Color-code the running card based on deadline proximity (participant's own timezone).
-  // Green tint = still before the deadline; amber tint = deadline passed and not yet checked in.
-  // Once checked in the card shows its own post-check-in state so no tint is applied.
-  const nowTimeStr = new Date().toLocaleTimeString("en-US", {
-    timeZone: meParticipant?.tz ?? detectTz(),
-    hour: "2-digit", minute: "2-digit", hour12: false,
-  });
+  // nowTimeStr already computed above (in postponement section)
   const isPastDeadline = !!todayDeadline && nowTimeStr > todayDeadline;
   const runCardStyle = (isRunDay && !runApproved && !checkedIn)
     ? { background: isPastDeadline ? "rgba(251,146,60,0.07)" : "rgba(74,222,128,0.08)" }
@@ -268,6 +325,24 @@ export function HomeScreen() {
               Отправить подтверждение
             </button>
           )}
+          {!isTaskPastDeadline && !taskSubmittedToday && !taskApproved && (
+            <PostponeSection
+              type="task"
+              postponement={todayTaskPostponement}
+              showForm={showPostponeForm === "task"}
+              reason={postponeReason}
+              targetDate={postponeTargetDate}
+              loading={postponeLoading}
+              error={postponeError}
+              minDate={tomorrowISO}
+              maxDate={challenge.endDate}
+              onShowForm={() => setShowPostponeForm("task")}
+              onHideForm={() => { setShowPostponeForm(null); setPostponeError(null); }}
+              onReasonChange={setPostponeReason}
+              onTargetDateChange={setPostponeTargetDate}
+              onSubmit={() => handlePostponeRequest("task")}
+            />
+          )}
         </Card>
       ) : !todayTask && !taskApproved ? (
         <Card className="!p-5">
@@ -285,7 +360,10 @@ export function HomeScreen() {
             <Activity size={14} style={{ color: BRAND_COLOR }} />
             <SecLabel>Утренняя пробежка</SecLabel>
             {stravaConnected && (
-              <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC4C02" }}>
+              <span className="ml-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC5200" }}>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                  <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                </svg>
                 Strava
               </span>
             )}
@@ -349,8 +427,37 @@ export function HomeScreen() {
               </button>
             </>
           )}
+          {!isPastDeadline && !submittedToday && (
+            <PostponeSection
+              type="running"
+              postponement={todayRunPostponement}
+              showForm={showPostponeForm === "running"}
+              reason={postponeReason}
+              targetDate={postponeTargetDate}
+              loading={postponeLoading}
+              error={postponeError}
+              minDate={tomorrowISO}
+              maxDate={challenge.endDate}
+              onShowForm={() => setShowPostponeForm("running")}
+              onHideForm={() => { setShowPostponeForm(null); setPostponeError(null); }}
+              onReasonChange={setPostponeReason}
+              onTargetDateChange={setPostponeTargetDate}
+              onSubmit={() => handlePostponeRequest("running")}
+            />
+          )}
         </Card>
       )}
+
+      {/* Approved postponements from previous days that are still within their window */}
+      {activeApprovedPostponements.map(p => (
+        <PostponedCard
+          key={p.id}
+          p={p}
+          challengeId={challenge.id}
+          currentUser={currentUser}
+          navigate={navigate}
+        />
+      ))}
 
       <div className="grid grid-cols-2 gap-3">
         <Card className="!p-4 flex flex-col items-center text-center">
@@ -458,5 +565,189 @@ function DevResetButton({
       <RotateCcw size={12} />
       {loading ? "Сброс…" : "[DEV] Сбросить мои тестовые данные"}
     </button>
+  );
+}
+
+// ── Postponement inline section ───────────────────────────────────────────────
+function PostponeSection({
+  type, postponement, showForm,
+  reason, targetDate, loading, error,
+  minDate, maxDate,
+  onShowForm, onHideForm, onReasonChange, onTargetDateChange, onSubmit,
+}: {
+  type: "task" | "running";
+  postponement: PostponementRequest | null;
+  showForm: boolean;
+  reason: string;
+  targetDate: string;
+  loading: boolean;
+  error: string | null;
+  minDate: string;
+  maxDate: string;
+  onShowForm: () => void;
+  onHideForm: () => void;
+  onReasonChange: (v: string) => void;
+  onTargetDateChange: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const fmt = (iso: string) => {
+    try { return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
+    catch { return iso; }
+  };
+
+  if (postponement?.status === "pending") {
+    return (
+      <div className="flex items-center gap-2 mt-2.5 p-2.5 bg-amber-50 rounded-xl border border-amber-200">
+        <Clock size={13} className="text-amber-500 shrink-0" />
+        <div>
+          <p className="text-xs font-bold text-amber-700">Перенос на рассмотрении</p>
+          <p className="text-[10px] text-amber-600">Запрошен до {fmt(postponement.targetDateISO)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (postponement?.status === "approved") {
+    return (
+      <div className="flex items-center gap-2 mt-2.5 p-2.5 bg-purple-50 rounded-xl border border-purple-200">
+        <CheckCircle2 size={13} className="text-purple-500 shrink-0" />
+        <div>
+          <p className="text-xs font-bold text-purple-700">Перенос одобрен</p>
+          <p className="text-[10px] text-purple-600">Сдайте до {fmt(postponement.targetDateISO)}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showForm) {
+    return (
+      <div className="mt-2.5 p-3 bg-muted/60 rounded-xl border border-border space-y-2.5">
+        {postponement?.status === "rejected" && (
+          <p className="text-[10px] font-bold text-red-500">Предыдущий запрос отклонён — можно подать новый.</p>
+        )}
+        <p className="text-xs font-extrabold">Запрос на перенос</p>
+        <div>
+          <label className="text-[10px] font-bold text-muted-foreground">Причина (необязательно)</label>
+          <textarea
+            placeholder="Объясните, почему не можете сдать сегодня…"
+            value={reason}
+            onChange={e => onReasonChange(e.target.value)}
+            rows={2}
+            className="w-full mt-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none resize-none placeholder-muted-foreground"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-bold text-muted-foreground">Сдам до (по умолчанию — завтра)</label>
+          <input
+            type="date"
+            value={targetDate}
+            min={minDate}
+            max={maxDate}
+            onChange={e => onTargetDateChange(e.target.value)}
+            className="w-full mt-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none"
+          />
+        </div>
+        {error && <p className="text-[10px] text-red-500 font-semibold">{error}</p>}
+        <div className="flex gap-2">
+          <button onClick={onHideForm}
+            className="flex-1 py-1.5 rounded-lg border border-border text-xs font-bold text-muted-foreground">
+            Отмена
+          </button>
+          <button onClick={onSubmit} disabled={loading}
+            className="flex-1 py-1.5 rounded-lg font-bold text-xs text-white disabled:opacity-50"
+            style={{ background: "#7C3AED" }}>
+            {loading ? "…" : "Отправить"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      {postponement?.status === "rejected" && (
+        <p className="text-[10px] text-red-500 font-bold mb-1">Перенос отклонён.</p>
+      )}
+      <button onClick={onShowForm}
+        className="w-full py-2 rounded-xl border border-border text-xs font-semibold text-muted-foreground flex items-center justify-center gap-1.5">
+        <CalendarDays size={12} />
+        {postponement?.status === "rejected" ? "Запросить перенос снова" : "Запросить перенос"}
+      </button>
+    </div>
+  );
+}
+
+// ── Approved postponement card for previous days ──────────────────────────────
+function PostponedCard({
+  p, challengeId, currentUser, navigate,
+}: {
+  p: PostponementRequest;
+  challengeId: string;
+  currentUser: { uid: string } | null;
+  navigate: ReturnType<typeof import("react-router").useNavigate>;
+}) {
+  const [subStatus, setSubStatus] = useState<"idle" | "pending" | "approved">("idle");
+
+  useEffect(() => {
+    if (!challengeId || !currentUser?.uid) return;
+    if (p.type === "task") {
+      return subscribeToTodayTaskSubmission(challengeId, currentUser.uid, p.dateISO, (data) => {
+        if (!data) { setSubStatus("idle"); return; }
+        if (data.status === "approved") setSubStatus("approved");
+        else if (data.status === "pending") setSubStatus("pending");
+        else setSubStatus("idle");
+      });
+    } else {
+      return subscribeToTodayCheckIn(challengeId, currentUser.uid, p.dateISO, (data) => {
+        if (!data) { setSubStatus("idle"); return; }
+        if (data.approved) setSubStatus("approved");
+        else if (data.submitted) setSubStatus("pending");
+        else setSubStatus("idle");
+      });
+    }
+  }, [challengeId, currentUser?.uid, p.dateISO, p.type]);
+
+  const goSubmit = () => {
+    const params = new URLSearchParams({
+      type: p.type === "running" ? "run" : "task",
+      originalDateISO: p.dateISO,
+      postponementId: p.id,
+    });
+    if (p.taskTitle) params.set("taskTitle", p.taskTitle);
+    navigate(`/app/tasks?${params}`);
+  };
+
+  const fmt = (iso: string) => {
+    try { return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "long" }); }
+    catch { return iso; }
+  };
+
+  return (
+    <Card className="!p-4" style={{ borderLeft: "3px solid #7C3AED" }}>
+      <div className="flex items-center gap-2 mb-2">
+        <CalendarDays size={13} className="text-purple-500 shrink-0" />
+        <SecLabel>Перенесённое задание</SecLabel>
+        <span className="ml-auto text-[10px] font-bold text-purple-600 shrink-0">до {fmt(p.targetDateISO)}</span>
+      </div>
+      <p className="font-bold text-sm mb-1">{p.taskTitle}</p>
+      <p className="text-[11px] text-muted-foreground mb-3">Оригинальная дата: {fmt(p.dateISO)}</p>
+      {subStatus === "approved" ? (
+        <div className="flex items-center gap-2 p-2.5 bg-green-50 rounded-xl border border-green-200">
+          <CheckCircle2 size={14} className="text-green-500" />
+          <p className="text-xs font-bold text-green-700">Зачтено!</p>
+        </div>
+      ) : subStatus === "pending" ? (
+        <div className="flex items-center gap-2 p-2.5 bg-blue-50 rounded-xl border border-blue-200">
+          <Clock size={14} className="text-blue-500" />
+          <p className="text-xs font-bold text-blue-700">На проверке у организатора</p>
+        </div>
+      ) : (
+        <button onClick={goSubmit}
+          className="w-full py-2.5 rounded-xl font-bold text-sm text-white"
+          style={{ background: "#7C3AED" }}>
+          Сдать задание
+        </button>
+      )}
+    </Card>
   );
 }

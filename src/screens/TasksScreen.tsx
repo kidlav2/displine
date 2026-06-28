@@ -1,12 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, RefreshCw, CalendarDays } from "lucide-react";
 import { useSearchParams, useNavigate } from "react-router";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
-import { submitProof, subscribeToTodayTaskSubmission, taskSubmitSubId } from "../lib/firestore";
+import { submitProof, subscribeToTodayTaskSubmission, taskSubmitSubId, runCheckInSubId } from "../lib/firestore";
 import { localNow } from "../lib/timezone";
 import { todayISOInTz } from "../lib/dates";
 import type { SubStatus } from "../types";
@@ -17,6 +17,11 @@ export function TasksScreen() {
   // subId is set when the user checked in from HomeScreen — we update that doc
   // instead of creating a new submission, so check-in and result are one record.
   const checkInSubId = searchParams.get("subId") ?? undefined;
+  // Postponement context — set when submitting for a previously approved postponement
+  const originalDateISO = searchParams.get("originalDateISO") ?? null;
+  const postponementId  = searchParams.get("postponementId")  ?? null;
+  const postponedTitle  = searchParams.get("taskTitle")        ?? null;
+  const isPostponed     = !!(originalDateISO && postponementId);
 
   const navigate = useNavigate();
   const { currentUser, userProfile } = useAuthContext();
@@ -36,17 +41,24 @@ export function TasksScreen() {
   const [stravaActivityId, setStravaActivityId] = useState<number | null>(null);
   // For tasks: deterministic daily subId so resubmits update same doc
   const participantTodayISO = meParticipant ? todayISOInTz(meParticipant.tz) : "";
-  const taskSubId = (type === "task" && currentUser && participantTodayISO)
-    ? taskSubmitSubId(currentUser.uid, participantTodayISO)
+  // For postponed submissions, use the original day's date for all ID generation
+  const effectiveISO = isPostponed ? originalDateISO! : participantTodayISO;
+
+  const taskSubId = (type === "task" && currentUser && effectiveISO)
+    ? taskSubmitSubId(currentUser.uid, effectiveISO)
+    : undefined;
+  // Postponed runs have no existing check-in doc; generate subId from original date
+  const postponedRunSubId = (type === "run" && isPostponed && currentUser && originalDateISO)
+    ? runCheckInSubId(currentUser.uid, originalDateISO)
     : undefined;
   // Use subId from URL (passed by HomeScreen) or fall back to generated one
-  const effectiveSubId = checkInSubId ?? taskSubId;
+  const effectiveSubId = checkInSubId ?? postponedRunSubId ?? taskSubId;
 
-  // Subscribe to today's task submission to restore status after reload
+  // Subscribe to today's (or original day's) task submission to restore status after reload
   useEffect(() => {
-    if (type !== "task" || !challenge?.id || !currentUser?.uid || !participantTodayISO) return;
+    if (type !== "task" || !challenge?.id || !currentUser?.uid || !effectiveISO) return;
     return subscribeToTodayTaskSubmission(
-      challenge.id, currentUser.uid, participantTodayISO,
+      challenge.id, currentUser.uid, effectiveISO,
       (data) => {
         if (!data) return;
         if (data.status === "approved") {
@@ -64,7 +76,7 @@ export function TasksScreen() {
       }
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [challenge?.id, currentUser?.uid, type, participantTodayISO]);
+  }, [challenge?.id, currentUser?.uid, type, effectiveISO]);
   const [syncError, setSyncError] = useState(false);
 
   const handleManualSync = async () => {
@@ -122,6 +134,9 @@ export function TasksScreen() {
     setUploadPct(0);
     try {
       const subType = type === "run" ? "running" : (todayTask?.type ?? "freeform");
+      const taskLabel = isPostponed && postponedTitle
+        ? postponedTitle
+        : (type === "run" ? "Утренняя пробежка" : (todayTask?.title ?? "Задание"));
 
       // Determine late status using the participant's stored timezone, not the device clock.
       // Device timezone can differ from where the challenge was set up (e.g. participant
@@ -129,7 +144,8 @@ export function TasksScreen() {
       const nowInTz = localNow(meParticipant.tz);
       const [nh, nm] = nowInTz.split(":").map(Number);
       const [dh, dm] = todayDeadline.split(":").map(Number);
-      const isLate = (nh * 60 + nm) > (dh * 60 + dm);
+      // Approved postponements grant an extension — never count as late
+      const isLate = isPostponed ? false : (nh * 60 + nm) > (dh * 60 + dm);
 
       const scoreKey = type === "run"
         ? (isLate ? "running_late" : "running_on_time")
@@ -147,7 +163,7 @@ export function TasksScreen() {
         },
         {
           type:             subType as "running" | "checklist" | "freeform",
-          taskTitle:        type === "run" ? "Утренняя пробежка" : (todayTask?.title ?? "Задание"),
+          taskTitle:        taskLabel,
           text:             comment.trim(),
           photoFile,
           km:               type === "run" ? (parseFloat(dist) || undefined) : undefined,
@@ -205,11 +221,21 @@ export function TasksScreen() {
       <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
 
       <div>
+        {isPostponed && (
+          <div className="flex items-center gap-2 mb-2 px-0.5">
+            <CalendarDays size={13} className="text-purple-500 shrink-0" />
+            <p className="text-xs font-bold text-purple-600">
+              Перенесённое задание от {originalDateISO}
+            </p>
+          </div>
+        )}
         <SecLabel>{type === "run" ? "Утренняя пробежка" : "Задание на сегодня"}</SecLabel>
         <p className="font-extrabold text-xl mt-1">
-          {type === "run" ? "Загрузить результат пробежки" : (todayTask?.title ?? "Задание")}
+          {isPostponed && postponedTitle
+            ? postponedTitle
+            : (type === "run" ? "Загрузить результат пробежки" : (todayTask?.title ?? "Задание"))}
         </p>
-        {todayTask?.description && type !== "run" && (
+        {todayTask?.description && type !== "run" && !isPostponed && (
           <p className="text-sm text-muted-foreground mt-1 leading-snug">{todayTask.description}</p>
         )}
       </div>
@@ -259,20 +285,35 @@ export function TasksScreen() {
             >
               {syncing
                 ? <><Loader2 size={14} className="animate-spin" /> Синхронизация…</>
-                : <><RefreshCw size={14} /> Загрузить из Strava</>
+                : <>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ color: "#FC5200" }}>
+                      <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                    </svg>
+                    Загрузить из Strava
+                  </>
               }
             </button>
           ) : (
             <button
               onClick={() => navigate("/app/profile")}
-              className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm"
+              className="w-full py-3 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2"
+              style={{ background: "#FC5200" }}
             >
-              <ExternalLink size={14} /> Подключить Strava
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+              </svg>
+              Connect with Strava
             </button>
           )}
           {syncMsg && (
             <p className={`text-xs text-center font-semibold ${syncError ? "text-red-500" : "text-green-600"}`}>
               {syncMsg}
+            </p>
+          )}
+          {stravaConnected && (
+            <p className="text-[10px] text-center text-muted-foreground">
+              Powered by{" "}
+              <span className="font-bold" style={{ color: "#FC5200" }}>Strava</span>
             </p>
           )}
         </>

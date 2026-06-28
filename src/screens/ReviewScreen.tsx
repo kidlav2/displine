@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Camera, Activity, CheckSquare, Layers } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, Plus, Camera, Activity, CheckSquare, Layers, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp, Lightbox } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
@@ -7,9 +7,9 @@ import { findCity, utcLabel, localNow } from "../lib/timezone";
 import { fmtDate, dayToDate, parseChallengeStartDate } from "../lib/dates";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { reviewSubmission, logPenalty, type FeedActor } from "../lib/firestore";
+import { reviewSubmission, logPenalty, subscribeToPostponementQueue, resolvePostponement, type FeedActor } from "../lib/firestore";
 import { CreateTaskShell } from "../components/CreateTaskShell";
-import type { ReviewFilter, ReviewItem } from "../types";
+import type { PostponementRequest, ReviewFilter, ReviewItem } from "../types";
 
 export function ReviewScreen() {
   const { challenge, adminTz, meParticipant } = useAppContext();
@@ -24,15 +24,22 @@ export function ReviewScreen() {
   const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
   const [lightboxIdx, setLightboxIdx] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
+  const [postponementQueue, setPostponementQueue] = useState<PostponementRequest[]>([]);
+
+  useEffect(() => {
+    if (!challenge?.id) return;
+    return subscribeToPostponementQueue(challenge.id, setPostponementQueue);
+  }, [challenge?.id]);
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
   const challengeStart = parseChallengeStartDate(challenge.startDate);
   const d = dayToDate(reviewDay, challengeStart);
   const counts = {
-    all:     challenge.queue.length,
-    running: challenge.queue.filter(q => q.type === "running").length,
-    task:    challenge.queue.filter(q => q.type === "checklist" || q.type === "freeform").length,
+    all:          challenge.queue.length,
+    running:      challenge.queue.filter(q => q.type === "running").length,
+    task:         challenge.queue.filter(q => q.type === "checklist" || q.type === "freeform").length,
+    postponements: postponementQueue.length,
   };
   const filtered = challenge.queue.filter(q =>
     filter === "all" ||
@@ -41,9 +48,10 @@ export function ReviewScreen() {
   );
 
   const FILTER_LABELS: { key: ReviewFilter; label: string }[] = [
-    { key: "all",     label: `Все (${counts.all})`             },
-    { key: "running", label: `Пробежка (${counts.running})`    },
-    { key: "task",    label: `Задание (${counts.task})`        },
+    { key: "all",          label: `Все (${counts.all})`                         },
+    { key: "running",      label: `Пробежка (${counts.running})`                },
+    { key: "task",         label: `Задание (${counts.task})`                    },
+    { key: "postponements", label: `Переносы (${counts.postponements})`         },
   ];
 
   const act = async (item: ReviewItem, status: "approved" | "rejected", latePenalty = false) => {
@@ -81,6 +89,19 @@ export function ReviewScreen() {
       }
     } catch (e) {
       console.error("[ReviewScreen] act failed:", e);
+    } finally {
+      setActLoading(false);
+      setExpanded(null);
+      setDraftComment("");
+    }
+  };
+
+  const actPostponement = async (p: PostponementRequest, decision: "approved" | "rejected") => {
+    setActLoading(true);
+    try {
+      await resolvePostponement(challenge.id, p.id, decision, draftComment.trim() || undefined);
+    } catch (e) {
+      console.error("[ReviewScreen] resolvePostponement failed:", e);
     } finally {
       setActLoading(false);
       setExpanded(null);
@@ -186,7 +207,10 @@ export function ReviewScreen() {
                 </div>
               </div>
               {item.stravaSource && (
-                <span className="mt-1 inline-flex px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC4C02" }}>
+                <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC5200" }}>
+                  <svg width="7" height="7" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                    <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                  </svg>
                   Strava
                 </span>
               )}
@@ -289,36 +313,55 @@ export function ReviewScreen() {
           </button>
         </div>
         <div className="flex gap-2 overflow-x-auto pb-3 mb-2" style={{ scrollbarWidth: "none" }}>{filterPills}</div>
-        {filtered.length === 0 && <p className="text-center text-sm text-muted-foreground py-12">Нет отправок</p>}
-        <div className="space-y-2">
-          {filtered.map(item => (
-            <div key={item.id}>
-              <button onClick={() => setExpanded(expanded === item.id ? null : item.id)} className="w-full text-left">
-                <Card className={`!p-3.5 ${expanded === item.id ? "rounded-b-none" : ""}`}
-                  style={expanded === item.id ? { borderBottomColor: "transparent" } : {}}>
-                  <div className="flex items-center gap-3">
-                    <Av ini={item.ini} sz="sm" admin={item.isAdmin} onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <button className="text-sm font-bold hover:underline leading-none" onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }}>{item.name}</button>
-                        {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">{typeIcon(item.type)}{item.task || (item.type === "running" ? "Пробежка" : item.type === "checklist" ? "Чеклист" : "Произвольное")}</span>
-                        {item.isLate && <span className="text-[10px] font-bold text-orange-400">оп.</span>}
-                        {item.checkIn !== "—" && <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} label={false} />}
-                      </div>
-                    </div>
-                    <StatusBadge status={item.status} />
-                  </div>
-                </Card>
-              </button>
-              {expanded === item.id && (
-                <Card className="rounded-t-none border-t-0">{expandDetail(item)}</Card>
-              )}
+
+        {filter === "postponements" ? (
+          <>
+            {postponementQueue.length === 0 && (
+              <p className="text-center text-sm text-muted-foreground py-12">Нет запросов на перенос</p>
+            )}
+            <div className="space-y-2">
+              {postponementQueue.map(p => (
+                <PostponementItem key={p.id} p={p} expanded={expanded === p.id}
+                  onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+                  draftComment={draftComment} onCommentChange={setDraftComment}
+                  loading={actLoading} onAct={actPostponement} />
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <>
+            {filtered.length === 0 && <p className="text-center text-sm text-muted-foreground py-12">Нет отправок</p>}
+            <div className="space-y-2">
+              {filtered.map(item => (
+                <div key={item.id}>
+                  <button onClick={() => setExpanded(expanded === item.id ? null : item.id)} className="w-full text-left">
+                    <Card className={`!p-3.5 ${expanded === item.id ? "rounded-b-none" : ""}`}
+                      style={expanded === item.id ? { borderBottomColor: "transparent" } : {}}>
+                      <div className="flex items-center gap-3">
+                        <Av ini={item.ini} sz="sm" admin={item.isAdmin} onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <button className="text-sm font-bold hover:underline leading-none" onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }}>{item.name}</button>
+                            {item.isAdmin && <span className="text-[9px] font-extrabold text-blue-500">ORG</span>}
+                          </div>
+                          <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span className="flex items-center gap-1 text-xs text-muted-foreground">{typeIcon(item.type)}{item.task || (item.type === "running" ? "Пробежка" : item.type === "checklist" ? "Чеклист" : "Произвольное")}</span>
+                            {item.isLate && <span className="text-[10px] font-bold text-orange-400">оп.</span>}
+                            {item.checkIn !== "—" && <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} label={false} />}
+                          </div>
+                        </div>
+                        <StatusBadge status={item.status} />
+                      </div>
+                    </Card>
+                  </button>
+                  {expanded === item.id && (
+                    <Card className="rounded-t-none border-t-0">{expandDetail(item)}</Card>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {/* ── DESKTOP layout ── */}
@@ -353,7 +396,18 @@ export function ReviewScreen() {
         </div>
 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-          {filtered.length === 0 ? (
+          {filter === "postponements" ? (
+            <div className="p-6 space-y-3">
+              {postponementQueue.length === 0 ? (
+                <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Нет запросов на перенос</div>
+              ) : postponementQueue.map(p => (
+                <PostponementItem key={p.id} p={p} expanded={expanded === p.id}
+                  onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+                  draftComment={draftComment} onCommentChange={setDraftComment}
+                  loading={actLoading} onAct={actPostponement} />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Нет отправок за этот день</div>
           ) : (
             <table className="w-full text-sm border-collapse">
@@ -430,5 +484,109 @@ export function ReviewScreen() {
         </div>
       </div>
     </>
+  );
+}
+
+// ── Postponement review item ──────────────────────────────────────────────────
+function PostponementItem({
+  p, expanded, onToggle, draftComment, onCommentChange, loading, onAct,
+}: {
+  p: PostponementRequest;
+  expanded: boolean;
+  onToggle: () => void;
+  draftComment: string;
+  onCommentChange: (v: string) => void;
+  loading: boolean;
+  onAct: (p: PostponementRequest, decision: "approved" | "rejected") => void;
+}) {
+  const fmt = (iso: string) => {
+    try { return new Date(iso + "T00:00:00").toLocaleDateString("ru-RU", { day: "numeric", month: "short" }); }
+    catch { return iso; }
+  };
+  const typeLabel = p.type === "running" ? "Пробежка" : "Задание";
+
+  return (
+    <div>
+      <button onClick={onToggle} className="w-full text-left">
+        <Card className={`!p-3.5 ${expanded ? "rounded-b-none" : ""}`}
+          style={expanded ? { borderBottomColor: "transparent" } : {}}>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+              <CalendarDays size={14} className="text-purple-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-bold leading-none">{p.participantName}</p>
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground">{typeLabel} · {p.taskTitle}</span>
+                <span className="text-[10px] font-bold text-purple-600">{fmt(p.dateISO)} → до {fmt(p.targetDateISO)}</span>
+              </div>
+              {p.reason && (
+                <p className="text-[11px] italic text-muted-foreground mt-0.5 truncate">«{p.reason}»</p>
+              )}
+            </div>
+            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">
+              Ожидает
+            </span>
+          </div>
+        </Card>
+      </button>
+      {expanded && (
+        <Card className="rounded-t-none border-t-0">
+          <div className="p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <p className="text-muted-foreground mb-0.5">Участник</p>
+                <p className="font-bold">{p.participantName}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Тип</p>
+                <p className="font-bold">{typeLabel}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Задание</p>
+                <p className="font-bold">{p.taskTitle}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Оригинальная дата</p>
+                <p className="font-bold">{fmt(p.dateISO)}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-0.5">Запрошен перенос до</p>
+                <p className="font-bold text-purple-700">{fmt(p.targetDateISO)}</p>
+              </div>
+            </div>
+            {p.reason && (
+              <div className="bg-muted rounded-xl px-3 py-2.5">
+                <p className="text-[10px] font-extrabold text-muted-foreground mb-1">ПРИЧИНА</p>
+                <p className="text-xs text-foreground leading-snug">{p.reason}</p>
+              </div>
+            )}
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground">Комментарий организатора (необязательно)</label>
+              <textarea
+                placeholder="Видна участнику после решения…"
+                value={draftComment}
+                onChange={e => onCommentChange(e.target.value)}
+                rows={2}
+                className="w-full mt-1 text-xs bg-muted rounded-xl px-3 py-2 outline-none resize-none placeholder-muted-foreground"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => onAct(p, "rejected")} disabled={loading}
+                className="flex-1 py-2 rounded-xl border-2 border-red-200 text-red-500 font-bold text-sm disabled:opacity-50">
+                Отклонить
+              </button>
+              <button onClick={() => onAct(p, "approved")} disabled={loading}
+                className="flex-1 py-2 rounded-xl font-bold text-sm text-white disabled:opacity-50"
+                style={{ background: "#7C3AED" }}>
+                {loading ? "…" : "Одобрить"}
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
   );
 }

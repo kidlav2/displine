@@ -18,7 +18,26 @@ export interface TeamMember {
 export type CommTab    = "leaderboard" | "feed" | "achievements";
 export type SortKey    = "score" | "distance";
 export type SubStatus  = "idle" | "pending" | "approved" | "rejected";
-export type ReviewFilter  = "all" | "running" | "task";
+export type ReviewFilter  = "all" | "running" | "task" | "postponements";
+
+export type PostponementStatus = "pending" | "approved" | "rejected";
+
+export interface PostponementRequest {
+  id: string;
+  participantUid: string;
+  participantName: string;
+  participantIni: string;
+  type: "task" | "running";
+  taskId: string | null;
+  taskTitle: string;
+  dateISO: string;
+  targetDateISO: string;
+  status: PostponementStatus;
+  reason: string;
+  requestedAt: string;
+  resolvedAt?: string;
+  organizerNote?: string;
+}
 export type ManageSection = "main" | "create-task" | "create-achievement" | "participants" | "settings" | "team";
 export type ChallengeStatus = "active" | "completed" | "upcoming";
 
