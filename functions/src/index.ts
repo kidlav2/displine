@@ -482,10 +482,18 @@ async function processSingleParticipant(
     if (currentLocalTime <= deadline) return { status: "before_deadline" };
   }
 
-  // Idempotency: skip if a submission already exists for today
-  const subId  = `${uid}_${dateStr}`;
-  const subRef = db.doc(`challenges/${challengeId}/submissions/${subId}`);
-  if ((await subRef.get()).exists) return { status: "already_submitted" };
+  // Skip only if already approved or pending (fully submitted). A checked_in doc
+  // means the user took a check-in photo but hasn't submitted proof yet — we can
+  // overwrite it with Strava data so they don't have to upload manually.
+  const subId   = `${uid}_${dateStr}`;
+  const subRef  = db.doc(`challenges/${challengeId}/submissions/${subId}`);
+  const subSnap = await subRef.get();
+  if (subSnap.exists) {
+    const existingStatus = subSnap.data()?.status as string | undefined;
+    if (existingStatus === "approved" || existingStatus === "pending") {
+      return { status: "already_submitted" };
+    }
+  }
 
   // Get a valid Strava access token (refreshes if needed)
   const accessToken = await getStravaAccessToken(db, uid, clientId, clientSecret);
@@ -569,8 +577,9 @@ async function processSingleParticipant(
   };
 
   // Atomic batch: submission + feed + participant km/results
+  // Use merge:true on submission so a pre-existing checkInPhotoUrl is preserved.
   const batch = db.batch();
-  batch.set(subRef, submissionData);
+  batch.set(subRef, submissionData, { merge: true });
   batch.set(db.doc(`challenges/${challengeId}/feed/${subId}`), feedData, { merge: true });
   batch.update(db.doc(`challenges/${challengeId}/participants/${uid}`), {
     results: FieldValue.arrayUnion({ type: "running", scoreKey }),
