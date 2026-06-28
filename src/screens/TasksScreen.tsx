@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2 } from "lucide-react";
-import { useSearchParams } from "react-router";
+import { useSearchParams, useNavigate } from "react-router";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
@@ -17,8 +17,10 @@ export function TasksScreen() {
   // instead of creating a new submission, so check-in and result are one record.
   const checkInSubId = searchParams.get("subId") ?? undefined;
 
-  const { currentUser } = useAuthContext();
+  const navigate = useNavigate();
+  const { currentUser, userProfile } = useAuthContext();
   const { challenge, meParticipant, todayTask, todayDeadline, scoring } = useAppContext();
+  const stravaConnected = !!userProfile?.stravaConnected;
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
@@ -212,9 +214,18 @@ export function TasksScreen() {
               </div>
             </Card>
           </div>
-          <button className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm">
-            <ExternalLink size={14} /> Подключить Strava
-          </button>
+          {stravaConnected ? (
+            <div className="w-full py-3 rounded-xl border-2 border-orange-400 bg-orange-50 flex items-center justify-center gap-2 font-semibold text-sm text-orange-600">
+              <ExternalLink size={14} /> Strava подключена — авто-синхронизация включена
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate("/app/profile")}
+              className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm"
+            >
+              <ExternalLink size={14} /> Подключить Strava
+            </button>
+          )}
         </>
       )}
 
