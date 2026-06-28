@@ -628,10 +628,14 @@ export const manualSyncStrava = onCall(
           db.doc(`challenges/${challengeId}`).get(),
           db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
         ]);
+        console.log(`[manualSyncStrava] challenge=${challengeId} chalExists=${chalSnap.exists} pExists=${pSnap.exists} chalStatus=${chalSnap.data()?.status}`);
         if (!chalSnap.exists || !pSnap.exists) continue;
 
         const chalStatus = chalSnap.data()?.status ?? "active";
-        if (chalStatus !== "active") continue;
+        if (chalStatus === "finished" || chalStatus === "cancelled") {
+          console.log(`[manualSyncStrava] skipping challenge=${challengeId} status="${chalStatus}"`);
+          continue;
+        }
 
         const result = await processSingleParticipant(
           db, clientId, clientSecret,
@@ -679,7 +683,8 @@ export const syncStravaActivities = onSchedule(
             db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
           ]);
           if (!chalSnap.exists || !pSnap.exists) continue;
-          if (chalSnap.data()?.status !== "active") continue;
+          const s = chalSnap.data()?.status ?? "active";
+          if (s === "finished" || s === "cancelled") continue;
 
           await processSingleParticipant(
             db, clientId, clientSecret,
