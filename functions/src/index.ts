@@ -601,31 +601,42 @@ export const manualSyncStrava = onCall(
       throw new HttpsError("failed-precondition", "Strava not connected.");
     }
 
-    // Collection group query — finds all participant docs for this user across every
-    // challenge without relying on the challengeRoles map (which may be missing for
-    // users added via admin flows or before the field was introduced).
-    const participantsSnap = await db.collectionGroup("participants")
-      .where("uid", "==", uid)
-      .get();
-
-    console.log(`[manualSyncStrava] uid=${uid} found ${participantsSnap.size} participant docs`);
-
     const results: Array<{ challengeId: string } & SyncStatus> = [];
 
-    for (const pDoc of participantsSnap.docs) {
-      const challengeId = pDoc.ref.parent.parent!.id;
-      try {
-        const chalSnap = await db.doc(`challenges/${challengeId}`).get();
-        if (!chalSnap.exists) continue;
+    // Primary: challengeRoles map on user doc (populated when joining via standard flow)
+    const challengeRoles = (userSnap.data()?.challengeRoles ?? {}) as Record<string, string>;
+    let challengeIds = Object.keys(challengeRoles);
 
-        // Treat missing status field as "active" — same default as the client app.
+    // Fallback: collection group query (requires index -- try if challengeRoles is empty)
+    if (challengeIds.length === 0) {
+      try {
+        const participantsSnap = await db.collectionGroup("participants")
+          .where("uid", "==", uid)
+          .get();
+        challengeIds = participantsSnap.docs.map(d => d.ref.parent.parent!.id);
+        console.log(`[manualSyncStrava] uid=${uid} collectionGroup fallback: ${challengeIds.length} challenges`);
+      } catch (indexErr) {
+        console.warn(`[manualSyncStrava] collectionGroup failed (index building?):`, indexErr);
+      }
+    }
+
+    console.log(`[manualSyncStrava] uid=${uid} challengeIds=${JSON.stringify(challengeIds)}`);
+
+    for (const challengeId of challengeIds) {
+      try {
+        const [chalSnap, pSnap] = await Promise.all([
+          db.doc(`challenges/${challengeId}`).get(),
+          db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
+        ]);
+        if (!chalSnap.exists || !pSnap.exists) continue;
+
         const chalStatus = chalSnap.data()?.status ?? "active";
         if (chalStatus !== "active") continue;
 
         const result = await processSingleParticipant(
           db, clientId, clientSecret,
           uid, challengeId,
-          pDoc.data(),
+          pSnap.data()!,
           chalSnap.data()!,
           { skipDeadline: true },
         );
