@@ -236,11 +236,11 @@ export function TasksScreen() {
 
       {type === "run" && (
         <>
-          <Card className="!p-4">
+          <Card className="!p-4 text-center">
             <SecLabel>Дистанция</SecLabel>
-            <div className="flex items-end gap-1.5 mt-2">
+            <div className="flex items-end justify-center gap-1.5 mt-2">
               <input type="number" placeholder="5.0" value={dist} onChange={e => setDist(e.target.value)}
-                className="flex-1 w-0 bg-transparent outline-none placeholder-muted-foreground"
+                className="w-20 bg-transparent outline-none placeholder-muted-foreground text-center"
                 style={{ fontFamily: "'Barlow Condensed', sans-serif", fontSize: 36, fontWeight: 900, lineHeight: 1 }} />
               <span className="text-base font-bold text-muted-foreground mb-0.5">км</span>
             </div>

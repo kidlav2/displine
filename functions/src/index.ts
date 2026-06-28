@@ -601,23 +601,25 @@ export const manualSyncStrava = onCall(
       throw new HttpsError("failed-precondition", "Strava not connected.");
     }
 
-    const challengeRoles = (userSnap.data()?.challengeRoles ?? {}) as Record<string, string>;
+    // Query all active challenges where this user is a participant directly —
+    // more reliable than relying on a challengeRoles map on the user doc.
+    const activeChallengesSnap = await db.collection("challenges")
+      .where("status", "==", "active")
+      .get();
+
     const results: Array<{ challengeId: string } & SyncStatus> = [];
 
-    for (const challengeId of Object.keys(challengeRoles)) {
+    for (const chalDoc of activeChallengesSnap.docs) {
+      const challengeId = chalDoc.id;
       try {
-        const [chalSnap, pSnap] = await Promise.all([
-          db.doc(`challenges/${challengeId}`).get(),
-          db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
-        ]);
-        if (!chalSnap.exists || !pSnap.exists) continue;
-        if (chalSnap.data()?.status !== "active") continue;
+        const pSnap = await db.doc(`challenges/${challengeId}/participants/${uid}`).get();
+        if (!pSnap.exists) continue;
 
         const result = await processSingleParticipant(
           db, clientId, clientSecret,
           uid, challengeId,
           pSnap.data()!,
-          chalSnap.data()!,
+          chalDoc.data(),
           { skipDeadline: true },
         );
         results.push({ challengeId, ...result });
