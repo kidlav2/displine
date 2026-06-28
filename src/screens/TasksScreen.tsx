@@ -260,7 +260,7 @@ export function TasksScreen() {
             <button
               onClick={handleManualSync}
               disabled={syncing}
-              className="w-full py-3 rounded-xl border-2 border-green-400 bg-green-50 flex items-center justify-center gap-2 font-semibold text-sm text-green-700 disabled:opacity-60"
+              className="w-full py-3 rounded-xl border-2 border-border bg-card flex items-center justify-center gap-2 font-semibold text-sm disabled:opacity-60"
             >
               {syncing
                 ? <><Loader2 size={14} className="animate-spin" /> Синхронизация…</>
@@ -276,7 +276,7 @@ export function TasksScreen() {
             </button>
           )}
           {syncMsg && (
-            <p className={`text-xs text-center font-semibold ${syncError ? "text-red-500" : "text-green-700"}`}>
+            <p className={`text-xs text-center font-semibold ${syncError ? "text-red-500" : "text-green-600"}`}>
               {syncMsg}
             </p>
           )}

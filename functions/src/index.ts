@@ -601,25 +601,30 @@ export const manualSyncStrava = onCall(
       throw new HttpsError("failed-precondition", "Strava not connected.");
     }
 
-    // Query all active challenges where this user is a participant directly —
-    // more reliable than relying on a challengeRoles map on the user doc.
-    const activeChallengesSnap = await db.collection("challenges")
-      .where("status", "==", "active")
-      .get();
+    // Use challengeRoles from the user doc — same source AppContext uses on the client.
+    // Avoids a status-filtered query that misses challenges lacking a "status" field.
+    const challengeRoles = (userSnap.data()?.challengeRoles ?? {}) as Record<string, string>;
+    const challengeIds = Object.keys(challengeRoles);
 
     const results: Array<{ challengeId: string } & SyncStatus> = [];
 
-    for (const chalDoc of activeChallengesSnap.docs) {
-      const challengeId = chalDoc.id;
+    for (const challengeId of challengeIds) {
       try {
-        const pSnap = await db.doc(`challenges/${challengeId}/participants/${uid}`).get();
-        if (!pSnap.exists) continue;
+        const [chalSnap, pSnap] = await Promise.all([
+          db.doc(`challenges/${challengeId}`).get(),
+          db.doc(`challenges/${challengeId}/participants/${uid}`).get(),
+        ]);
+        if (!chalSnap.exists || !pSnap.exists) continue;
+
+        // Treat missing status field as "active" — same default as the client app.
+        const status = chalSnap.data()?.status ?? "active";
+        if (status !== "active") continue;
 
         const result = await processSingleParticipant(
           db, clientId, clientSecret,
           uid, challengeId,
           pSnap.data()!,
-          chalDoc.data(),
+          chalSnap.data()!,
           { skipDeadline: true },
         );
         results.push({ challengeId, ...result });
