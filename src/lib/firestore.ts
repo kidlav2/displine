@@ -1294,3 +1294,8 @@ export async function getUpcomingTasks(challengeId: string, fromDateISO: string)
 export async function deleteTask(challengeId: string, taskId: string): Promise<void> {
   await deleteDoc(doc(db, "challenges", challengeId, "tasks", taskId));
 }
+
+/** Delete a challenge document. Subcollections are left as orphans (cleanup via Cloud Function). */
+export async function deleteChallenge(challengeId: string): Promise<void> {
+  await deleteDoc(challengeRef(challengeId));
+}

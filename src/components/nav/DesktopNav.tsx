@@ -33,10 +33,11 @@ function tabsForRole(role: UserRole): TabDef[] {
 }
 
 export function DesktopNav() {
-  const { challenge, userRole } = useAppContext();
+  const { challenge, userRole, postponementQueue } = useAppContext();
   const location = useLocation();
   const navigate = useNavigate();
   const tabs = tabsForRole(userRole);
+  const reviewBadge = (challenge?.queue?.length ?? 0) + (postponementQueue?.length ?? 0);
 
   return (
     <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 w-60 bg-card border-r border-border">
@@ -58,12 +59,18 @@ export function DesktopNav() {
       <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
         {tabs.map(({ path, Icon, label }) => {
           const active = location.pathname === path;
+          const badge = path === "/app/review" && reviewBadge > 0 ? reviewBadge : 0;
           return (
             <button key={path} onClick={() => navigate(path)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
               style={active ? { background: "#FFF3F0", color: BRAND_COLOR } : { color: "#6B7280" }}>
               <Icon size={18} strokeWidth={active ? 2.5 : 1.5} style={{ color: active ? BRAND_COLOR : "#9BA5B4" }} />
               {label}
+              {badge > 0 && (
+                <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-extrabold text-white flex items-center justify-center" style={{ background: BRAND_COLOR }}>
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
             </button>
           );
         })}

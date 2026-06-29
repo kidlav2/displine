@@ -647,6 +647,11 @@ function PostponeSection({
             onChange={e => onTargetDateChange(e.target.value)}
             className="w-full mt-1 bg-background border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none"
           />
+          {targetDate && targetDate.length >= 10 && (
+            <p className="text-[10px] text-muted-foreground mt-0.5 font-semibold">
+              {`${targetDate.slice(8,10)}.${targetDate.slice(5,7)}.${targetDate.slice(0,4)}`}
+            </p>
+          )}
         </div>
         {error && <p className="text-[10px] text-red-500 font-semibold">{error}</p>}
         <div className="flex gap-2">

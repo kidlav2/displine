@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import type React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import type { Achievement, ChallengeData, Participant, ScoringConfig, Task, UserRole } from "../types";
+import type { Achievement, ChallengeData, Participant, PostponementRequest, ScoringConfig, Task, UserRole } from "../types";
 import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
 import { detectTz } from "../lib/timezone";
 import { challengeCurrentDay, todayRunDayInTz, todayISO } from "../lib/dates";
@@ -10,6 +10,7 @@ import { useAuthContext } from "./AuthContext";
 import {
   challengeRef, participantsCol, tasksCol, teamCol, achievementsCol,
   snapToParticipant, snapToReviewItem, snapToTask, snapToTeamMember, snapToAchievement,
+  subscribeToPostponementQueue,
 } from "../lib/firestore";
 
 interface AppContextType {
@@ -33,6 +34,7 @@ interface AppContextType {
   isOwner: boolean;
   scoring: ScoringConfig;
   achievements: Achievement[];
+  postponementQueue: PostponementRequest[];
   updateChallenge: (id: string, update: Partial<ChallengeData>) => void;
 }
 
@@ -49,6 +51,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [challengeLoading, setChallengeLoading] = useState(true);
   const [todayTask, setTodayTask]   = useState<Task | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [postponementQueue, setPostponementQueue] = useState<PostponementRequest[]>([]);
 
   // ── Load challenge metadata from Firestore ────────────────────────────────
   useEffect(() => {
@@ -217,7 +220,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (err) => console.error("[AppContext] team subscription error:", err)
     );
 
-    return () => { queueUnsub(); teamUnsub(); };
+    const postponementsUnsub = subscribeToPostponementQueue(
+      selectedId,
+      (items) => setPostponementQueue(items)
+    );
+
+    return () => { queueUnsub(); teamUnsub(); postponementsUnsub(); };
   }, [selectedId, currentUser, isAdmin]);
 
   // FLAG: updateChallenge only patches local React state. All production writes
@@ -242,6 +250,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       todayTask, todayDeadline,
       challenge, meParticipant, isAdmin, isOwner, scoring,
       achievements,
+      postponementQueue,
       updateChallenge,
     }}>
       {children}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight, Plus, Camera, Activity, CheckSquare, Layers, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp, Lightbox } from "../components/atoms";
@@ -7,12 +7,12 @@ import { findCity, utcLabel, localNow } from "../lib/timezone";
 import { fmtDate, dayToDate, parseChallengeStartDate } from "../lib/dates";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { reviewSubmission, logPenalty, subscribeToPostponementQueue, resolvePostponement, type FeedActor } from "../lib/firestore";
+import { reviewSubmission, logPenalty, resolvePostponement, type FeedActor } from "../lib/firestore";
 import { CreateTaskShell } from "../components/CreateTaskShell";
 import type { PostponementRequest, ReviewFilter, ReviewItem } from "../types";
 
 export function ReviewScreen() {
-  const { challenge, adminTz, meParticipant } = useAppContext();
+  const { challenge, adminTz, meParticipant, postponementQueue } = useAppContext();
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
@@ -24,12 +24,6 @@ export function ReviewScreen() {
   const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
   const [lightboxIdx, setLightboxIdx] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
-  const [postponementQueue, setPostponementQueue] = useState<PostponementRequest[]>([]);
-
-  useEffect(() => {
-    if (!challenge?.id) return;
-    return subscribeToPostponementQueue(challenge.id, setPostponementQueue);
-  }, [challenge?.id]);
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
@@ -330,6 +324,17 @@ export function ReviewScreen() {
           </>
         ) : (
           <>
+            {filter === "all" && postponementQueue.length > 0 && (
+              <div className="mb-3 space-y-2">
+                <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">Запросы на перенос</p>
+                {postponementQueue.map(p => (
+                  <PostponementItem key={p.id} p={p} expanded={expanded === p.id}
+                    onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+                    draftComment={draftComment} onCommentChange={setDraftComment}
+                    loading={actLoading} onAct={actPostponement} />
+                ))}
+              </div>
+            )}
             {filtered.length === 0 && <p className="text-center text-sm text-muted-foreground py-12">Нет отправок</p>}
             <div className="space-y-2">
               {filtered.map(item => (
@@ -407,7 +412,20 @@ export function ReviewScreen() {
                   loading={actLoading} onAct={actPostponement} />
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : (
+            <>
+            {filter === "all" && postponementQueue.length > 0 && (
+              <div className="p-6 pb-0 space-y-2">
+                <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Запросы на перенос</p>
+                {postponementQueue.map(p => (
+                  <PostponementItem key={p.id} p={p} expanded={expanded === p.id}
+                    onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
+                    draftComment={draftComment} onCommentChange={setDraftComment}
+                    loading={actLoading} onAct={actPostponement} />
+                ))}
+              </div>
+            )}
+            {filtered.length === 0 ? (
             <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">Нет отправок за этот день</div>
           ) : (
             <table className="w-full text-sm border-collapse">
@@ -480,6 +498,8 @@ export function ReviewScreen() {
                 ))}
               </tbody>
             </table>
+          )}
+            </>
           )}
         </div>
       </div>

@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ChevronLeft, CheckCircle2, Plus, X } from "lucide-react";
+import { ChevronLeft, CheckCircle2, Plus, X, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, ALL_DAYS, CURRENCIES, DAY_LABELS, bc } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import { updateChallengeDoc } from "../lib/firestore";
+import { updateChallengeDoc, deleteChallenge } from "../lib/firestore";
 import { durationFromDates, addDays } from "../lib/dates";
 import type { ChallengeSettings, ScoringEntry } from "../types";
 
@@ -24,7 +24,7 @@ function fromInputDate(iso: string): string {
 }
 
 export function ChallengeSettingsScreen() {
-  const { challenge } = useAppContext();
+  const { challenge, setSelectedId } = useAppContext();
   const navigate = useNavigate();
 
   const [s, setS] = useState<ChallengeSettings>(challenge.settings);
@@ -36,6 +36,7 @@ export function ChallengeSettingsScreen() {
   );
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const toggleDay = (d: string) => setS(p => {
     const next = { ...p, runSchedule: { ...p.runSchedule } };
@@ -241,6 +242,32 @@ export function ChallengeSettingsScreen() {
           {loading ? "Сохранение…" : "Сохранить настройки"}
         </button>
       )}
+
+      <div className="mt-8 pt-6 border-t border-border">
+        <p className="text-xs font-extrabold tracking-widest uppercase text-red-400 mb-2">Опасная зона</p>
+        <p className="text-xs text-muted-foreground mb-3">Удаление челленджа необратимо. Все данные участников, задания и история будут потеряны.</p>
+        <button
+          disabled={deleteLoading}
+          onClick={async () => {
+            const confirmed = window.confirm(`Удалить челлендж «${challenge.name}»? Это действие необратимо.`);
+            if (!confirmed) return;
+            const confirmed2 = window.confirm(`Вы уверены? Все данные участников будут удалены навсегда.`);
+            if (!confirmed2) return;
+            setDeleteLoading(true);
+            try {
+              await deleteChallenge(challenge.id);
+              setSelectedId(null);
+              navigate("/challenges");
+            } catch {
+              alert("Не удалось удалить челлендж");
+              setDeleteLoading(false);
+            }
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-bold disabled:opacity-40 hover:bg-red-50 transition-colors">
+          <Trash2 size={14} />
+          {deleteLoading ? "Удаление…" : "Удалить челлендж"}
+        </button>
+      </div>
     </div>
   );
 }
