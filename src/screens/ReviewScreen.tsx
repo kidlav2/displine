@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Camera, Activity, CheckSquare, Layers, CalendarDays } from "lucide-react";
+import { Camera, Activity, CheckSquare, Layers, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp, Lightbox } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { findCity, utcLabel, localNow } from "../lib/timezone";
-import { fmtDate, dayToDate, parseChallengeStartDate } from "../lib/dates";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { reviewSubmission, logPenalty, resolvePostponement, type FeedActor } from "../lib/firestore";
-import { CreateTaskShell } from "../components/CreateTaskShell";
 import type { PostponementRequest, ReviewFilter, ReviewItem } from "../types";
 
 export function ReviewScreen() {
@@ -16,19 +14,15 @@ export function ReviewScreen() {
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
-  const [reviewDay, setReviewDay] = useState(challenge.currentDay);
   const [filter, setFilter] = useState<ReviewFilter>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
   const [draftComment, setDraftComment] = useState("");
   const [actLoading, setActLoading] = useState(false);
   const [lightboxPhotos, setLightboxPhotos] = useState<string[]>([]);
   const [lightboxIdx, setLightboxIdx] = useState(0);
-  const [showCreate, setShowCreate] = useState(false);
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
-  const challengeStart = parseChallengeStartDate(challenge.startDate);
-  const d = dayToDate(reviewDay, challengeStart);
   const counts = {
     all:          challenge.queue.length + postponementQueue.length,
     running:      challenge.queue.filter(q => q.type === "running").length,
@@ -102,19 +96,6 @@ export function ReviewScreen() {
       setDraftComment("");
     }
   };
-
-  const dateNav = (
-    <div className="flex items-center gap-2">
-      <button onClick={() => setReviewDay(v => Math.max(1, v - 1))}
-        className="w-8 h-8 rounded-xl border border-border bg-card flex items-center justify-center"><ChevronLeft size={16} /></button>
-      <div className="text-center">
-        <p className="font-extrabold text-sm leading-none">{fmtDate(d)}</p>
-        <p className="text-[11px] text-muted-foreground mt-0.5 font-semibold">День {reviewDay} / {challenge.duration}</p>
-      </div>
-      <button onClick={() => setReviewDay(v => Math.min(challenge.duration, v + 1))}
-        className="w-8 h-8 rounded-xl border border-border bg-card flex items-center justify-center"><ChevronRight size={16} /></button>
-    </div>
-  );
 
   const filterPills = (
     <div className="flex flex-wrap gap-2">
@@ -288,24 +269,10 @@ export function ReviewScreen() {
     return <Layers size={13} className="text-purple-400 shrink-0" />;
   };
 
-  const createTaskModal = showCreate && (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-card">
-      <CreateTaskShell challengeId={challenge.id} onDone={() => setShowCreate(false)} />
-    </div>
-  );
-
   return (
     <>
-      {createTaskModal}
-
       {/* ── MOBILE layout ── */}
       <div className="lg:hidden px-4 pt-5 pb-4">
-        <div className="flex items-center justify-between mb-4">
-          {dateNav}
-          <button onClick={() => setShowCreate(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-white" style={{ background: BRAND_COLOR }}>
-            <Plus size={13} /> Создать задание
-          </button>
-        </div>
         <div className="flex gap-2 overflow-x-auto pb-3 mb-2" style={{ scrollbarWidth: "none" }}>{filterPills}</div>
 
         {filter === "postponements" ? (
@@ -373,10 +340,7 @@ export function ReviewScreen() {
       <div className="hidden lg:flex h-[calc(100vh-0px)] overflow-hidden">
         <div className="w-72 shrink-0 border-r border-border overflow-y-auto bg-card/50 px-5 py-6 space-y-5"
           style={{ scrollbarWidth: "none" }}>
-          <div>
-            <p className="font-extrabold text-lg mb-4">Проверка</p>
-            {dateNav}
-          </div>
+          <p className="font-extrabold text-lg mb-4">Проверка</p>
           <div>
             <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-2">Фильтр по типу</p>
             {filterPills}
@@ -393,11 +357,6 @@ export function ReviewScreen() {
               <p className="text-muted-foreground mt-1 text-[10px]">Метки показывают время участника + ваше время</p>
             </div>
           </div>
-          <button onClick={() => setShowCreate(true)}
-            className="w-full py-3 rounded-xl font-extrabold text-sm text-white flex items-center justify-center gap-2"
-            style={{ background: BRAND_COLOR }}>
-            <Plus size={14} /> Создать задание
-          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
