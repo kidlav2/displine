@@ -1,7 +1,8 @@
-import { useState } from "react";
-import { Globe, Instagram, Link, CheckCircle2, LogOut, Loader2 } from "lucide-react";
+import { useState, useRef } from "react";
+import { Globe, Instagram, Link, CheckCircle2, LogOut, Loader2, Camera } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { updateDoc } from "firebase/firestore";
+import { ref as storageRef, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { useNavigate } from "react-router";
 import { httpsCallable } from "firebase/functions";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -10,7 +11,7 @@ import { TimezoneSettings } from "../components/atoms";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { auth, functions } from "../lib/firebase";
+import { auth, functions, storage } from "../lib/firebase";
 import { writeUserProfile, participantRef } from "../lib/firestore";
 
 const disconnectStravaFn = httpsCallable<Record<string, never>, { success: boolean }>(
@@ -22,14 +23,23 @@ export function ProfileScreen() {
   const { currentUser, userProfile } = useAuthContext();
   const navigate = useNavigate();
 
+  const [name, setName]             = useState(userProfile?.name ?? "");
   const [bio, setBio]               = useState(userProfile?.bio ?? "");
   const [instagram, setInstagram]   = useState(userProfile?.socialLinks?.instagram ?? "");
   const [otherLink, setOtherLink]   = useState(userProfile?.socialLinks?.other ?? "");
   const [saving, setSaving]         = useState(false);
   const [saved, setSaved]           = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [tzSaved, setTzSaved]       = useState(false);
   const [tzSaving, setTzSaving]     = useState(false);
   const [stravaLoading, setStravaLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const nameToIni = (n: string) => {
+    const parts = n.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+    return n.trim().slice(0, 2).toUpperCase();
+  };
 
   const handleTzChange = async (tz: string) => {
     setAdminTz(tz);
@@ -77,17 +87,51 @@ export function ProfileScreen() {
     }
   };
 
-  const saveBio = async () => {
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !currentUser) return;
+    setPhotoUploading(true);
+    try {
+      const sRef = storageRef(storage, `users/${currentUser.uid}/avatar`);
+      const task = uploadBytesResumable(sRef, file);
+      await new Promise<void>((resolve, reject) => {
+        task.on("state_changed", null, reject, resolve);
+      });
+      const photoUrl = await getDownloadURL(task.snapshot.ref);
+      await Promise.all([
+        writeUserProfile(currentUser.uid, {
+          ...(userProfile ?? { name: "", ini: "", timezone: "UTC", challengeRoles: {} }),
+          photoUrl,
+        }),
+        updateDoc(participantRef(challenge.id, currentUser.uid), { photoUrl }),
+      ]);
+    } catch (e) {
+      console.error("[ProfileScreen] avatar upload failed:", e);
+    } finally {
+      setPhotoUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const saveProfile = async () => {
     if (!currentUser || saving) return;
+    const trimmedName = name.trim();
+    if (!trimmedName) return;
     setSaving(true);
     try {
-      await writeUserProfile(currentUser.uid, {
-        ...(userProfile ?? { name: "", ini: "", timezone: "UTC", challengeRoles: {} }),
-        bio: bio.trim() || undefined,
-        socialLinks: (instagram.trim() || otherLink.trim())
-          ? { instagram: instagram.trim() || undefined, other: otherLink.trim() || undefined }
-          : undefined,
-      });
+      const ini = nameToIni(trimmedName);
+      await Promise.all([
+        writeUserProfile(currentUser.uid, {
+          ...(userProfile ?? { name: "", ini: "", timezone: "UTC", challengeRoles: {} }),
+          name: trimmedName,
+          ini,
+          bio: bio.trim() || undefined,
+          socialLinks: (instagram.trim() || otherLink.trim())
+            ? { instagram: instagram.trim() || undefined, other: otherLink.trim() || undefined }
+            : undefined,
+        }),
+        updateDoc(participantRef(challenge.id, currentUser.uid), { name: trimmedName, ini }),
+      ]);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } finally {
@@ -102,8 +146,33 @@ export function ProfileScreen() {
   return (
     <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-5 lg:pt-8 space-y-4 pb-6">
       <div className="flex flex-col items-center text-center pt-2">
-        <Av ini={meParticipant?.ini ?? "?"} photoUrl={meParticipant?.photoUrl} sz="lg" accent />
-        <p className="font-extrabold text-2xl mt-3">{meParticipant?.name ?? "—"}</p>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleAvatarChange}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={photoUploading}
+          className="relative group"
+          aria-label="Изменить фото"
+        >
+          <Av ini={meParticipant?.ini ?? "?"} photoUrl={meParticipant?.photoUrl} sz="lg" accent />
+          <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            {photoUploading
+              ? <Loader2 size={20} className="text-white animate-spin" />
+              : <Camera size={20} className="text-white" />}
+          </div>
+          {photoUploading && (
+            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center">
+              <Loader2 size={20} className="text-white animate-spin" />
+            </div>
+          )}
+        </button>
+        <p className="text-[10px] text-muted-foreground mt-1.5">Нажмите на аватар, чтобы изменить фото</p>
+        <p className="font-extrabold text-2xl mt-2">{meParticipant?.name ?? "—"}</p>
         <p className="text-sm text-muted-foreground">{challenge.emoji} {challenge.name}</p>
       </div>
 
@@ -138,8 +207,17 @@ export function ProfileScreen() {
         </div>
       </Card>
 
-      {/* Bio + social links */}
+      {/* Name + bio + social links */}
       <Card className="!p-4 space-y-3">
+        <div>
+          <SecLabel>Имя</SecLabel>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Ваше имя"
+            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none placeholder-muted-foreground font-semibold"
+          />
+        </div>
         <div className="flex items-baseline justify-between">
           <SecLabel>О себе</SecLabel>
           <span className="text-[10px] text-muted-foreground tabular-nums">{bio.length}/500</span>
@@ -171,8 +249,8 @@ export function ProfileScreen() {
           />
         </div>
         <button
-          onClick={saveBio}
-          disabled={saving}
+          onClick={saveProfile}
+          disabled={saving || !name.trim()}
           className="w-full py-2.5 rounded-xl font-bold text-sm text-white disabled:opacity-40 flex items-center justify-center gap-2"
           style={{ background: BRAND_COLOR }}
         >
