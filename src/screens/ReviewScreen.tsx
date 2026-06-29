@@ -30,7 +30,7 @@ export function ReviewScreen() {
   const challengeStart = parseChallengeStartDate(challenge.startDate);
   const d = dayToDate(reviewDay, challengeStart);
   const counts = {
-    all:          challenge.queue.length,
+    all:          challenge.queue.length + postponementQueue.length,
     running:      challenge.queue.filter(q => q.type === "running").length,
     task:         challenge.queue.filter(q => q.type === "checklist" || q.type === "freeform").length,
     postponements: postponementQueue.length,
