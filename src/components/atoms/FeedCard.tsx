@@ -145,13 +145,19 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
               </span>
             )}
             {item.isLate && <span className="text-xs font-bold text-orange-400">Опоздание</span>}
-            {item.stravaSource && (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC5200" }}>
-                <svg width="8" height="8" viewBox="0 0 24 24" fill="white" aria-hidden="true">
-                  <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-                </svg>
-                Strava
-              </span>
+            {item.type === "running" && (
+              item.stravaSource ? (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC5200" }}>
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                    <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                  </svg>
+                  Данные из Strava
+                </span>
+              ) : (
+                <span className="text-[9px] font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  Загружено вручную
+                </span>
+              )
             )}
             <ScorePill scoreKey={item.submissionStatus === "approved"
               ? (item.type === "running" ? (item.isLate ? "running_late" : "running_on_time") : "task_completed")

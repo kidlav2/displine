@@ -89,6 +89,7 @@ export interface ReviewItem {
   ini: string; name: string; isAdmin: boolean;
   type: "running" | "checklist" | "freeform"; task: string;
   checkIn: string; resultT: string;
+  checkInISO?: string;     // full ISO datetime of checkIn Timestamp; used to display Strava activity time
   participantTz: string;
   status: string; km: number | null;
   organizerComment: string | null;

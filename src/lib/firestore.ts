@@ -151,6 +151,7 @@ export function snapToReviewItem(snap: QueryDocumentSnapshot<DocumentData>): Rev
     task:            d.taskTitle        ?? d.task ?? "",
     checkIn,
     resultT,
+    checkInISO:      checkInRaw instanceof Timestamp ? checkInRaw.toDate().toISOString() : undefined,
     participantTz:   d.participantTz    ?? "UTC",
     status:          d.status           ?? "pending",
     km:              d.km               ?? null,

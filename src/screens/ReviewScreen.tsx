@@ -66,7 +66,7 @@ export function ReviewScreen() {
           item.participantId,
           {
             reason: "Опоздание на пробежку",
-            livesLost: 1,
+            livesLost: item.type === "running" ? 0 : 1,
             amount: challenge.settings.penaltyAmount,
             burpees: challenge.settings.burpees > 0 ? challenge.settings.burpees : undefined,
             loggedBy: currentUser.uid,
@@ -130,7 +130,37 @@ export function ReviewScreen() {
       {/* Type-specific content */}
       {item.type === "running" && (
         <div className="mb-3">
-          <div className="flex gap-2 mb-3">
+          {/* Source badge */}
+          {item.stravaSource ? (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 rounded-xl" style={{ background: "rgba(252,82,0,0.08)", border: "1px solid rgba(252,82,0,0.2)" }}>
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white shrink-0" style={{ background: "#FC5200" }}>
+                <svg width="7" height="7" viewBox="0 0 24 24" fill="white" aria-hidden="true">
+                  <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+                </svg>
+                Strava
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] font-extrabold text-orange-700">Данные из Strava</p>
+                {item.checkInISO && (
+                  <p className="text-[10px] text-orange-600 font-semibold">
+                    {(() => {
+                      try {
+                        const d = new Date(item.checkInISO!);
+                        const date = d.toLocaleDateString("ru-RU", { timeZone: item.participantTz, day: "2-digit", month: "2-digit", year: "numeric" });
+                        const time = d.toLocaleTimeString("ru-RU", { timeZone: item.participantTz, hour: "2-digit", minute: "2-digit", hour12: false });
+                        return `${date} в ${time}`;
+                      } catch { return ""; }
+                    })()}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 mb-3 px-2 py-1 rounded-lg bg-muted w-fit">
+              <span className="text-[9px] font-bold text-muted-foreground">Загружено вручную</span>
+            </div>
+          )}
+          <div className="flex gap-2">
             {runPhotos.length >= 2 ? (
               runPhotos.map((src, i) => (
                 <button
@@ -181,14 +211,6 @@ export function ReviewScreen() {
                   </p>
                 </div>
               </div>
-              {item.stravaSource && (
-                <span className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC5200" }}>
-                  <svg width="7" height="7" viewBox="0 0 24 24" fill="white" aria-hidden="true">
-                    <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
-                  </svg>
-                  Strava
-                </span>
-              )}
               {item.text && <p className="text-xs text-muted-foreground leading-snug">{item.text}</p>}
             </div>
           </div>
@@ -251,7 +273,7 @@ export function ReviewScreen() {
           </div>
           <button onClick={() => act(item, "approved", true)} disabled={actLoading}
             className="w-full py-2 rounded-xl border-2 border-orange-200 bg-orange-50 text-orange-600 font-bold text-sm disabled:opacity-50">
-            ⚡ Опоздание (принять, −1 жизнь)
+            {item.type === "running" ? "Опоздание (принять, штраф)" : "Опоздание (принять, −1 жизнь)"}
           </button>
         </div>
       )}

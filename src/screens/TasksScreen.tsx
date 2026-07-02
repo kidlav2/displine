@@ -125,7 +125,8 @@ export function TasksScreen() {
   }, []);
 
   const hasPhoto = !!photoFile || !!photoPreview;
-  const canSubmit = hasPhoto && (type === "task" || dist.length > 0);
+  const isStravaSubmission = !!stravaActivityId;
+  const canSubmit = (hasPhoto || isStravaSubmission) && (type === "task" || dist.length > 0);
 
   const submit = async () => {
     if (!canSubmit || submitting || !currentUser || !meParticipant) return;
@@ -243,7 +244,13 @@ export function TasksScreen() {
       {/* Photo */}
       <button
         onClick={() => fileRef.current?.click()}
-        className={`w-full h-48 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-colors overflow-hidden relative ${photoPreview ? "border-green-400" : "border-border bg-card"}`}
+        className={`w-full rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-3 transition-colors overflow-hidden relative ${
+          photoPreview
+            ? "h-48 border-green-400"
+            : isStravaSubmission
+            ? "h-24 border-orange-200 bg-orange-50/60"
+            : "h-48 border-border bg-card"
+        }`}
       >
         {photoPreview ? (
           <>
@@ -253,6 +260,14 @@ export function TasksScreen() {
                 <CheckCircle2 size={16} className="text-white" />
               </div>
             )}
+          </>
+        ) : isStravaSubmission ? (
+          <>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ color: "#FC5200" }}>
+              <path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" />
+            </svg>
+            <p className="text-xs font-bold text-orange-600">Данные из Strava — фото не требуется</p>
+            <p className="text-[10px] text-muted-foreground">Нажмите, чтобы добавить фото (необязательно)</p>
           </>
         ) : (
           <>
