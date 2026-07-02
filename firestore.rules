@@ -62,7 +62,25 @@ service cloud.firestore {
 
       match /participants/{uid} {
         allow read:  if isParticipant(challengeId);
-        allow write: if isOrganizer(challengeId);
+
+        // Self-service: a participant may edit ONLY presentation fields on their
+        // own doc (name/avatar/timezone). Never role, isAdmin, lives, km,
+        // results, penalties, or active — those are organizer-controlled.
+        allow update: if isSignedIn() && request.auth.uid == uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["tz", "photoUrl", "name", "ini"]);
+
+        // Organizer: may adjust gameplay fields (lives, active, penalties, km,
+        // results). Changing role/isAdmin requires an OWNER acting on a DIFFERENT
+        // participant — no self-elevation, and helpers cannot promote at all.
+        allow update: if isOrganizer(challengeId) && (
+          (request.resource.data.role == resource.data.role &&
+           request.resource.data.isAdmin == resource.data.isAdmin) ||
+          (isOwner(challengeId) && request.auth.uid != uid)
+        );
+
+        allow delete: if isOrganizer(challengeId);
+
         allow create: if isSignedIn() && request.auth.uid == uid && (
           (
             get(/databases/$(database)/documents/challenges/$(challengeId))
@@ -106,7 +124,14 @@ service cloud.firestore {
 
       match /feed/{postId} {
         allow read:   if isParticipant(challengeId);
-        allow create: if isParticipant(challengeId);
+        // Author cannot be spoofed: participantId must be the caller, isAdmin must
+        // match the caller's real participant doc, and only organizers may write
+        // "system:*" event posts (the UI renders those as authoritative actions).
+        allow create: if isParticipant(challengeId) &&
+          request.resource.data.participantId == request.auth.uid &&
+          request.resource.data.isAdmin == isOrganizer(challengeId) &&
+          (isOrganizer(challengeId) ||
+           !request.resource.data.type.matches('system:.*'));
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
            request.resource.data.diff(resource.data).affectedKeys()
@@ -127,8 +152,16 @@ service cloud.firestore {
           (isParticipant(challengeId) &&
            request.auth.uid == resource.data.participantUid &&
            (
-             (resource.data.status in ["checked_in", "rejected"] && request.resource.data.status == "checked_in") ||
-             (resource.data.status in ["checked_in", "pending", "rejected"] && request.resource.data.status == "pending")
+             // Submitting proof (after check-in) or resubmitting after a rejection:
+             // the participant legitimately sets km/isLate/photo/text here.
+             (resource.data.status in ["checked_in", "rejected"] &&
+              request.resource.data.status in ["checked_in", "pending"]) ||
+             // Already pending: may only touch non-scoring fields. Prevents
+             // inflating km or flipping isLate/scoreKey/type before review.
+             (resource.data.status == "pending" &&
+              request.resource.data.status == "pending" &&
+              request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(["text", "photoUrl", "submittedAt", "status"]))
            ));
         allow delete: if isOwner(challengeId);
       }

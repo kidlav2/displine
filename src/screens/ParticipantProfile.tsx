@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useParams, useNavigate } from "react-router";
 import { getDoc } from "firebase/firestore";
 import { Av, Hearts, Card, SecLabel } from "../components/atoms";
@@ -14,20 +14,20 @@ import type { Penalty, UserProfile } from "../types";
 export function ParticipantProfile() {
   const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
-  const { challenge, isAdmin, isOwner, scoring } = useAppContext();
+  const { challenge, isAdmin, isOwner, scoring, loading } = useAppContext();
   const { currentUser } = useAuthContext();
 
-  const meParticipant = challenge.participants.find(p => p.uid === currentUser?.uid);
+  const meParticipant = challenge?.participants.find(p => p.uid === currentUser?.uid);
   const actor = (currentUser && meParticipant)
     ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
     : undefined;
 
-  const participant = challenge.participants.find(p => p.uid === uid);
+  const participant = challenge?.participants.find(p => p.uid === uid);
 
   const [penaltyForm, setPenaltyForm]     = useState(false);
   const [penaltyReason, setPenaltyReason] = useState("");
-  const [penaltyAmount, setPenaltyAmount] = useState(String(challenge.settings.penaltyAmount || 5000));
-  const [penaltyBurpees, setPenaltyBurpees] = useState(String(challenge.settings.burpees || 0));
+  const [penaltyAmount, setPenaltyAmount] = useState(String(challenge?.settings.penaltyAmount || 5000));
+  const [penaltyBurpees, setPenaltyBurpees] = useState(String(challenge?.settings.burpees || 0));
   const [orgNoteSaved, setOrgNoteSaved]   = useState(false);
   const [orgNote, setOrgNote]             = useState("");
   const [noteLoading, setNoteLoading]     = useState(false);
@@ -45,9 +45,17 @@ export function ParticipantProfile() {
 
   // Load any existing organizer note for this participant
   useEffect(() => {
-    if (!isAdmin || !uid) return;
+    if (!isAdmin || !uid || !challenge?.id) return;
     getOrgNote(challenge.id, uid).then(setOrgNote).catch(() => {});
-  }, [isAdmin, challenge.id, uid]);
+  }, [isAdmin, challenge?.id, uid]);
+
+  // Challenge data may not be loaded yet (this route mounts outside AppShell's
+  // loading gate, e.g. on a deep-link / hard refresh). Guard before reading it.
+  if (loading || !challenge) return (
+    <div className="flex items-center justify-center h-full min-h-[50vh]">
+      <Loader2 size={28} className="animate-spin text-muted-foreground" />
+    </div>
+  );
 
   if (!participant) return (
     <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Участник не найден.</div>

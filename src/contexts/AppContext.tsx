@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
@@ -170,31 +170,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [selectedId, currentUser]);
 
-  // ── Derived state ─────────────────────────────────────────────────────────
-  const rawChallenge = challenges.find(c => c.id === selectedId) ?? challenges[0];
+  // ── Derived state (memoized so the context value stays referentially stable
+  // across renders that don't actually change the underlying data) ───────────
+  const rawChallenge = useMemo(
+    () => challenges.find(c => c.id === selectedId) ?? challenges[0],
+    [challenges, selectedId],
+  );
 
   // Compute currentDay dynamically from startDate so it is always accurate
   // regardless of what value is stored in the Firestore challenge doc.
-  const challenge = rawChallenge
-    ? { ...rawChallenge, currentDay: challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration) }
-    : rawChallenge;
+  const challenge = useMemo(
+    () => rawChallenge
+      ? { ...rawChallenge, currentDay: challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration) }
+      : rawChallenge,
+    [rawChallenge],
+  );
 
-  const meParticipant: Participant | null = currentUser
-    ? (challenge?.participants.find(p => p.uid === currentUser.uid) ?? null)
-    : null;
+  const meParticipant = useMemo<Participant | null>(
+    () => currentUser
+      ? (challenge?.participants.find(p => p.uid === currentUser.uid) ?? null)
+      : null,
+    [challenge, currentUser],
+  );
 
   // Use participant's stored timezone so isRunDay and deadline are correct
   // for their local time, not the browser's OS clock timezone.
   const participantTz = meParticipant?.tz ?? detectTz();
-  const isRunDay = !!(challenge?.settings.runSchedule?.[todayRunDayInTz(participantTz)]);
-  const todayDeadline = challenge?.settings.runSchedule?.[todayRunDayInTz(participantTz)] ?? "06:00";
+  const { isRunDay, todayDeadline } = useMemo(() => {
+    const day = todayRunDayInTz(participantTz);
+    const deadline = challenge?.settings.runSchedule?.[day];
+    return { isRunDay: !!deadline, todayDeadline: deadline ?? "06:00" };
+  }, [challenge, participantTz]);
 
   const userRole: UserRole = meParticipant?.role ?? "participant";
 
   const isAdmin = userRole !== "participant";
   const isOwner = userRole === "owner";
 
-  const scoring: ScoringConfig = challenge?.settings.scoring ?? DEFAULT_SCORING;
+  const scoring: ScoringConfig = useMemo(
+    () => challenge?.settings.scoring ?? DEFAULT_SCORING,
+    [challenge],
+  );
 
   // ── Admin-only subscriptions (queue + team) ───────────────────────────────
   // Runs only after participants load and isAdmin is resolved. Regular
@@ -238,21 +254,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Consumers can gate rendering on this to avoid reading undefined challenge data.
   const loading = authLoading || challengeLoading;
 
+  // Memoize the context value so consumers only re-render when a value they
+  // depend on actually changes — not on every AppProvider render. State setters
+  // (setChallenges, setSelectedId, setAdminTz, setAdminTzAuto) are stable and
+  // intentionally omitted from the dependency list.
+  const value = useMemo<AppContextType>(() => ({
+    challenges, setChallenges,
+    selectedId, setSelectedId,
+    userRole,
+    adminTz, setAdminTz,
+    adminTzAuto, setAdminTzAuto,
+    isRunDay,
+    loading,
+    todayTask, todayDeadline,
+    challenge, meParticipant, isAdmin, isOwner, scoring,
+    achievements,
+    postponementQueue,
+    updateChallenge,
+  }), [
+    challenges, selectedId, userRole, adminTz, adminTzAuto,
+    isRunDay, loading, todayTask, todayDeadline,
+    challenge, meParticipant, isAdmin, isOwner, scoring,
+    achievements, postponementQueue, updateChallenge,
+  ]);
+
   return (
-    <AppContext.Provider value={{
-      challenges, setChallenges,
-      selectedId, setSelectedId,
-      userRole,
-      adminTz, setAdminTz,
-      adminTzAuto, setAdminTzAuto,
-      isRunDay,
-      loading,
-      todayTask, todayDeadline,
-      challenge, meParticipant, isAdmin, isOwner, scoring,
-      achievements,
-      postponementQueue,
-      updateChallenge,
-    }}>
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );
