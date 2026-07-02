@@ -191,9 +191,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Compute currentDay dynamically from startDate so it is always accurate
   // regardless of what value is stored in the Firestore challenge doc.
   const challenge = useMemo(
-    () => rawChallenge
-      ? { ...rawChallenge, currentDay: challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration) }
-      : rawChallenge,
+    () => {
+      if (!rawChallenge) return rawChallenge;
+      const day = challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration);
+      console.log("[AppContext] startDate=", rawChallenge.startDate, "duration=", rawChallenge.duration, "→ currentDay=", day);
+      return { ...rawChallenge, currentDay: day };
+    },
     [rawChallenge],
   );
 
