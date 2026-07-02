@@ -6,6 +6,17 @@ import type { Achievement, ChallengeData, Participant, PostponementRequest, Scor
 import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
 import { detectTz } from "../lib/timezone";
 import { challengeCurrentDay, todayRunDayInTz, todayISO } from "../lib/dates";
+
+/** Normalize any Firestore date value (Timestamp, ISO string, or legacy English string) to "YYYY-MM-DD". */
+function toISODate(v: unknown): string {
+  if (!v) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "object" && v !== null && "toDate" in v) {
+    const d = (v as { toDate(): Date }).toDate();
+    return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+  }
+  return "";
+}
 import { useAuthContext } from "./AuthContext";
 import {
   challengeRef, participantsCol, tasksCol, teamCol, achievementsCol,
@@ -89,8 +100,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             name:        d.name        ?? "",
             emoji:       d.emoji       ?? "🏃",
             description: d.description ?? "",
-            startDate:   d.startDate   ?? "",
-            endDate:     d.endDate     ?? "",
+            startDate:   toISODate(d.startDate),
+            endDate:     toISODate(d.endDate),
             duration:    d.duration    ?? 30,
             currentDay:  d.currentDay  ?? 1,
             status:      d.status      ?? "active",

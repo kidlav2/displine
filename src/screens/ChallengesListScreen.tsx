@@ -5,6 +5,7 @@ import { Av, Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
+import { challengeCurrentDay } from "../lib/dates";
 import type { ChallengeData, ChallengeStatus } from "../types";
 
 const STATUS_COLOR: Record<ChallengeStatus, string> = {
@@ -17,6 +18,7 @@ const STATUS_LABEL: Record<ChallengeStatus, string> = {
 function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => void }) {
   const [copied, setCopied] = useState(false);
   const link = `displine.vercel.app/join?code=${ch.inviteCode}`;
+  const currentDay = challengeCurrentDay(ch.startDate, ch.duration);
 
   const copyLink = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -41,10 +43,10 @@ function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => vo
           {ch.status === "active" && (
             <>
               <div className="h-1.5 bg-muted rounded-full overflow-hidden mb-1">
-                <div className="h-full rounded-full" style={{ width: `${(ch.currentDay / ch.duration) * 100}%`, background: BRAND_COLOR }} />
+                <div className="h-full rounded-full" style={{ width: `${(currentDay / ch.duration) * 100}%`, background: BRAND_COLOR }} />
               </div>
               <div className="flex items-center justify-between text-[10px] text-muted-foreground font-semibold">
-                <span>День {ch.currentDay} / {ch.duration}</span>
+                <span>День {currentDay} / {ch.duration}</span>
                 <span>{ch.participants.length} участников</span>
               </div>
             </>
