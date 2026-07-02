@@ -7,15 +7,19 @@ import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
 import { detectTz } from "../lib/timezone";
 import { challengeCurrentDay, todayRunDayInTz, todayISO } from "../lib/dates";
 
-/** Normalize any Firestore date value (Timestamp, ISO string, or legacy English string) to "YYYY-MM-DD". */
+/** Normalize any Firestore date value (Timestamp, ISO "YYYY-MM-DD", or legacy English string like "Jun 28, 2026") to "YYYY-MM-DD". */
 function toISODate(v: unknown): string {
   if (!v) return "";
-  if (typeof v === "string") return v;
   if (typeof v === "object" && v !== null && "toDate" in v) {
     const d = (v as { toDate(): Date }).toDate();
     return isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
   }
-  return "";
+  if (typeof v !== "string") return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  // Legacy English format stored in Firestore (e.g. "Jun 28, 2026")
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 import { useAuthContext } from "./AuthContext";
 import {
@@ -191,12 +195,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Compute currentDay dynamically from startDate so it is always accurate
   // regardless of what value is stored in the Firestore challenge doc.
   const challenge = useMemo(
-    () => {
-      if (!rawChallenge) return rawChallenge;
-      const day = challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration);
-      console.log("[AppContext] startDate=", rawChallenge.startDate, "duration=", rawChallenge.duration, "→ currentDay=", day);
-      return { ...rawChallenge, currentDay: day };
-    },
+    () => rawChallenge
+      ? { ...rawChallenge, currentDay: challengeCurrentDay(rawChallenge.startDate, rawChallenge.duration) }
+      : rawChallenge,
     [rawChallenge],
   );
 
