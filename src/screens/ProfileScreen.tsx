@@ -19,7 +19,7 @@ const disconnectStravaFn = httpsCallable<Record<string, never>, { success: boole
 );
 
 export function ProfileScreen() {
-  const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto, scoring } = useAppContext();
+  const { challenge, meParticipant, adminTz, adminTzAuto, setAdminTz, setAdminTzAuto, scoring, setSelectedId } = useAppContext();
   const { currentUser, userProfile } = useAuthContext();
   const navigate = useNavigate();
 
@@ -82,7 +82,17 @@ export function ProfileScreen() {
       await leaveChallenge(challenge.id, currentUser.uid, meParticipant.role === "helper", {
         uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin,
       });
-      navigate("/", { replace: true });
+      // Navigate directly to the right destination rather than going through "/"
+      // (which would race with RootLayout reading the now-stale userProfile snapshot).
+      const remainingIds = Object.keys(userProfile?.challengeRoles ?? {}).filter(id => id !== challenge.id);
+      if (remainingIds.length === 0) {
+        navigate("/join", { replace: true });
+      } else if (remainingIds.length === 1) {
+        setSelectedId(remainingIds[0]);
+        navigate("/app/home", { replace: true });
+      } else {
+        navigate("/challenges", { replace: true });
+      }
     } catch (e) {
       console.error("[ProfileScreen] leaveChallenge failed:", e);
       setLeaveError("Не удалось покинуть челлендж. Попробуйте снова.");

@@ -6,7 +6,7 @@ import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
 import {
   resolveInviteCode, joinChallengeAsParticipant, acceptTeamInvite, TeamInviteError,
-  challengeRef, participantRef, leaveChallenge, type InviteData,
+  challengeRef, participantRef, leaveChallenge, removeChallengeRole, type InviteData,
 } from "../lib/firestore";
 import { detectTz } from "../lib/timezone";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -260,8 +260,17 @@ function OnboardingLayout() {
     if (userProfile && invite) {
       const alreadyJoined = !!userProfile.challengeRoles?.[invite.challengeId];
       if (alreadyJoined) {
-        setSelectedId(invite.challengeId);
-        navigate("/app/home", { replace: true });
+        // Verify the participant doc still exists — it could be absent after a
+        // partially-applied leave (participant deleted but challengeRoles not cleared).
+        // If stale, clean up and let this effect re-fire to do the actual join.
+        getDoc(participantRef(invite.challengeId, currentUser.uid)).then(snap => {
+          if (snap.exists()) {
+            setSelectedId(invite.challengeId);
+            navigate("/app/home", { replace: true });
+          } else {
+            removeChallengeRole(currentUser.uid, invite.challengeId).catch(console.error);
+          }
+        });
         return;
       }
 
@@ -338,12 +347,19 @@ function OnboardingLayout() {
 
   // Google auth sets step → "profile" synchronously before userProfile loads from
   // Firestore. Once it does, check if the user is already a member and skip the
-  // join form entirely.
+  // join form entirely. Also handles stale challengeRoles from a failed leave.
   useEffect(() => {
     if (step !== "profile" || !currentUser || !userProfile || !invite) return;
     if (userProfile.challengeRoles?.[invite.challengeId]) {
-      setSelectedId(invite.challengeId);
-      navigate("/app/home", { replace: true });
+      getDoc(participantRef(invite.challengeId, currentUser.uid)).then(snap => {
+        if (snap.exists()) {
+          setSelectedId(invite.challengeId);
+          navigate("/app/home", { replace: true });
+        } else {
+          // Stale entry — remove it so the profile form can proceed to join.
+          removeChallengeRole(currentUser.uid, invite.challengeId).catch(console.error);
+        }
+      });
     }
   }, [step, currentUser, userProfile, invite, setSelectedId, navigate]);
 
@@ -394,9 +410,13 @@ function OnboardingLayout() {
       // loaded, and the auto-redirect useEffect hasn't fired yet). Skip re-join —
       // setDoc on an existing participant doc would be rejected by Firestore rules.
       if (userProfile?.challengeRoles?.[invite.challengeId]) {
-        setSelectedId(invite.challengeId);
-        navigate("/app/home", { replace: true });
-        return;
+        const pSnap = await getDoc(participantRef(invite.challengeId, currentUser.uid));
+        if (pSnap.exists()) {
+          setSelectedId(invite.challengeId);
+          navigate("/app/home", { replace: true });
+          return;
+        }
+        // Stale entry (participant doc gone after failed leave) — fall through to re-join.
       }
       if (invite.type === "team") {
         const { challengeId } = await acceptTeamInvite(code, currentUser.uid, {

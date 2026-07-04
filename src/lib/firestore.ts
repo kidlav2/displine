@@ -253,6 +253,13 @@ export async function addChallengeRole(
   });
 }
 
+/** Remove a challenge entry from the user's challengeRoles map. */
+export async function removeChallengeRole(uid: string, challengeId: string): Promise<void> {
+  await updateDoc(userRef(uid), {
+    [`challengeRoles.${challengeId}`]: deleteField(),
+  });
+}
+
 /** Create a new challenge document and add the creator as owner-participant. */
 export async function createChallenge(
   ownerUid: string,
@@ -961,16 +968,16 @@ export async function leaveChallenge(
   // Write the feed event first — security rules require an existing
   // participant doc to author a feed post, and we're about to delete it.
   await writeFeedSystemEvent(challengeId, actor, "system:left", `покинул(а) челлендж`);
+  // Delete participant doc and remove the challengeRoles entry atomically.
+  // Previously these were two separate writes; a failure between them left
+  // the user's profile listing a challenge their participant doc no longer
+  // existed in, causing a stuck "half-left" state.
   await runTransaction(db, async (tx) => {
     tx.delete(participantRef(challengeId, uid));
     if (wasTeamMember) tx.delete(teamMemberRef(challengeId, uid));
-  });
-  // Unlike organizer-initiated removal, the leaving user IS the profile
-  // owner here, so (unlike removeParticipantFromChallenge) we can and should
-  // clear the role entry — otherwise the client keeps trying to load a
-  // challenge the user no longer has access to.
-  await updateDoc(userRef(uid), {
-    [`challengeRoles.${challengeId}`]: deleteField(),
+    tx.update(userRef(uid), {
+      [`challengeRoles.${challengeId}`]: deleteField(),
+    });
   });
 }
 
