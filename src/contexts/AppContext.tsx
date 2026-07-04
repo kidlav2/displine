@@ -79,7 +79,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const roleEntries = Object.entries(userProfile.challengeRoles);
+    const roleEntries = Object.entries(userProfile.challengeRoles ?? {});
     if (roleEntries.length === 0) {
       setChallenges([]);
       setChallengeLoading(false);

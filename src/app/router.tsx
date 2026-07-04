@@ -336,6 +336,17 @@ function OnboardingLayout() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, userProfile, step, inviteLoading, invite, conflict, conflictLoading]);
 
+  // Google auth sets step → "profile" synchronously before userProfile loads from
+  // Firestore. Once it does, check if the user is already a member and skip the
+  // join form entirely.
+  useEffect(() => {
+    if (step !== "profile" || !currentUser || !userProfile || !invite) return;
+    if (userProfile.challengeRoles?.[invite.challengeId]) {
+      setSelectedId(invite.challengeId);
+      navigate("/app/home", { replace: true });
+    }
+  }, [step, currentUser, userProfile, invite, setSelectedId, navigate]);
+
   const handleLeaveConflictAndJoin = async () => {
     if (!conflict || !currentUser) return;
     setLeavingConflict(true);
@@ -379,6 +390,14 @@ function OnboardingLayout() {
 
   const handleProfileDone = async (data: { name: string; ini: string }) => {
     if (currentUser && invite) {
+      // Already a member (e.g. Google auth set step="profile" before userProfile
+      // loaded, and the auto-redirect useEffect hasn't fired yet). Skip re-join —
+      // setDoc on an existing participant doc would be rejected by Firestore rules.
+      if (userProfile?.challengeRoles?.[invite.challengeId]) {
+        setSelectedId(invite.challengeId);
+        navigate("/app/home", { replace: true });
+        return;
+      }
       if (invite.type === "team") {
         const { challengeId } = await acceptTeamInvite(code, currentUser.uid, {
           name:     data.name,

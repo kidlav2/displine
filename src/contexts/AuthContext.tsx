@@ -41,7 +41,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       doc(db, "users", currentUser.uid),
       (snap) => {
         if (snap.exists()) {
-          setUserProfile({ uid: currentUser.uid, ...snap.data() } as UserProfile);
+          const data = snap.data();
+          setUserProfile({
+            uid: currentUser.uid,
+            ...data,
+            // Normalise: field may be absent on profiles created before the
+            // challengeRoles map was introduced, or after a failed join.
+            challengeRoles: data.challengeRoles ?? {},
+          } as UserProfile);
         } else {
           // New user — profile hasn't been created yet (happens during onboarding)
           setUserProfile(null);
