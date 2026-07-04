@@ -20,3 +20,5 @@ npm-debug.log*
 # Editor
 .DS_Store
 .vscode/settings.json
+.vercel
+.env*
