@@ -285,6 +285,12 @@ function OnboardingLayout() {
             getDoc(challengeRef(existingId)),
             getDoc(participantRef(existingId, currentUser.uid)),
           ]).then(([chSnap, pSnap]) => {
+            if (!pSnap.exists()) {
+              // Stale entry — participant doc is gone (half-left state).
+              // Clean up and let the effect re-fire to proceed with join.
+              removeChallengeRole(currentUser.uid, existingId).catch(console.error);
+              return;
+            }
             const chData = chSnap.data();
             const pData = pSnap.data();
             setConflict({
@@ -299,6 +305,10 @@ function OnboardingLayout() {
                 isAdmin: pData?.isAdmin ?? false,
               },
             });
+          }).catch(() => {
+            // PERMISSION_DENIED means the participant doc no longer exists
+            // (stale challengeRoles entry after a failed leave). Clean it up.
+            removeChallengeRole(currentUser.uid, existingId).catch(console.error);
           }).finally(() => setConflictLoading(false));
         }
         return;
