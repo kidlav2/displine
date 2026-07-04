@@ -87,7 +87,7 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
     tz:       d.tz       ?? "UTC",
     results:  (d.results ?? []) as DayResult[],
     penalties: (d.penalties ?? []).map((p: DocumentData) => ({
-      date:      tsToString(p.date),
+      date:      p.date instanceof Timestamp ? p.date.toDate().toISOString().slice(0, 10) : (p.date ?? ""),
       reason:    p.reason    ?? "",
       livesLost: p.livesLost ?? 0,
       amount:    p.amount    ?? 0,

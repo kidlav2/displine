@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, RefreshCw, CalendarDays } from "lucide-react";
+import { Camera, ImageIcon, CheckCircle2, XCircle, Clock, ExternalLink, Loader2, RefreshCw, CalendarDays, AlertCircle } from "lucide-react";
 import { useSearchParams, useNavigate } from "react-router";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -33,6 +33,7 @@ export function TasksScreen() {
   const [dist, setDist] = useState("");
   const [comment, setComment] = useState("");
   const [status, setStatus] = useState<SubStatus>("idle");
+  const [orgComment, setOrgComment] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadPct, setUploadPct] = useState(0);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -63,10 +64,12 @@ export function TasksScreen() {
         if (!data) return;
         if (data.status === "approved") {
           setStatus("approved");
+          setOrgComment(data.organizerComment);
         } else if (data.status === "pending") {
           setStatus("pending");
         } else if (data.status === "rejected") {
           setStatus("idle"); // stay on form
+          setOrgComment(data.organizerComment);
           setSubmitError(
             data.organizerComment
               ? `Отклонено: ${data.organizerComment}. Отправьте снова.`
@@ -187,15 +190,36 @@ export function TasksScreen() {
   };
 
   if (status === "approved") {
+    const reviewPenalty = meParticipant?.penalties?.find(p => !p.paid && p.date === effectiveISO) ?? null;
+    const approvedWithPenalty = !!reviewPenalty;
     return (
       <div className="max-w-[560px] mx-auto px-4 lg:px-6 pt-6 lg:pt-8 flex flex-col items-center text-center gap-4">
-        <div className="w-20 h-20 rounded-full border-2 border-green-200 bg-green-50 flex items-center justify-center mt-12">
-          <CheckCircle2 size={28} className="text-green-500" />
+        <div className={`w-20 h-20 rounded-full border-2 flex items-center justify-center mt-12 ${approvedWithPenalty ? "border-amber-200 bg-amber-50" : "border-green-200 bg-green-50"}`}>
+          {approvedWithPenalty
+            ? <AlertCircle size={28} className="text-amber-500" />
+            : <CheckCircle2 size={28} className="text-green-500" />}
         </div>
-        <p className="font-extrabold text-2xl">Задание выполнено!</p>
-        <p className="text-sm text-muted-foreground max-w-[230px]">
-          Организатор проверил и одобрил ваше подтверждение. Очки начислены.
+        <p className="font-extrabold text-2xl">
+          {approvedWithPenalty ? "Принято со штрафом" : "Задание выполнено!"}
         </p>
+        {approvedWithPenalty && reviewPenalty ? (
+          <p className="text-sm text-amber-600 max-w-[300px]">
+            {"Организатор одобрил, но выписал штраф"}
+            {reviewPenalty.amount > 0 ? ` — ${reviewPenalty.amount.toLocaleString("ru")} ${challenge.settings.currency}` : ""}
+            {(reviewPenalty.burpees ?? 0) > 0 ? ` · ${reviewPenalty.burpees} бёрпи` : ""}
+            {". Очки начислены."}
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground max-w-[280px]">
+            Организатор проверил и одобрил ваше подтверждение. Очки начислены.
+          </p>
+        )}
+        {orgComment && (
+          <div className="w-full max-w-[320px] text-left bg-muted rounded-xl px-4 py-3">
+            <p className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground mb-1">Комментарий организатора</p>
+            <p className="text-sm">{orgComment}</p>
+          </div>
+        )}
       </div>
     );
   }

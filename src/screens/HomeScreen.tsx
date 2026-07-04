@@ -32,6 +32,7 @@ export function HomeScreen() {
   const [taskSubmittedToday, setTaskSubmittedToday] = useState(false);
   const [taskApproved, setTaskApproved] = useState(false);
   const [taskRejectedToday, setTaskRejectedToday] = useState(false);
+  const [taskOrganizerComment, setTaskOrganizerComment] = useState<string | null>(null);
   const [lbSort, setLbSort] = useState<SortKey>("score");
   const [myPostponements, setMyPostponements] = useState<PostponementRequest[]>([]);
   const [showPostponeForm, setShowPostponeForm] = useState<"task" | "running" | null>(null);
@@ -131,7 +132,8 @@ export function HomeScreen() {
       participantTodayISO,
       (data) => {
         setTaskStatusLoading(false);
-        if (!data) { setTaskSubmittedToday(false); setTaskRejectedToday(false); setTaskApproved(false); return; }
+        if (!data) { setTaskSubmittedToday(false); setTaskRejectedToday(false); setTaskApproved(false); setTaskOrganizerComment(null); return; }
+        setTaskOrganizerComment(data.organizerComment);
         if (data.status === "approved") {
           setTaskSubmittedToday(true); setTaskRejectedToday(false); setTaskApproved(true);
         } else if (data.status === "pending") {
@@ -202,6 +204,12 @@ export function HomeScreen() {
     }
   };
 
+  // Detect if today's task was approved alongside a penalty (organizer used "Опоздание" button)
+  const todayTaskPenalty = taskApproved
+    ? (meParticipant?.penalties?.find(p => !p.paid && p.date === participantTodayISO) ?? null)
+    : null;
+  const taskApprovedWithPenalty = !!todayTaskPenalty;
+
   const runDayLabels = Object.keys(challenge.settings.runSchedule).map(d => DAY_LABELS[d] ?? d).join(" / ") || "—";
   const runOnTimePts = scoring.find(e => e.key === "running_on_time")?.points ?? 2;
   const runLatePts   = scoring.find(e => e.key === "running_late")?.points    ?? 1;
@@ -259,6 +267,11 @@ export function HomeScreen() {
                 {p.amount > 0 ? ` — ${p.amount.toLocaleString("ru")} ${challenge.settings.currency}` : ""}
                 {(p.burpees ?? 0) > 0 ? ` · ${p.burpees} бёрпи` : ""}
               </p>
+              {p.date.length === 10 && (
+                <p className="text-[10px] text-amber-500 mt-0.5">
+                  {`${p.date.slice(8, 10)}.${p.date.slice(5, 7)}.${p.date.slice(0, 4)}`}
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -268,14 +281,34 @@ export function HomeScreen() {
       {(taskApproved || runApproved) && (
         <Card className="!p-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-              <CheckCircle2 size={20} className="text-green-500" />
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${taskApprovedWithPenalty ? "bg-amber-50" : "bg-green-50"}`}>
+              {taskApprovedWithPenalty
+                ? <AlertCircle size={20} className="text-amber-500" />
+                : <CheckCircle2 size={20} className="text-green-500" />}
             </div>
-            <div>
-              <p className="font-extrabold text-sm text-green-700">
-                {taskApproved && runApproved ? "Всё выполнено сегодня!" : taskApproved ? "Задание выполнено!" : "Пробежка зачтена!"}
+            <div className="flex-1 min-w-0">
+              <p className={`font-extrabold text-sm ${taskApprovedWithPenalty ? "text-amber-700" : "text-green-700"}`}>
+                {taskApproved && runApproved ? "Всё выполнено сегодня!"
+                  : taskApproved ? (taskApprovedWithPenalty ? "Принято со штрафом" : "Задание выполнено!")
+                  : "Пробежка зачтена!"}
               </p>
-              <p className="text-xs text-muted-foreground">Отличная работа 💪</p>
+              {taskApproved && taskApprovedWithPenalty && todayTaskPenalty ? (
+                <p className="text-[11px] text-amber-600">
+                  {"Организатор одобрил, но выписал штраф"}
+                  {todayTaskPenalty.amount > 0 ? ` — ${todayTaskPenalty.amount.toLocaleString("ru")} ${challenge.settings.currency}` : ""}
+                  {(todayTaskPenalty.burpees ?? 0) > 0 ? ` · ${todayTaskPenalty.burpees} бёрпи` : ""}
+                  {". Очки начислены."}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {taskApproved ? "Организатор проверил и одобрил ваше подтверждение. Очки начислены." : "Отличная работа 💪"}
+                </p>
+              )}
+              {taskOrganizerComment && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  <span className="font-bold">Комментарий организатора:</span> {taskOrganizerComment}
+                </p>
+              )}
             </div>
           </div>
         </Card>
@@ -309,11 +342,15 @@ export function HomeScreen() {
             </div>
           ) : taskRejectedToday ? (
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-200">
-                <XCircle size={16} className="text-red-500 shrink-0" />
+              <div className="flex items-start gap-2 p-3 bg-red-50 rounded-xl border border-red-200">
+                <XCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-extrabold text-red-700">Отклонено организатором</p>
-                  <p className="text-[11px] text-red-500">Отправьте подтверждение снова</p>
+                  <p className="text-xs font-extrabold text-red-700">Отклонено — организатор не принял подтверждение.</p>
+                  {taskOrganizerComment ? (
+                    <p className="text-[11px] text-red-600 mt-0.5">{taskOrganizerComment}</p>
+                  ) : (
+                    <p className="text-[11px] text-red-500">Отправьте подтверждение снова</p>
+                  )}
                 </div>
               </div>
               <button onClick={() => goSubmit("task")} className="w-full py-3 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>
@@ -522,6 +559,7 @@ export function HomeScreen() {
           setTaskSubmittedToday(false);
           setTaskApproved(false);
           setTaskRejectedToday(false);
+          setTaskOrganizerComment(null);
           setTaskStatusLoading(false);
           setCheckInLoading(false);
         }}

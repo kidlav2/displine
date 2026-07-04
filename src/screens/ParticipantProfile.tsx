@@ -174,7 +174,11 @@ export function ParticipantProfile() {
                     <AlertCircle size={13} className={`shrink-0 mt-0.5 ${pen.paid ? "text-green-400" : "text-red-400"}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold">{pen.reason}</p>
-                      <p className="text-xs text-muted-foreground">{pen.date}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {pen.date.length === 10
+                          ? `${pen.date.slice(8, 10)}.${pen.date.slice(5, 7)}.${pen.date.slice(0, 4)}`
+                          : pen.date}
+                      </p>
                     </div>
                     <div className="text-right shrink-0">
                       {pen.amount > 0 && (
