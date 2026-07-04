@@ -45,6 +45,12 @@ import {
   subscribeToPostponementQueue,
 } from "../lib/firestore";
 
+// Persist the active challenge so a refresh doesn't reset it. Without a stable
+// selectedId, a user in >1 challenge got selectedId=null → no participant
+// subscription (blank name/avatar, no leave button) and a race-ordered
+// challenges[0] fallback that "jumped" between challenges on every reload.
+const SELECTED_CHALLENGE_KEY = "displine.selectedChallengeId";
+
 interface AppContextType {
   challenges: ChallengeData[];
   setChallenges: React.Dispatch<React.SetStateAction<ChallengeData[]>>;
@@ -76,7 +82,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, userProfile, authLoading } = useAuthContext();
 
   const [challenges, setChallenges] = useState<ChallengeData[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => {
+    try { return localStorage.getItem(SELECTED_CHALLENGE_KEY); } catch { return null; }
+  });
   const [adminTz, setAdminTz]       = useState<string>(detectTz);
   const [adminTzAuto, setAdminTzAuto] = useState(true);
   // Start true — we don't know yet whether there are challenges to load
@@ -151,9 +159,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return [...prev, merged];
         });
         setChallengeLoading(false);
-
-        // Auto-select if this is the only challenge
-        setSelectedId(prev => prev ?? (roleEntries.length === 1 ? cid : null));
       }, (err) => {
         // Permission denied (user removed from challenge) or network error.
         // Unblock the loading state so the UI can show the appropriate fallback.
@@ -165,6 +170,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     return () => unsubs.forEach(u => u());
   }, [authLoading, currentUser, userProfile]);
+
+  // Keep selectedId pointing at a challenge the user is actually in, deterministically.
+  // Runs only once the profile is known (while it's loading we keep the value restored
+  // from localStorage). If the current selection is still valid we keep it; otherwise we
+  // fall back to the first role — never null while the user has ≥1 challenge.
+  useEffect(() => {
+    if (!userProfile) return;
+    const ids = Object.keys(userProfile.challengeRoles ?? {});
+    if (ids.length === 0) { setSelectedId(null); return; }
+    setSelectedId(prev => (prev && ids.includes(prev)) ? prev : ids[0]);
+  }, [userProfile]);
+
+  // Persist the active challenge across refreshes.
+  useEffect(() => {
+    try {
+      if (selectedId) localStorage.setItem(SELECTED_CHALLENGE_KEY, selectedId);
+      else localStorage.removeItem(SELECTED_CHALLENGE_KEY);
+    } catch { /* ignore storage errors (private mode, quota) */ }
+  }, [selectedId]);
 
   // ── Subscribe to active challenge subcollections ──────────────────────────
   useEffect(() => {
