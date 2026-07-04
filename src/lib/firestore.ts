@@ -1126,8 +1126,11 @@ export async function joinChallengeAsParticipant(
   // UPDATE and rejected by rules (only tz/photoUrl/name/ini are self-editable),
   // surfacing as PERMISSION_DENIED. Don't clobber the existing gameplay fields;
   // just re-register the role (preserving whatever role the doc already holds).
-  const existing = await getDoc(ref);
-  if (existing.exists()) {
+  // A brand-new joiner isn't a participant yet, so this probe read may be denied
+  // by rules; treat any failure as "no existing doc" and fall through to create.
+  let existing: Awaited<ReturnType<typeof getDoc>> | null = null;
+  try { existing = await getDoc(ref); } catch { existing = null; }
+  if (existing?.exists()) {
     const role = (existing.data().role as UserRole) ?? "participant";
     await addChallengeRole(uid, challengeId, role);
     return;

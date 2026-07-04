@@ -74,7 +74,10 @@ service cloud.firestore {
       allow delete: if isOwner(challengeId);
 
       match /participants/{uid} {
-        allow read:  if isParticipant(challengeId);
+        // Members may read the roster; additionally, any signed-in user may read
+        // their OWN participant doc (existent or not) — the join flow needs to
+        // probe it before membership exists, and it only ever exposes own data.
+        allow read:  if isParticipant(challengeId) || (isSignedIn() && request.auth.uid == uid);
 
         // Self-service: a participant may edit ONLY presentation fields on their
         // own doc (name/avatar/timezone). Never role, isAdmin, lives, km,
