@@ -1,9 +1,13 @@
 import { createBrowserRouter, Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
 import { signInWithCustomToken, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
-import { resolveInviteCode, joinChallengeAsParticipant, acceptTeamInvite, TeamInviteError, type InviteData } from "../lib/firestore";
+import {
+  resolveInviteCode, joinChallengeAsParticipant, acceptTeamInvite, TeamInviteError,
+  challengeRef, participantRef, leaveChallenge, type InviteData,
+} from "../lib/firestore";
 import { detectTz } from "../lib/timezone";
 import { useAuthContext } from "../contexts/AuthContext";
 import { AppShell } from "./AppShell";
@@ -198,6 +202,14 @@ function RootLayout() {
 
 interface ChallengePreview { name: string; emoji: string; description: string; inviteCode: string; }
 
+interface ChallengeConflict {
+  challengeId: string;
+  name: string;
+  emoji: string;
+  wasTeamMember: boolean;
+  actor: { uid: string; name: string; ini: string; isAdmin: boolean };
+}
+
 function OnboardingLayout() {
   const { setSelectedId } = useAppContext();
   const { currentUser, userProfile } = useAuthContext();
@@ -211,6 +223,12 @@ function OnboardingLayout() {
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!code);
   const [inviteError, setInviteError] = useState<string | null>(null);
+
+  // Single-challenge-at-a-time: set when the user already has a different
+  // active challenge and needs to choose before joining this one.
+  const [conflict, setConflict] = useState<ChallengeConflict | null>(null);
+  const [conflictLoading, setConflictLoading] = useState(false);
+  const [leavingConflict, setLeavingConflict] = useState(false);
 
   // No code → show join-or-create landing (handled below, skip resolution)
   useEffect(() => {
@@ -243,7 +261,40 @@ function OnboardingLayout() {
       if (alreadyJoined) {
         setSelectedId(invite.challengeId);
         navigate("/app/home", { replace: true });
-      } else if (invite.type === "team") {
+        return;
+      }
+
+      // Don't silently join a second challenge — surface the conflict so the
+      // user can decide whether to leave their current one first.
+      const otherIds = Object.keys(userProfile.challengeRoles ?? {});
+      if (otherIds.length > 0) {
+        if (!conflict && !conflictLoading) {
+          setConflictLoading(true);
+          const existingId = otherIds[0];
+          Promise.all([
+            getDoc(challengeRef(existingId)),
+            getDoc(participantRef(existingId, currentUser.uid)),
+          ]).then(([chSnap, pSnap]) => {
+            const chData = chSnap.data();
+            const pData = pSnap.data();
+            setConflict({
+              challengeId:   existingId,
+              name:          chData?.name  ?? "",
+              emoji:         chData?.emoji ?? "🏁",
+              wasTeamMember: pData?.role === "helper",
+              actor: {
+                uid:     currentUser.uid,
+                name:    pData?.name ?? userProfile.name,
+                ini:     pData?.ini  ?? userProfile.ini,
+                isAdmin: pData?.isAdmin ?? false,
+              },
+            });
+          }).finally(() => setConflictLoading(false));
+        }
+        return;
+      }
+
+      if (invite.type === "team") {
         acceptTeamInvite(code, currentUser.uid, {
           name:     userProfile.name,
           ini:      userProfile.ini,
@@ -276,7 +327,28 @@ function OnboardingLayout() {
       setStep("profile");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, userProfile, step, inviteLoading, invite]);
+  }, [currentUser, userProfile, step, inviteLoading, invite, conflict, conflictLoading]);
+
+  const handleLeaveConflictAndJoin = async () => {
+    if (!conflict || !currentUser) return;
+    setLeavingConflict(true);
+    try {
+      await leaveChallenge(conflict.challengeId, currentUser.uid, conflict.wasTeamMember, conflict.actor);
+      // userProfile.challengeRoles updates via the live subscription in
+      // AuthContext — clearing conflict lets the effect above re-evaluate
+      // and proceed with the normal join flow once it does.
+      setConflict(null);
+    } catch (e) {
+      console.error("[OnboardingLayout] leaveChallenge failed:", e);
+      setLeavingConflict(false);
+    }
+  };
+
+  const handleStayInCurrentChallenge = () => {
+    if (!conflict) return;
+    setSelectedId(conflict.challengeId);
+    navigate("/app/home", { replace: true });
+  };
 
   const preview: ChallengePreview | undefined = invite ?? undefined;
 
@@ -400,6 +472,37 @@ function OnboardingLayout() {
           >
             Назад
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (conflict) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6" style={jk}>
+        <div className="text-center space-y-4 max-w-xs">
+          <p className="text-3xl">{conflict.emoji}</p>
+          <p className="font-extrabold text-lg">Вы уже в другом челлендже</p>
+          <p className="text-sm text-muted-foreground leading-snug">
+            Вы уже участвуете в другом челлендже — <span className="font-semibold text-foreground">{conflict.name}</span>.
+            Чтобы присоединиться к этому, нужно сначала покинуть текущий.
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <button
+              onClick={handleLeaveConflictAndJoin}
+              disabled={leavingConflict}
+              className="px-6 py-3 rounded-xl font-extrabold text-sm text-destructive-foreground bg-destructive disabled:opacity-40"
+            >
+              {leavingConflict ? "…" : "Покинуть текущий и присоединиться"}
+            </button>
+            <button
+              onClick={handleStayInCurrentChallenge}
+              disabled={leavingConflict}
+              className="px-6 py-2.5 rounded-xl font-bold text-sm border border-border disabled:opacity-40"
+            >
+              Остаться в текущем
+            </button>
+          </div>
         </div>
       </div>
     );

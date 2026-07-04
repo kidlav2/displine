@@ -64,13 +64,20 @@ export function ReviewScreen() {
         await logPenalty(
           challenge.id,
           item.participantId,
-          {
-            reason: "Опоздание на пробежку",
-            livesLost: item.type === "running" ? 0 : 1,
-            amount: challenge.settings.penaltyAmount,
-            burpees: challenge.settings.burpees > 0 ? challenge.settings.burpees : undefined,
-            loggedBy: currentUser.uid,
-          },
+          item.type === "running"
+            ? {
+                reason: "Опоздание на пробежку",
+                livesLost: 0,
+                amount: challenge.settings.penaltyAmount,
+                burpees: challenge.settings.burpees > 0 ? challenge.settings.burpees : undefined,
+                loggedBy: currentUser.uid,
+              }
+            : {
+                reason: "Опоздание по заданию",
+                livesLost: 1,
+                amount: 0,
+                loggedBy: currentUser.uid,
+              },
           actor,
           item.name
         );

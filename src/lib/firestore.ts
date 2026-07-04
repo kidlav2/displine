@@ -563,9 +563,15 @@ export async function reviewSubmission(
   const { parseScoring } = await import("../constants/scoring");
   const scoring = parseScoring(rawScoring);
 
-  // Late penalty overrides scoreKey to running_late regardless of what was sent
+  // Late penalty only means something for running submissions (it swaps
+  // running_on_time → running_late). For task submissions the "approve with
+  // penalty" button deducts a life separately (see ReviewScreen) — the
+  // submission's own scoreKey must be preserved, otherwise a task gets
+  // recorded (and scored) as if it were a running penalty.
   const effectiveScoreKey: import("../types").ScoreKey =
-    applyLatePenalty ? "running_late" : scoreKey;
+    (applyLatePenalty && (scoreKey === "running_on_time" || scoreKey === "running_late"))
+      ? "running_late"
+      : scoreKey;
 
   const entry = scoring.find(e => e.key === effectiveScoreKey);
   const pts = decision === "approved" ? (entry?.points ?? 0) : 0;
