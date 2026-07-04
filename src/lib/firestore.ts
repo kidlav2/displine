@@ -1118,7 +1118,21 @@ export async function joinChallengeAsParticipant(
   startingLives: number,
   inviteCode: string,
 ): Promise<void> {
-  await setDoc(participantRef(challengeId, uid), {
+  const ref = participantRef(challengeId, uid);
+  // Recovery for the "half-left" state: a participant doc can survive while the
+  // user's challengeRoles entry was cleared (a leave that deleted the role but
+  // not the doc). In that case challengeRoles looks empty, so the join flow gets
+  // here — but the doc already exists, so a full setDoc would be evaluated as an
+  // UPDATE and rejected by rules (only tz/photoUrl/name/ini are self-editable),
+  // surfacing as PERMISSION_DENIED. Don't clobber the existing gameplay fields;
+  // just re-register the role (preserving whatever role the doc already holds).
+  const existing = await getDoc(ref);
+  if (existing.exists()) {
+    const role = (existing.data().role as UserRole) ?? "participant";
+    await addChallengeRole(uid, challengeId, role);
+    return;
+  }
+  await setDoc(ref, {
     uid,
     ini:      profile.ini,
     name:     profile.name,
