@@ -18,10 +18,15 @@ export function utcLabel(tz: string): string {
   return `UTC${off >= 0 ? "+" : "-"}${h}${m ? ":" + String(m).padStart(2, "0") : ""}`;
 }
 
-export function localNow(tz: string): string {
-  return new Date().toLocaleTimeString("en-US", {
+/** Format an arbitrary Date as "HH:MM" (24h) in the given timezone. */
+export function localTimeInTz(date: Date, tz: string): string {
+  return date.toLocaleTimeString("en-US", {
     timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false,
   });
+}
+
+export function localNow(tz: string): string {
+  return localTimeInTz(new Date(), tz);
 }
 
 export function convertTime(timeStr: string, fromTz: string, toTz: string): string {

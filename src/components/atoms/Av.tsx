@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Shield } from "lucide-react";
 import { BRAND_COLOR } from "../../constants/design";
 
@@ -12,14 +13,19 @@ interface AvProps {
 
 export function Av({ ini, photoUrl, sz = "md", accent = false, admin = false, onClick }: AvProps) {
   const s = { xs: "w-6 h-6 text-[9px]", sm: "w-8 h-8 text-xs", md: "w-10 h-10 text-sm", lg: "w-14 h-14 text-lg" }[sz];
+  // Fall back to initials when the image fails to load (e.g. an expired Telegram
+  // CDN URL that hasn't been re-cached yet) so we never render a broken image.
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [photoUrl]);
+  const showImg = !!photoUrl && !failed;
   return (
     <div className="relative shrink-0 inline-flex" onClick={onClick} style={onClick ? { cursor: "pointer" } : {}}>
       <div
-        className={`${s} rounded-full overflow-hidden flex items-center justify-center font-extrabold select-none ${!photoUrl && !accent ? "bg-muted text-muted-foreground" : ""}`}
-        style={photoUrl ? {} : accent ? { background: BRAND_COLOR, color: "#fff" } : {}}
+        className={`${s} rounded-full overflow-hidden flex items-center justify-center font-extrabold select-none ${!showImg && !accent ? "bg-muted text-muted-foreground" : ""}`}
+        style={showImg ? {} : accent ? { background: BRAND_COLOR, color: "#fff" } : {}}
       >
-        {photoUrl
-          ? <img src={photoUrl} alt={ini} className="w-full h-full object-cover" />
+        {showImg
+          ? <img src={photoUrl!} alt={ini} className="w-full h-full object-cover" onError={() => setFailed(true)} />
           : ini}
       </div>
       {admin && (

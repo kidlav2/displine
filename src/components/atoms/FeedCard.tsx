@@ -188,7 +188,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
         <div className="px-3.5 pb-2 space-y-1.5">
           {item.socialComments.slice(0, 2).map((c, i) => (
             <div key={i} className="flex items-start gap-2">
-              <Av ini={c.ini} sz="xs" />
+              <Av ini={c.ini} photoUrl={c.photoUrl ?? (c.uid ? participants.find(x => x.uid === c.uid)?.photoUrl : null)} sz="xs" />
               <p className="text-xs leading-snug"><span className="font-bold">{c.name}</span>{" "}<span className="text-muted-foreground">{c.text}</span></p>
             </div>
           ))}

@@ -39,6 +39,36 @@ async function cacheTelegramPhoto(uid: string, pictureUrl: string): Promise<stri
   }
 }
 
+/** A permanent avatar is one we host in Storage (from a prior cache OR a manual
+ *  upload in ProfileScreen). Telegram CDN URLs are NOT permanent — they expire. */
+function isPermanentAvatar(url: string | null | undefined): boolean {
+  return typeof url === "string" && url.includes("firebasestorage.googleapis.com");
+}
+
+/**
+ * Push a freshly-cached permanent avatar URL out to the records that other
+ * screens actually read: the Firestore user profile, and every participant doc
+ * the user belongs to (leaderboard + feed avatars snapshot `photoUrl` at join
+ * time and are otherwise never refreshed). Best-effort per doc.
+ */
+async function propagateAvatar(
+  uid: string,
+  photoUrl: string,
+  challengeRoles: Record<string, unknown>,
+): Promise<void> {
+  const db = getFirestore();
+  await db.doc(`users/${uid}`).set({ photoUrl }, { merge: true }).catch((err) => {
+    console.error("[propagateAvatar] profile update failed:", err);
+  });
+  await Promise.all(
+    Object.keys(challengeRoles).map((cid) =>
+      db.doc(`challenges/${cid}/participants/${uid}`)
+        .set({ photoUrl }, { merge: true })
+        .catch((err) => console.error(`[propagateAvatar] participant ${cid} update failed:`, err)),
+    ),
+  );
+}
+
 // ── Telegram OIDC verification ────────────────────────────────────────────────
 // Set via: firebase functions:params:set TELEGRAM_CLIENT_ID=<your numeric client id>
 // Obtain the Client ID from @BotFather → Bot Settings → Web Login.
@@ -105,10 +135,31 @@ export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (requ
   const telegramUsername = (payload.preferred_username as string | undefined) ?? null;
   const rawPhotoUrl     = (payload.picture as string | undefined) ?? null;
 
-  // Re-host the Telegram CDN photo in our own Storage bucket so it doesn't
-  // break if Telegram's link later expires or rotates. Falls back to the raw
-  // CDN URL if the fetch/upload fails for any reason.
-  const photoUrl = rawPhotoUrl ? (await cacheTelegramPhoto(uid, rawPhotoUrl)) ?? rawPhotoUrl : null;
+  // Resolve the avatar. If the user already has a permanent (Storage-hosted)
+  // avatar — from an earlier cache OR a manual upload in ProfileScreen — keep it
+  // and never clobber it with the Telegram photo. Otherwise (new user, or a
+  // stale Telegram CDN URL that will expire) re-host the Telegram photo in our
+  // bucket and propagate that permanent URL to the profile + participant docs so
+  // existing leaderboard/feed entries stop showing broken images.
+  const db = getFirestore();
+  const existingSnap  = await db.doc(`users/${uid}`).get();
+  const existingData  = existingSnap.exists ? existingSnap.data() : null;
+  const existingPhoto = existingData?.photoUrl as string | undefined;
+
+  let photoUrl: string | null;
+  if (isPermanentAvatar(existingPhoto)) {
+    photoUrl = existingPhoto!;
+  } else if (rawPhotoUrl) {
+    const cached = await cacheTelegramPhoto(uid, rawPhotoUrl);
+    photoUrl = cached ?? rawPhotoUrl;
+    // Only propagate a genuinely permanent URL, and only when a profile already
+    // exists (new users get their photoUrl written during ProfileSetup instead).
+    if (cached && existingData) {
+      await propagateAvatar(uid, cached, (existingData.challengeRoles as Record<string, unknown>) ?? {});
+    }
+  } else {
+    photoUrl = existingPhoto ?? null;
+  }
 
   // Upsert Firebase Auth user so createCustomToken always succeeds
   const adminAuth = getAuth();

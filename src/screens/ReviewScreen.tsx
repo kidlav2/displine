@@ -23,6 +23,10 @@ export function ReviewScreen() {
 
   const onViewParticipant = (uid: string) => navigate(`/participants/${uid}`);
 
+  // Review items don't carry an avatar URL; look it up from the live participant doc.
+  const photoFor = (uid: string) =>
+    challenge.participants.find(p => p.uid === uid)?.photoUrl ?? null;
+
   const counts = {
     all:          challenge.queue.length + postponementQueue.length,
     running:      challenge.queue.filter(q => q.type === "running").length,
@@ -339,7 +343,7 @@ export function ReviewScreen() {
                     <Card className={`!p-3.5 ${expanded === item.id ? "rounded-b-none" : ""}`}
                       style={expanded === item.id ? { borderBottomColor: "transparent" } : {}}>
                       <div className="flex items-center gap-3">
-                        <Av ini={item.ini} sz="sm" admin={item.isAdmin} onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }} />
+                        <Av ini={item.ini} photoUrl={photoFor(item.participantId)} sz="sm" admin={item.isAdmin} onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <button className="text-sm font-bold hover:underline leading-none" onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }}>{item.name}</button>
@@ -432,7 +436,7 @@ export function ReviewScreen() {
                       onClick={() => setExpanded(expanded === item.id ? null : item.id)}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <Av ini={item.ini} sz="sm" admin={item.isAdmin}
+                          <Av ini={item.ini} photoUrl={photoFor(item.participantId)} sz="sm" admin={item.isAdmin}
                             onClick={e => { e.stopPropagation(); onViewParticipant(item.participantId); }} />
                           <div>
                             <button className="font-semibold hover:underline leading-none text-sm"

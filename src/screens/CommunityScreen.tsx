@@ -123,7 +123,10 @@ export function CommunityScreen() {
   const handleComment = async (id: string, text: string) => {
     if (!currentUser || !meParticipant) return;
     try {
-      await addComment(challenge.id, id, { ini: meParticipant.ini, name: meParticipant.name, text });
+      await addComment(challenge.id, id, {
+        ini: meParticipant.ini, name: meParticipant.name, text,
+        uid: meParticipant.uid, photoUrl: meParticipant.photoUrl ?? null,
+      });
     } catch (err) {
       console.error("[CommunityScreen] addComment failed:", err);
     }

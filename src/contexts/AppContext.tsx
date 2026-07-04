@@ -21,6 +21,23 @@ function toISODate(v: unknown): string {
   if (isNaN(d.getTime())) return "";
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+/** Minimal valid ChallengeData used to seed an entry when a subcollection snapshot
+ *  (e.g. participants) arrives before the challenge-metadata snapshot has created
+ *  it — common right after joining. The metadata effect later fills the real
+ *  fields and preserves the already-loaded subcollection data. */
+function emptyChallenge(id: string): ChallengeData {
+  return {
+    id, name: "", emoji: "🏃", description: "",
+    startDate: "", endDate: "", duration: 30, currentDay: 1,
+    status: "active", inviteCode: "", totalTreasury: 0,
+    participants: [], feed: [], queue: [], team: [],
+    settings: {
+      runSchedule: {}, penaltyAmount: 0, currency: "KZT",
+      burpees: 0, startingLives: 3, scoring: DEFAULT_SCORING,
+    },
+  };
+}
+
 import { useAuthContext } from "./AuthContext";
 import {
   challengeRef, participantsCol, tasksCol, teamCol, achievementsCol,
@@ -157,7 +174,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       query(participantsCol(selectedId)),
       (snap) => {
         const participants = snap.docs.map(snapToParticipant);
-        setChallenges(prev => prev.map(c => c.id === selectedId ? { ...c, participants } : c));
+        setChallenges(prev => {
+          const idx = prev.findIndex(c => c.id === selectedId);
+          if (idx < 0) {
+            // Participants snapshot beat the challenge-metadata snapshot (typical
+            // right after joining). Seed a stub so the data isn't dropped and lost
+            // until the next participant change — the metadata effect will fill in
+            // the real fields and preserve these participants.
+            return [...prev, { ...emptyChallenge(selectedId), participants }];
+          }
+          const next = [...prev];
+          next[idx] = { ...next[idx], participants };
+          return next;
+        });
       },
       (err) => console.error("[AppContext] participants subscription error:", err)
     );

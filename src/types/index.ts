@@ -50,7 +50,7 @@ export interface Penalty {
   paid?: boolean;
   penaltyId?: string;
 }
-export interface SocialComment { ini: string; name: string; text: string; }
+export interface SocialComment { ini: string; name: string; text: string; uid?: string; photoUrl?: string | null; }
 
 export interface DayResult { type: "running" | "task"; scoreKey: ScoreKey; }
 

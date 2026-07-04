@@ -34,10 +34,23 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId)) &&
         get(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId))
           .data.ownerUid == request.auth.uid;
-      allow update: if isSignedIn() &&
-        resource.data.usedAt == null &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["usedAt"]) &&
-        request.resource.data.usedAt != null;
+      allow update: if isSignedIn() && (
+        // Anyone may mark a single-use (team) invite consumed, exactly once.
+        (
+          resource.data.usedAt == null &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(["usedAt"]) &&
+          request.resource.data.usedAt != null
+        ) ||
+        // The challenge owner may re-sync the invite's cached config fields after
+        // editing settings (keeps startingLives etc. from drifting out of sync).
+        (
+          exists(/databases/$(database)/documents/challenges/$(resource.data.challengeId)) &&
+          get(/databases/$(database)/documents/challenges/$(resource.data.challengeId))
+            .data.ownerUid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["startingLives", "name", "emoji", "description"])
+        )
+      );
     }
 
     // -- User profiles ------------------------------------------------------
@@ -101,9 +114,26 @@ service cloud.firestore {
             request.resource.data.active == true &&
             request.resource.data.results.size() == 0 &&
             request.resource.data.penalties.size() == 0 &&
-            request.resource.data.lives ==
-              get(/databases/$(database)/documents/challenges/$(challengeId))
-                .data.settings.startingLives
+            (
+              // Lives must equal the challenge's current setting…
+              request.resource.data.lives ==
+                get(/databases/$(database)/documents/challenges/$(challengeId))
+                  .data.settings.startingLives ||
+              // …OR the value advertised by the exact public invite the joiner used.
+              // The invite mirrors startingLives at creation and can lag when the
+              // owner edits the setting; accepting the invite's value keeps those
+              // legitimate joins working instead of failing with PERMISSION_DENIED.
+              // The joiner cannot forge a higher count: the value is pinned to a
+              // specific owner-created invite whose challengeId must match.
+              (
+                "inviteCode" in request.resource.data &&
+                get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+                  .data.challengeId == challengeId &&
+                request.resource.data.lives ==
+                  get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
+                    .data.startingLives
+              )
+            )
           ) ||
           (
             request.resource.data.isAdmin == true &&

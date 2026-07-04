@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR, ALL_DAYS, CURRENCIES, DAY_LABELS, bc } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import { updateChallengeDoc, deleteChallenge } from "../lib/firestore";
+import { updateChallengeDoc, deleteChallenge, syncInviteConfig } from "../lib/firestore";
 import { durationFromDates, addDays } from "../lib/dates";
 import type { ChallengeSettings, ScoringEntry } from "../types";
 
@@ -76,6 +76,13 @@ export function ChallengeSettingsScreen() {
         ...(endDate   ? { endDate:   fromInputDate(endDate)   } : {}),
         duration: dur || challenge.duration,
       });
+      // Keep the public invite's cached starting lives in sync so future joiners
+      // get the current value and Firestore rules accept their join. Best-effort:
+      // never let an invite hiccup surface as a failed settings save.
+      if (challenge.inviteCode && s.startingLives !== challenge.settings.startingLives) {
+        await syncInviteConfig(challenge.inviteCode, { startingLives: s.startingLives })
+          .catch(err => console.error("[ChallengeSettings] invite sync failed:", err));
+      }
       setSaved(true);
       setTimeout(() => { setSaved(false); navigate(-1); }, 1000);
     } finally {

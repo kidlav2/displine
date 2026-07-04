@@ -1,6 +1,6 @@
 import { createBrowserRouter, Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
-import { signInWithCustomToken, signInWithPopup, GoogleAuthProvider } from "firebase/auth";
+import { signInWithCustomToken, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
@@ -30,6 +30,7 @@ import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
 import { StravaCallbackScreen } from "../screens/StravaCallbackScreen";
 
 import { useAppContext } from "../contexts/AppContext";
+import { Av } from "../components/atoms";
 import { jk } from "../constants/design";
 import type { TelegramProfile } from "../types";
 
@@ -220,6 +221,12 @@ function OnboardingLayout() {
   const [step, setStep] = useState<"telegram" | "profile">("telegram");
   const [telegramData, setTelegramData] = useState<TelegramProfile | undefined>(undefined);
 
+  // An already-authenticated user landing on an invite link must explicitly
+  // confirm which account they're joining as (item 4) rather than being silently
+  // assumed to join as whoever happens to be logged in. Set true once the user
+  // either confirms their current account or signs in fresh during this flow.
+  const [accountConfirmed, setAccountConfirmed] = useState(false);
+
   const [invite, setInvite] = useState<InviteData | null>(null);
   const [inviteLoading, setInviteLoading] = useState(!!code);
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -273,6 +280,11 @@ function OnboardingLayout() {
         });
         return;
       }
+
+      // Already authenticated but hasn't yet confirmed which account to join as.
+      // Hold here — the render shows the account-choice screen; joining only
+      // proceeds once the user taps "Continue" (which sets accountConfirmed).
+      if (!accountConfirmed) return;
 
       // Don't silently join a second challenge — surface the conflict so the
       // user can decide whether to leave their current one first.
@@ -337,11 +349,14 @@ function OnboardingLayout() {
           currentUser.uid,
           { name: userProfile.name, ini: userProfile.ini, tz: userProfile.timezone,
             photoUrl: userProfile.photoUrl ?? currentUser.photoURL ?? null },
-          invite.startingLives
+          invite.startingLives,
+          code,
         ).then(() => {
           setSelectedId(invite.challengeId);
           navigate("/app/home", { replace: true });
-        }).catch(() => {
+        }).catch((err: unknown) => {
+          // Surface the failure instead of silently bouncing back to the form.
+          console.error("[OnboardingLayout] auto-join failed:", err);
           setAutoJoinError("Не удалось вступить в челлендж. Пожалуйста, попробуйте снова.");
           setStep("profile");
         });
@@ -353,7 +368,7 @@ function OnboardingLayout() {
       setStep("profile");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, userProfile, step, inviteLoading, invite, conflict, conflictLoading]);
+  }, [currentUser, userProfile, step, inviteLoading, invite, conflict, conflictLoading, accountConfirmed]);
 
   // Google auth sets step → "profile" synchronously before userProfile loads from
   // Firestore. Once it does, check if the user is already a member and skip the
@@ -394,6 +409,18 @@ function OnboardingLayout() {
     navigate("/app/home", { replace: true });
   };
 
+  // Item 4: account-choice actions for an already-signed-in user on an invite link.
+  const handleContinueAsCurrentAccount = () => setAccountConfirmed(true);
+
+  const handleSwitchAccount = async () => {
+    await signOut(auth);
+    // Reset the flow so the login screen shows fresh for the other account.
+    setAccountConfirmed(false);
+    setConflict(null);
+    setTelegramData(undefined);
+    setStep("telegram");
+  };
+
   const preview: ChallengePreview | undefined = invite ?? undefined;
 
   const handleTelegramAuth = async (payload: { id_token: string; nonce: string }) => {
@@ -405,12 +432,15 @@ function OnboardingLayout() {
       displayName:      result.data.displayName,
       photoUrl:         result.data.photoUrl,
     });
+    // The user just picked this account by signing in — no account-choice needed.
+    setAccountConfirmed(true);
     setStep("profile");
   };
 
   const handleGoogleAuthOnboarding = async () => {
     await signInWithPopup(auth, new GoogleAuthProvider());
     // Google auth resolves with name/photo in currentUser — profile step will read it
+    setAccountConfirmed(true);
     setStep("profile");
   };
 
@@ -447,7 +477,8 @@ function OnboardingLayout() {
           currentUser.uid,
           { name: data.name, ini: data.ini, tz: detectTz(),
             photoUrl: currentUser.photoURL ?? null },
-          invite.startingLives
+          invite.startingLives,
+          code,
         );
         setSelectedId(invite.challengeId);
       }
@@ -554,6 +585,52 @@ function OnboardingLayout() {
               className="px-6 py-2.5 rounded-xl font-bold text-sm border border-border disabled:opacity-40"
             >
               Остаться в текущем
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Item 4: already signed in on arrival — let the user confirm which account to
+  // join as, or switch, instead of silently assuming the current session.
+  if (
+    currentUser && userProfile && invite && !accountConfirmed &&
+    !userProfile.challengeRoles?.[invite.challengeId]
+  ) {
+    const secondary = currentUser.email
+      ?? (userProfile.telegramUsername ? `@${userProfile.telegramUsername}` : null);
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6" style={jk}>
+        <div className="text-center space-y-5 max-w-xs">
+          <p className="text-3xl">{invite.emoji}</p>
+          <div className="space-y-1">
+            <p className="font-extrabold text-lg">Присоединиться к челленджу</p>
+            <p className="text-sm text-muted-foreground leading-snug">
+              <span className="font-semibold text-foreground">{invite.name}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-3 justify-center rounded-2xl border border-border bg-card px-4 py-3">
+            <Av ini={userProfile.ini} photoUrl={userProfile.photoUrl} sz="md" />
+            <div className="text-left min-w-0">
+              <p className="text-sm font-bold truncate">{userProfile.name}</p>
+              {secondary && <p className="text-xs text-muted-foreground truncate">{secondary}</p>}
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">Вы вошли как этот аккаунт. Продолжить?</p>
+          <div className="flex flex-col gap-2 pt-1">
+            <button
+              onClick={handleContinueAsCurrentAccount}
+              className="px-6 py-3 rounded-xl font-extrabold text-sm text-white"
+              style={{ background: "#FF4F00" }}
+            >
+              Продолжить как {userProfile.name}
+            </button>
+            <button
+              onClick={handleSwitchAccount}
+              className="px-6 py-2.5 rounded-xl font-bold text-sm border border-border"
+            >
+              Войти в другой аккаунт
             </button>
           </div>
         </div>

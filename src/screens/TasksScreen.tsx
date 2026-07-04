@@ -6,8 +6,8 @@ import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
 import { Card, SecLabel } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
-import { submitProof, subscribeToTodayTaskSubmission, taskSubmitSubId, runCheckInSubId } from "../lib/firestore";
-import { localNow } from "../lib/timezone";
+import { submitProof, subscribeToTodayTaskSubmission, taskSubmitSubId, runCheckInSubId, getCheckInAt } from "../lib/firestore";
+import { localTimeInTz } from "../lib/timezone";
 import { todayISOInTz } from "../lib/dates";
 import type { SubStatus } from "../types";
 
@@ -142,14 +142,23 @@ export function TasksScreen() {
         ? postponedTitle
         : (type === "run" ? "Утренняя пробежка" : (todayTask?.title ?? "Задание"));
 
-      // Determine late status using the participant's stored timezone, not the device clock.
-      // Device timezone can differ from where the challenge was set up (e.g. participant
-      // travels, or submits from a different country).
-      const nowInTz = localNow(meParticipant.tz);
-      const [nh, nm] = nowInTz.split(":").map(Number);
-      const [dh, dm] = todayDeadline.split(":").map(Number);
-      // Approved postponements grant an extension — never count as late
-      const isLate = isPostponed ? false : (nh * 60 + nm) > (dh * 60 + dm);
+      // Determine late status from the CHECK-IN moment, not the result-upload moment.
+      // A participant who checked in before the deadline is on time even if they
+      // upload the run result (manually or via Strava sync) hours later.
+      // We read the persisted checkInAt off the check-in doc and compare THAT time
+      // (in the participant's stored timezone) against the deadline. Falls back to
+      // "now" only if no check-in timestamp exists (e.g. direct submit without a
+      // prior check-in). Approved postponements grant an extension — never late.
+      let isLate = false;
+      if (type === "run" && !isPostponed) {
+        const checkInAt = effectiveSubId
+          ? await getCheckInAt(challenge.id, effectiveSubId)
+          : null;
+        const refTime = localTimeInTz(checkInAt ?? new Date(), meParticipant.tz);
+        const [nh, nm] = refTime.split(":").map(Number);
+        const [dh, dm] = todayDeadline.split(":").map(Number);
+        isLate = (nh * 60 + nm) > (dh * 60 + dm);
+      }
 
       const scoreKey = type === "run"
         ? (isLate ? "running_late" : "running_on_time")

@@ -371,6 +371,19 @@ export async function checkInForRun(
 }
 
 /**
+ * One-shot read of a submission's check-in timestamp. Used at result-upload time
+ * to decide lateness from WHEN the participant checked in (before the deadline),
+ * not when they got around to uploading the result. Returns null if the doc or
+ * the checkInAt field is absent.
+ */
+export async function getCheckInAt(challengeId: string, subId: string): Promise<Date | null> {
+  const snap = await getDoc(submissionRef(challengeId, subId));
+  if (!snap.exists()) return null;
+  const ts = snap.data().checkInAt;
+  return ts instanceof Timestamp ? ts.toDate() : null;
+}
+
+/**
  * Subscribe to today's running check-in for the given participant.
  * Calls back with { subId, checkInAt } when a check-in exists, or null when not.
  * HomeScreen uses this to restore persisted check-in state after a reload.
@@ -755,6 +768,21 @@ export async function updateChallengeDoc(
   await updateDoc(challengeRef(challengeId), patch as DocumentData);
 }
 
+/**
+ * Re-sync the public invite doc's cached config to match the challenge. The invite
+ * is a public mirror read at join time (and by Firestore rules to validate the new
+ * participant's starting lives); when the owner edits settings it must be updated
+ * too, otherwise new joiners see/get stale values. Best-effort: a failure here must
+ * not block the challenge update itself, so callers should not await-throw on it.
+ */
+export async function syncInviteConfig(
+  inviteCode: string,
+  patch: Partial<{ startingLives: number; name: string; emoji: string; description: string }>,
+): Promise<void> {
+  if (!inviteCode) return;
+  await updateDoc(inviteRef(inviteCode), patch as DocumentData);
+}
+
 /** Update a participant's lives directly (e.g., from ManageParticipants). */
 export async function setParticipantLives(
   challengeId: string,
@@ -1087,7 +1115,8 @@ export async function joinChallengeAsParticipant(
   challengeId: string,
   uid: string,
   profile: { name: string; ini: string; tz: string; photoUrl?: string | null },
-  startingLives: number
+  startingLives: number,
+  inviteCode: string,
 ): Promise<void> {
   await setDoc(participantRef(challengeId, uid), {
     uid,
@@ -1103,6 +1132,12 @@ export async function joinChallengeAsParticipant(
     tz:       profile.tz,
     results:  [],
     penalties: [],
+    // Stored so Firestore rules can validate `lives` against the exact public
+    // invite the joiner used. The invite is a cached copy of startingLives, so
+    // when the owner later edits the setting the invite can lag the challenge —
+    // validating against the invite (not the live challenge doc) prevents those
+    // stale-but-legitimate joins from being rejected with PERMISSION_DENIED.
+    inviteCode,
   });
   // Register the challenge role in the user's profile
   await addChallengeRole(uid, challengeId, "participant");
