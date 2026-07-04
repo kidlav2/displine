@@ -10,11 +10,13 @@ import { useAppContext } from "../contexts/AppContext";
 import { createAchievementDoc, getUpcomingTasks, deleteTask } from "../lib/firestore";
 import type { AchievementConditionType, Task } from "../types";
 import { CreateTaskShell } from "../components/CreateTaskShell";
+import { todayISOInTz } from "../lib/dates";
+import { detectTz } from "../lib/timezone";
 
 // ── Main ManageScreen ─────────────────────────────────────────────────────────
 
 export function ManageScreen() {
-  const { challenge, userRole, setSelectedId } = useAppContext();
+  const { challenge, userRole, meParticipant, setSelectedId } = useAppContext();
   const navigate = useNavigate();
 
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -43,7 +45,10 @@ export function ManageScreen() {
     if (!showUpcomingTasks) return;
     setUpcomingLoading(true);
     setUpcomingError(null);
-    const todayISO = new Date().toISOString().slice(0, 10);
+    // Use the organizer's timezone-local date, not UTC. `toISOString()` is always
+    // UTC, so for users ahead of UTC (e.g. UTC+5/+6) it can resolve to *yesterday*,
+    // which pulls today's already-running task into the "upcoming" list.
+    const todayISO = todayISOInTz(meParticipant?.tz ?? detectTz());
     getUpcomingTasks(challenge.id, todayISO)
       .then(tasks => { setUpcomingTasks(tasks); setUpcomingLoading(false); })
       .catch(() => { setUpcomingError("Не удалось загрузить задания"); setUpcomingLoading(false); });

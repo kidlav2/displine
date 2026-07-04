@@ -151,9 +151,12 @@ export function TasksScreen() {
       // prior check-in). Approved postponements grant an extension — never late.
       let isLate = false;
       if (type === "run" && !isPostponed) {
-        const checkInAt = effectiveSubId
-          ? await getCheckInAt(challenge.id, effectiveSubId)
-          : null;
+        // The run check-in doc has a deterministic id (`${uid}_${date}`), so read
+        // its timestamp directly instead of relying on the ?subId= URL param —
+        // several upload paths (page reload, Strava sync, direct navigation) don't
+        // carry it, and without it we'd wrongly fall back to the upload time.
+        const runSubId = runCheckInSubId(meParticipant.uid, participantTodayISO);
+        const checkInAt = await getCheckInAt(challenge.id, runSubId);
         const refTime = localTimeInTz(checkInAt ?? new Date(), meParticipant.tz);
         const [nh, nm] = refTime.split(":").map(Number);
         const [dh, dm] = todayDeadline.split(":").map(Number);
