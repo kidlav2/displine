@@ -79,7 +79,10 @@ service cloud.firestore {
           (isOwner(challengeId) && request.auth.uid != uid)
         );
 
-        allow delete: if isOrganizer(challengeId);
+        // Organizer may remove anyone; a participant may remove themselves
+        // (owners excluded — leaving would orphan the challenge).
+        allow delete: if isOrganizer(challengeId) ||
+          (isSignedIn() && request.auth.uid == uid && resource.data.role != "owner");
 
         allow create: if isSignedIn() && request.auth.uid == uid && (
           (
@@ -131,6 +134,7 @@ service cloud.firestore {
           request.resource.data.participantId == request.auth.uid &&
           request.resource.data.isAdmin == isOrganizer(challengeId) &&
           (isOrganizer(challengeId) ||
+           request.resource.data.type == "system:left" ||
            !request.resource.data.type.matches('system:.*'));
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&
@@ -179,8 +183,10 @@ service cloud.firestore {
       }
 
       match /team/{memberId} {
-        allow read:  if isOrganizer(challengeId);
-        allow write: if isOwner(challengeId);
+        allow read:   if isOrganizer(challengeId);
+        allow create, update: if isOwner(challengeId);
+        // Owner can remove any team member; a helper may remove themselves (leaving).
+        allow delete: if isOwner(challengeId) || (isSignedIn() && request.auth.uid == memberId);
       }
 
       match /tasks/{taskId} {

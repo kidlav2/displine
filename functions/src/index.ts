@@ -4,9 +4,40 @@ import { defineString, defineSecret } from "firebase-functions/params";
 import { initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { getStorage } from "firebase-admin/storage";
+import { randomUUID } from "crypto";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 
 initializeApp();
+
+/**
+ * Telegram's OIDC `picture` claim points at Telegram's own CDN, which can
+ * rotate/expire independently of our app. Download it once and re-host it in
+ * our Storage bucket (same convention as ProfileScreen's manual avatar
+ * upload: users/{uid}/avatar) so the URL we persist stays valid long-term.
+ * Returns null on any failure so callers can fall back to the raw CDN URL.
+ */
+async function cacheTelegramPhoto(uid: string, pictureUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(pictureUrl);
+    if (!res.ok) return null;
+    const buffer = Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get("content-type") ?? "image/jpeg";
+
+    const bucket = getStorage().bucket();
+    const filePath = `users/${uid}/avatar`;
+    const file = bucket.file(filePath);
+    const token = randomUUID();
+    await file.save(buffer, {
+      metadata: { contentType, metadata: { firebaseStorageDownloadTokens: token } },
+    });
+
+    return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`;
+  } catch (err) {
+    console.error("[cacheTelegramPhoto] failed to cache Telegram photo:", err);
+    return null;
+  }
+}
 
 // ── Telegram OIDC verification ────────────────────────────────────────────────
 // Set via: firebase functions:params:set TELEGRAM_CLIENT_ID=<your numeric client id>
@@ -72,17 +103,32 @@ export const verifyTelegramLogin = onCall({ cors: ALLOWED_ORIGINS }, async (requ
   const uid             = `tg_${telegramId}`;
   const displayName     = (payload.name as string | undefined) ?? "";
   const telegramUsername = (payload.preferred_username as string | undefined) ?? null;
-  const photoUrl        = (payload.picture as string | undefined) ?? null;
+  const rawPhotoUrl     = (payload.picture as string | undefined) ?? null;
+
+  // Re-host the Telegram CDN photo in our own Storage bucket so it doesn't
+  // break if Telegram's link later expires or rotates. Falls back to the raw
+  // CDN URL if the fetch/upload fails for any reason.
+  const photoUrl = rawPhotoUrl ? (await cacheTelegramPhoto(uid, rawPhotoUrl)) ?? rawPhotoUrl : null;
 
   // Upsert Firebase Auth user so createCustomToken always succeeds
   const adminAuth = getAuth();
+  let userExists = true;
   try {
     await adminAuth.getUser(uid);
   } catch {
+    userExists = false;
+  }
+
+  if (!userExists) {
     await adminAuth.createUser({
       uid,
       displayName,
       ...(photoUrl ? { photoURL: photoUrl } : {}),
+    });
+  } else if (photoUrl) {
+    // Keep the Auth profile's cached photo fresh on every subsequent login too.
+    await adminAuth.updateUser(uid, { photoURL: photoUrl }).catch((err) => {
+      console.error("[verifyTelegramLogin] failed to update photoURL:", err);
     });
   }
 

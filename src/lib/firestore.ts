@@ -940,6 +940,33 @@ export async function removeParticipantFromChallenge(
 }
 
 /**
+ * A participant leaves a challenge of their own accord. Same underlying
+ * deletion as removeParticipantFromChallenge (organizer-initiated), but
+ * writes a distinct feed message so it doesn't read as an organizer action.
+ */
+export async function leaveChallenge(
+  challengeId: string,
+  uid: string,
+  wasTeamMember: boolean,
+  actor: FeedActor,
+): Promise<void> {
+  // Write the feed event first — security rules require an existing
+  // participant doc to author a feed post, and we're about to delete it.
+  await writeFeedSystemEvent(challengeId, actor, "system:left", `покинул(а) челлендж`);
+  await runTransaction(db, async (tx) => {
+    tx.delete(participantRef(challengeId, uid));
+    if (wasTeamMember) tx.delete(teamMemberRef(challengeId, uid));
+  });
+  // Unlike organizer-initiated removal, the leaving user IS the profile
+  // owner here, so (unlike removeParticipantFromChallenge) we can and should
+  // clear the role entry — otherwise the client keeps trying to load a
+  // challenge the user no longer has access to.
+  await updateDoc(userRef(uid), {
+    [`challengeRoles.${challengeId}`]: deleteField(),
+  });
+}
+
+/**
  * Resolve a human-readable invite code to the minimal challenge data needed
  * for the onboarding screen. Reads from invites/{code} which is publicly
  * readable without auth.

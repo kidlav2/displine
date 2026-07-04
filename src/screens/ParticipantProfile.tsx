@@ -94,6 +94,9 @@ export function ParticipantProfile() {
           <RoleBadge role={participant.role} />
         </div>
         <p className="text-xs text-muted-foreground mt-1">Вступил {participant.joinDate}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Местное время: {localNow(participant.tz)} ({utcLabel(participant.tz)})
+        </p>
         {/* Social links remain in the header; bio moves to its own card below */}
         {(publicProfile?.socialLinks?.instagram || publicProfile?.socialLinks?.other) && (
           <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">

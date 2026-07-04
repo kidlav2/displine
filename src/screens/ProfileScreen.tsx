@@ -12,7 +12,7 @@ import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { auth, functions, storage } from "../lib/firebase";
-import { writeUserProfile, participantRef } from "../lib/firestore";
+import { writeUserProfile, participantRef, leaveChallenge } from "../lib/firestore";
 
 const disconnectStravaFn = httpsCallable<Record<string, never>, { success: boolean }>(
   functions, "disconnectStrava"
@@ -33,6 +33,8 @@ export function ProfileScreen() {
   const [tzSaved, setTzSaved]       = useState(false);
   const [tzSaving, setTzSaving]     = useState(false);
   const [stravaLoading, setStravaLoading] = useState(false);
+  const [leaving, setLeaving]       = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const nameToIni = (n: string) => {
@@ -66,6 +68,26 @@ export function ProfileScreen() {
   const handleLogout = async () => {
     await signOut(auth);
     navigate("/login", { replace: true });
+  };
+
+  const handleLeaveChallenge = async () => {
+    if (!currentUser || !meParticipant || leaving) return;
+    const confirmed = window.confirm(
+      "Вы уверены, что хотите покинуть этот челлендж? Ваш прогресс, отправки и история останутся видны другим участникам."
+    );
+    if (!confirmed) return;
+    setLeaving(true);
+    setLeaveError(null);
+    try {
+      await leaveChallenge(challenge.id, currentUser.uid, meParticipant.role === "helper", {
+        uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin,
+      });
+      navigate("/", { replace: true });
+    } catch (e) {
+      console.error("[ProfileScreen] leaveChallenge failed:", e);
+      setLeaveError("Не удалось покинуть челлендж. Попробуйте снова.");
+      setLeaving(false);
+    }
   };
 
   const handleConnectStrava = () => {
@@ -332,6 +354,25 @@ export function ProfileScreen() {
         <LogOut size={15} />
         Выйти из аккаунта
       </button>
+
+      {meParticipant && meParticipant.role !== "owner" && (
+        <>
+          <div className="flex items-center gap-3 pt-2">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground">Опасная зона</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          {leaveError && <p className="text-xs font-bold text-red-500 text-center">{leaveError}</p>}
+          <button
+            onClick={handleLeaveChallenge}
+            disabled={leaving}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm text-destructive-foreground bg-destructive disabled:opacity-40"
+          >
+            {leaving ? <Loader2 size={15} className="animate-spin" /> : null}
+            Покинуть челлендж
+          </button>
+        </>
+      )}
     </div>
   );
 }
