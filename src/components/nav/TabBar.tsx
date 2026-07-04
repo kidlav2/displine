@@ -1,6 +1,6 @@
 import { Home, CheckSquare, Users, User, Settings } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
-import { BRAND_COLOR } from "../../constants/design";
+import { BRAND_COLOR, NAV_INACTIVE } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
 import type { UserRole } from "../../types";
 
@@ -48,14 +48,14 @@ export function TabBar() {
           return (
             <button key={path} onClick={() => navigate(path)} className="flex-1 flex flex-col items-center py-3 gap-1">
               <div className="relative">
-                <Icon size={21} strokeWidth={active ? 2.5 : 1.5} style={{ color: active ? BRAND_COLOR : "#9BA5B4" }} />
+                <Icon size={21} strokeWidth={active ? 2.5 : 1.5} style={{ color: active ? BRAND_COLOR : NAV_INACTIVE }} />
                 {badge > 0 && (
                   <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-4 px-1 rounded-full text-[9px] font-extrabold text-white flex items-center justify-center leading-none" style={{ background: BRAND_COLOR }}>
                     {badge > 99 ? "99+" : badge}
                   </span>
                 )}
               </div>
-              <span className="text-[9px] font-bold" style={{ color: active ? BRAND_COLOR : "#9BA5B4" }}>{label}</span>
+              <span className="text-[9px] font-bold" style={{ color: active ? BRAND_COLOR : NAV_INACTIVE }}>{label}</span>
             </button>
           );
         })}

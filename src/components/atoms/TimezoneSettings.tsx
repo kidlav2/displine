@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { CITY_TIMEZONES } from "../../constants/timezones";
 import { findCity, utcLabel, localNow } from "../../lib/timezone";
-import { BRAND_COLOR, bc } from "../../constants/design";
+import { BRAND_COLOR, BRAND_TINT, bc } from "../../constants/design";
 
 interface TimezoneSettingsProps {
   tz: string;
@@ -59,7 +59,7 @@ export function TimezoneSettings({ tz, isAuto, onChange }: TimezoneSettingsProps
               key={`${c.city}-${i}`}
               onClick={() => { onChange(c.tz); setSearch(""); }}
               className="w-full flex items-center justify-between px-3.5 py-2.5 text-sm text-left border-t border-border first:border-t-0 transition-colors hover:bg-muted"
-              style={selected ? { background: "#FFF3F0" } : { background: "#fff" }}
+              style={selected ? { background: BRAND_TINT } : { background: "#fff" }}
             >
               <div>
                 <span className="font-semibold">{c.city}</span>

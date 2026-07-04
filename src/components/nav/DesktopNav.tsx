@@ -1,6 +1,6 @@
 import { Home, CheckSquare, Users, User, Settings } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
-import { BRAND_COLOR } from "../../constants/design";
+import { BRAND_COLOR, BRAND_TINT, NAV_INACTIVE } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
 import type { UserRole } from "../../types";
 
@@ -43,7 +43,7 @@ export function DesktopNav() {
     <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 w-60 bg-card border-r border-border">
       <div className="px-5 pt-6 pb-4 border-b border-border">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base" style={{ background: "#FFF3F0" }}>🔥</div>
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base" style={{ background: BRAND_TINT }}>🔥</div>
           <div>
             <p className="font-extrabold text-sm leading-none">Discipline</p>
             <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -63,8 +63,8 @@ export function DesktopNav() {
           return (
             <button key={path} onClick={() => navigate(path)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-              style={active ? { background: "#FFF3F0", color: BRAND_COLOR } : { color: "#6B7280" }}>
-              <Icon size={18} strokeWidth={active ? 2.5 : 1.5} style={{ color: active ? BRAND_COLOR : "#9BA5B4" }} />
+              style={active ? { background: BRAND_TINT, color: BRAND_COLOR } : { color: NAV_INACTIVE }}>
+              <Icon size={18} strokeWidth={active ? 2.5 : 1.5} style={{ color: active ? BRAND_COLOR : NAV_INACTIVE }} />
               {label}
               {badge > 0 && (
                 <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-extrabold text-white flex items-center justify-center" style={{ background: BRAND_COLOR }}>

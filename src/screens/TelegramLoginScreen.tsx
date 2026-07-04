@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { BRAND_COLOR } from "../constants/design";
+import { BRAND_COLOR, BRAND_TINT } from "../constants/design";
 
 // Google SVG icon (inline to avoid extra dependency)
 function GoogleIcon() {
@@ -115,7 +115,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, onInviteC
           <div className="flex flex-col items-center text-center mb-10">
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
-              style={{ background: "#FFF3F0" }}
+              style={{ background: BRAND_TINT }}
             >
               {challenge.emoji}
             </div>
@@ -132,7 +132,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, onInviteC
           <div className="flex flex-col items-center text-center mb-10">
             <div
               className="w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-4"
-              style={{ background: "#FFF3F0" }}
+              style={{ background: BRAND_TINT }}
             >
               🏁
             </div>

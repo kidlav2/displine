@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Camera, Activity, CheckSquare, Layers, CalendarDays } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Card, Chip, SecLabel, StatusBadge, DualTimestamp, Lightbox } from "../components/atoms";
-import { BRAND_COLOR } from "../constants/design";
+import { BRAND_COLOR, SUCCESS_COLOR, ERROR_COLOR, POSTPONE_COLOR } from "../constants/design";
 import { findCity, utcLabel, localNow } from "../lib/timezone";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -110,8 +110,8 @@ export function ReviewScreen() {
     <div className="space-y-1">
       {[
         { label: "На проверке",      count: challenge.queue.filter(q => q.status === "pending" || q.status === "in_progress").length, color: "#F59E0B" },
-        { label: "Одобрено",         count: challenge.queue.filter(q => q.status === "approved").length,                               color: "#22C55E" },
-        { label: "Отклонено / Оп.",  count: challenge.queue.filter(q => q.status === "rejected" || q.status === "late" || q.status === "missing").length, color: "#EF4444" },
+        { label: "Одобрено",         count: challenge.queue.filter(q => q.status === "approved").length,                               color: SUCCESS_COLOR },
+        { label: "Отклонено / Оп.",  count: challenge.queue.filter(q => q.status === "rejected" || q.status === "late" || q.status === "missing").length, color: ERROR_COLOR },
       ].map(s => (
         <div key={s.label} className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">{s.label}</span>
@@ -206,7 +206,7 @@ export function ReviewScreen() {
                 )}
                 <div>
                   <p className="text-muted-foreground mb-1">Опоздание</p>
-                  <p className={`font-bold ${item.isLate ? "text-orange-500" : "text-green-500"}`}>
+                  <p className={`font-bold ${item.isLate ? "text-amber-500" : "text-green-500"}`}>
                     {item.isLate ? "Да" : "Нет"}
                   </p>
                 </div>
@@ -272,7 +272,7 @@ export function ReviewScreen() {
             </button>
           </div>
           <button onClick={() => act(item, "approved", true)} disabled={actLoading}
-            className="w-full py-2 rounded-xl border-2 border-orange-200 bg-orange-50 text-orange-600 font-bold text-sm disabled:opacity-50">
+            className="w-full py-2 rounded-xl border-2 border-amber-200 bg-amber-50 text-amber-600 font-bold text-sm disabled:opacity-50">
             {item.type === "running" ? "Опоздание (принять, штраф)" : "Опоздание (принять, −1 жизнь)"}
           </button>
         </div>
@@ -340,7 +340,7 @@ export function ReviewScreen() {
                           </div>
                           <div className="mt-0.5 flex items-center gap-2 flex-wrap">
                             <span className="flex items-center gap-1 text-xs text-muted-foreground">{typeIcon(item.type)}{item.task || (item.type === "running" ? "Пробежка" : item.type === "checklist" ? "Чеклист" : "Произвольное")}</span>
-                            {item.isLate && <span className="text-[10px] font-bold text-orange-400">оп.</span>}
+                            {item.isLate && <span className="text-[10px] font-bold text-amber-500">оп.</span>}
                             {item.checkIn !== "—" && <DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} label={false} />}
                           </div>
                         </div>
@@ -440,7 +440,7 @@ export function ReviewScreen() {
                         <div className="flex items-center gap-1.5">
                           {typeIcon(item.type)}
                           <span className="text-sm">{item.task || (item.type === "running" ? "Пробежка" : item.type === "checklist" ? "Чеклист" : "Произвольное")}</span>
-                          {item.isLate && <span className="text-[10px] font-bold text-orange-400 ml-1">оп.</span>}
+                          {item.isLate && <span className="text-[10px] font-bold text-amber-500 ml-1">оп.</span>}
                         </div>
                       </td>
                       <td className="px-4 py-3"><DualTimestamp time={item.checkIn} participantTz={item.participantTz} adminTz={adminTz} /></td>
@@ -513,7 +513,7 @@ function PostponementItem({
         <Card className={`!p-3.5 ${expanded ? "rounded-b-none" : ""}`}
           style={expanded ? { borderBottomColor: "transparent" } : {}}>
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-full bg-purple-50 flex items-center justify-center shrink-0">
               <CalendarDays size={14} className="text-purple-600" />
             </div>
             <div className="flex-1 min-w-0">
@@ -528,7 +528,7 @@ function PostponementItem({
                 <p className="text-[11px] italic text-muted-foreground mt-0.5 truncate">«{p.reason}»</p>
               )}
             </div>
-            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 shrink-0">
+            <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 shrink-0">
               Ожидает
             </span>
           </div>
@@ -582,7 +582,7 @@ function PostponementItem({
               </button>
               <button onClick={() => onAct(p, "approved")} disabled={loading}
                 className="flex-1 py-2 rounded-xl font-bold text-sm text-white disabled:opacity-50"
-                style={{ background: "#7C3AED" }}>
+                style={{ background: POSTPONE_COLOR }}>
                 {loading ? "…" : "Одобрить"}
               </button>
             </div>

@@ -17,12 +17,16 @@
   --muted-foreground: #8C8C9A;
   --accent: #F0614A;
   --accent-foreground: #FFFFFF;
-  --destructive: #E03B5A;
+  --destructive: #EF4444;
   --destructive-foreground: #ffffff;
   --border: rgba(0, 0, 0, 0.07);
   --input: transparent;
   --input-background: #F2F3F5;
   --switch-background: #C8CDD6;
+  /* Semantic tokens not covered by Tailwind classes */
+  --brand-tint: #FFF3F0;
+  --nav-inactive: #9BA5B4;
+  --postpone: #7C3AED;
   --font-weight-medium: 600;
   --font-weight-normal: 400;
   --ring: #F0614A;

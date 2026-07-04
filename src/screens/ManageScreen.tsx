@@ -214,7 +214,7 @@ export function ManageScreen() {
           <div className="flex gap-2 mt-2 flex-wrap">
             {["⭐", "🔥", "🏆", "💪", "🎯", "🌟", "⚡", "🦁", "🏃", "❤️"].map(ico => (
               <button key={ico} onClick={() => setAchForm(f => ({ ...f, icon: ico }))}
-                className={`text-2xl w-12 h-12 rounded-xl border-2 ${achForm.icon === ico ? "border-orange-400 bg-orange-50" : "border-border bg-muted"}`}>{ico}</button>
+                className={`text-2xl w-12 h-12 rounded-xl border-2 ${achForm.icon === ico ? "border-primary bg-primary/5" : "border-border bg-muted"}`}>{ico}</button>
             ))}
           </div>
         </div>

@@ -9,3 +9,4 @@ export { DualTimestamp } from "./DualTimestamp";
 export { TimezoneSettings } from "./TimezoneSettings";
 export { FeedCard } from "./FeedCard";
 export { Lightbox } from "./Lightbox";
+export { RoleBadge } from "./RoleBadge";

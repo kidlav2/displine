@@ -99,7 +99,7 @@ export function CreateChallengeScreen() {
           <div className="flex gap-2 mt-2 flex-wrap">
             {EMOJIS.map(e => (
               <button key={e} onClick={() => setEmoji(e)}
-                className={`text-2xl w-11 h-11 rounded-xl border-2 ${emoji === e ? "border-orange-400 bg-orange-50" : "border-border bg-muted"}`}>{e}</button>
+                className={`text-2xl w-11 h-11 rounded-xl border-2 ${emoji === e ? "border-primary bg-primary/5" : "border-border bg-muted"}`}>{e}</button>
             ))}
           </div>
         </div>

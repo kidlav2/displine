@@ -6,7 +6,7 @@ import {
 } from "firebase/auth";
 import { auth } from "../lib/firebase";
 import { SecLabel } from "../components/atoms";
-import { BRAND_COLOR } from "../constants/design";
+import { BRAND_COLOR, BRAND_TINT } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 
 function authErrMsg(err: AuthError): string {
@@ -65,7 +65,7 @@ export function OrgLoginScreen() {
   return (
     <div className="flex flex-col h-full px-6 pt-10 pb-8">
       <div className="flex flex-col items-center text-center mb-8">
-        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-4" style={{ background: "#FFF3F0" }}>🔥</div>
+        <div className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl mb-4" style={{ background: BRAND_TINT }}>🔥</div>
         <h1 className="font-extrabold text-2xl leading-tight mb-1">Вход для организатора</h1>
         <p className="text-sm text-muted-foreground max-w-[260px] leading-snug">
           Войдите, чтобы управлять челленджем. Участники присоединяются по ссылке — эта форма только для организаторов.

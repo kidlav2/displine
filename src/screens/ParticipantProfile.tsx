@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useParams, useNavigate } from "react-router";
 import { getDoc } from "firebase/firestore";
-import { Av, Hearts, Card, SecLabel } from "../components/atoms";
+import { Av, Hearts, Card, SecLabel, RoleBadge } from "../components/atoms";
 import { BRAND_COLOR, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { findCity, localNow, utcLabel } from "../lib/timezone";
@@ -91,16 +91,7 @@ export function ParticipantProfile() {
         <Av ini={participant.ini} photoUrl={publicProfile?.photoUrl ?? participant.photoUrl} sz="lg" admin={participant.isAdmin} />
         <div className="flex items-center gap-2 mt-3">
           <p className="font-extrabold text-2xl">{participant.name}</p>
-          {participant.role === "owner" && (
-            <span className="flex items-center gap-1 text-[10px] font-extrabold text-purple-500 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-full">
-              <Shield size={9} /> владелец
-            </span>
-          )}
-          {participant.role === "helper" && (
-            <span className="flex items-center gap-1 text-[10px] font-extrabold text-blue-500 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-              <Shield size={9} /> организатор
-            </span>
-          )}
+          <RoleBadge role={participant.role} />
         </div>
         <p className="text-xs text-muted-foreground mt-1">Вступил {participant.joinDate}</p>
         {/* Social links remain in the header; bio moves to its own card below */}
@@ -192,7 +183,7 @@ export function ParticipantProfile() {
                         </p>
                       )}
                       {(pen.burpees ?? 0) > 0 && (
-                        <p className={`text-xs font-semibold mt-0.5 ${pen.paid ? "text-green-400 line-through" : "text-orange-500"}`}>
+                        <p className={`text-xs font-semibold mt-0.5 ${pen.paid ? "text-green-400 line-through" : "text-amber-500"}`}>
                           {pen.burpees} бёрпи
                         </p>
                       )}
@@ -241,9 +232,9 @@ export function ParticipantProfile() {
           <Card className="!p-4 space-y-3 border-blue-100">
             {isOwner ? (
               <button onClick={() => setPenaltyForm(v => !v)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-orange-100 bg-orange-50 text-left">
-                <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center shrink-0"><AlertCircle size={16} className="text-orange-500" /></div>
-                <div><p className="text-sm font-bold text-orange-600">Записать штраф</p><p className="text-xs text-orange-400">Зафиксировать штраф вручную</p></div>
+                className="w-full flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50 text-left">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0"><AlertCircle size={16} className="text-amber-500" /></div>
+                <div><p className="text-sm font-bold text-amber-600">Записать штраф</p><p className="text-xs text-amber-400">Зафиксировать штраф вручную</p></div>
               </button>
             ) : (
               <div className="flex items-center gap-2 p-3 bg-muted rounded-xl">

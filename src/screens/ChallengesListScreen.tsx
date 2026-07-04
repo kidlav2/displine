@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Plus, CheckCircle2, Copy, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Av, Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR } from "../constants/design";
+import { BRAND_COLOR, SUCCESS_COLOR } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { challengeCurrentDay } from "../lib/dates";
 import type { ChallengeData, ChallengeStatus } from "../types";
 
 const STATUS_COLOR: Record<ChallengeStatus, string> = {
-  active: "#22C55E", completed: "#8C8C9A", upcoming: "#3B82F6",
+  active: SUCCESS_COLOR, completed: "#8C8C9A", upcoming: "#3B82F6",
 };
 const STATUS_LABEL: Record<ChallengeStatus, string> = {
   active: "Активен", completed: "Завершён", upcoming: "Предстоящий",
@@ -61,7 +61,7 @@ function ChallengeCard({ ch, onSelect }: { ch: ChallengeData; onSelect: () => vo
         <p className="text-[11px] text-muted-foreground font-mono truncate mr-3">{link}</p>
         <button onClick={copyLink}
           className="flex items-center gap-1.5 shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-border bg-card transition-colors"
-          style={copied ? { color: "#22C55E", borderColor: "#BBF7D0" } : { color: BRAND_COLOR }}>
+          style={copied ? { color: SUCCESS_COLOR, borderColor: "#BBF7D0" } : { color: BRAND_COLOR }}>
           {copied ? <CheckCircle2 size={11} /> : <Copy size={11} />}
           {copied ? "Скопировано!" : "Копировать"}
         </button>

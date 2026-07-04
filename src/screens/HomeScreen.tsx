@@ -4,8 +4,8 @@ import {
   Wallet, TrendingUp, MapPin, CheckCircle2, XCircle, Zap, CalendarDays, AlertCircle, RotateCcw,
 } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Av, Hearts, Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, DAY_LABELS, bc } from "../constants/design";
+import { Av, Hearts, Card, SecLabel, RoleBadge } from "../components/atoms";
+import { BRAND_COLOR, DAY_LABELS, POSTPONE_COLOR, bc } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -249,12 +249,12 @@ export function HomeScreen() {
 
       {/* Unpaid penalty warnings — only shown until organizer marks them as paid */}
       {meParticipant?.penalties?.filter(p => !p.paid && (p.amount > 0 || (p.burpees ?? 0) > 0 || (p.livesLost ?? 0) > 0)).map((p, i) => (
-        <Card key={i} className="!p-4 border-2 border-orange-200 bg-orange-50">
+        <Card key={i} className="!p-4 border-2 border-amber-200 bg-amber-50">
           <div className="flex items-center gap-3">
-            <AlertCircle size={16} className="text-orange-500 shrink-0" />
+            <AlertCircle size={16} className="text-amber-500 shrink-0" />
             <div>
-              <p className="text-xs font-extrabold text-orange-700">Неоплаченный штраф</p>
-              <p className="text-[11px] text-orange-600">
+              <p className="text-xs font-extrabold text-amber-700">Неоплаченный штраф</p>
+              <p className="text-[11px] text-amber-600">
                 {p.reason}
                 {p.amount > 0 ? ` — ${p.amount.toLocaleString("ru")} ${challenge.settings.currency}` : ""}
                 {(p.burpees ?? 0) > 0 ? ` · ${p.burpees} бёрпи` : ""}
@@ -493,8 +493,7 @@ export function HomeScreen() {
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-bold leading-none truncate">{p.name}</p>
-                  {p.role === "owner" && <span className="text-[9px] font-extrabold text-purple-500">Орг.</span>}
-                  {p.role === "helper" && <span className="text-[9px] font-extrabold text-blue-500">Пом.</span>}
+                  <RoleBadge role={p.role} variant="text" />
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {lbSort === "score" ? `${calcScore(p.results, scoring)} оч.` : `${p.km} км`}
@@ -661,7 +660,7 @@ function PostponeSection({
           </button>
           <button onClick={onSubmit} disabled={loading}
             className="flex-1 py-1.5 rounded-lg font-bold text-xs text-white disabled:opacity-50"
-            style={{ background: "#7C3AED" }}>
+            style={{ background: POSTPONE_COLOR }}>
             {loading ? "…" : "Отправить"}
           </button>
         </div>
@@ -730,7 +729,7 @@ function PostponedCard({
   };
 
   return (
-    <Card className="!p-4" style={{ borderLeft: "3px solid #7C3AED" }}>
+    <Card className="!p-4" style={{ borderLeft: `3px solid ${POSTPONE_COLOR}` }}>
       <div className="flex items-center gap-2 mb-2">
         <CalendarDays size={13} className="text-purple-500 shrink-0" />
         <SecLabel>Перенесённое задание</SecLabel>
@@ -751,7 +750,7 @@ function PostponedCard({
       ) : (
         <button onClick={goSubmit}
           className="w-full py-2.5 rounded-xl font-bold text-sm text-white"
-          style={{ background: "#7C3AED" }}>
+          style={{ background: POSTPONE_COLOR }}>
           Сдать задание
         </button>
       )}

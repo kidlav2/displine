@@ -144,7 +144,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
                 <MapPin size={11} /> {item.km} km
               </span>
             )}
-            {item.isLate && <span className="text-xs font-bold text-orange-400">Опоздание</span>}
+            {item.isLate && <span className="text-xs font-bold text-amber-500">Опоздание</span>}
             {item.type === "running" && (
               item.stravaSource ? (
                 <span className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-extrabold text-white" style={{ background: "#FC5200" }}>

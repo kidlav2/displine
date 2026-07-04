@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { Av, Hearts, Card, Chip, FeedCard } from "../components/atoms";
+import { Av, Hearts, Card, Chip, FeedCard, RoleBadge } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { calcScore } from "../lib/scoring";
 import { useAppContext } from "../contexts/AppContext";
@@ -213,8 +213,7 @@ export function CommunityScreen() {
                 <div className="flex-1 min-w-0 cursor-pointer" onClick={() => onViewParticipant(p.uid)}>
                   <div className="flex items-center gap-1.5">
                     <p className="text-sm font-bold leading-none truncate">{p.name}</p>
-                    {p.role === "owner" && <span className="text-[9px] font-extrabold text-purple-500">Орг.</span>}
-                    {p.role === "helper" && <span className="text-[9px] font-extrabold text-blue-500">Пом.</span>}
+                    <RoleBadge role={p.role} variant="text" />
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {sort === "score" ? `${calcScore(p.results, scoring)} оч.` : `${p.km} км`}

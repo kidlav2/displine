@@ -15,15 +15,16 @@ export function Av({ ini, photoUrl, sz = "md", accent = false, admin = false, on
   return (
     <div className="relative shrink-0 inline-flex" onClick={onClick} style={onClick ? { cursor: "pointer" } : {}}>
       <div
-        className={`${s} rounded-full overflow-hidden flex items-center justify-center font-extrabold select-none`}
-        style={photoUrl ? {} : { background: accent ? BRAND_COLOR : "#EEEEF2", color: accent ? "#fff" : "#666" }}
+        className={`${s} rounded-full overflow-hidden flex items-center justify-center font-extrabold select-none ${!photoUrl && !accent ? "bg-muted text-muted-foreground" : ""}`}
+        style={photoUrl ? {} : accent ? { background: BRAND_COLOR, color: "#fff" } : {}}
       >
         {photoUrl
           ? <img src={photoUrl} alt={ini} className="w-full h-full object-cover" />
           : ini}
       </div>
       {admin && (
-        <span className="absolute -bottom-0.5 -right-0.5 bg-blue-500 rounded-full flex items-center justify-center" style={{ width: 14, height: 14 }}>
+        <span className="absolute -bottom-0.5 -right-0.5 rounded-full flex items-center justify-center"
+          style={{ width: 14, height: 14, background: BRAND_COLOR }}>
           <Shield size={8} className="text-white" strokeWidth={2.5} />
         </span>
       )}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle, Copy, Check, UserRoundPlus, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Av, Card, SecLabel } from "../components/atoms";
+import { Av, Card, SecLabel, RoleBadge } from "../components/atoms";
 import { BRAND_COLOR } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { inviteTeamMember, updateTeamMemberRole, removeTeamMember, demoteTeamMember, promoteParticipantToTeam } from "../lib/firestore";
@@ -96,11 +96,9 @@ export function TeamScreen() {
 
   const roleBadge = (role: OrgRole, status: TeamMember["status"]) => {
     if (status === "invited") return (
-      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Приглашён</span>
+      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 shrink-0">Приглашён</span>
     );
-    return role === "owner"
-      ? <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-200">Владелец</span>
-      : <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">Организатор</span>;
+    return <RoleBadge role={role} />;
   };
 
   return (
@@ -184,7 +182,7 @@ export function TeamScreen() {
 
       {/* Path B — invite link */}
       {showInvite && (
-        <Card className="!p-4 mb-4 border-orange-100 bg-orange-50">
+        <Card className="!p-4 mb-4 border-amber-100 bg-amber-50">
           {generatedLink ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">

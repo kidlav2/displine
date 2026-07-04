@@ -1,7 +1,13 @@
 import type React from "react";
 
-// TODO: replace BRAND_COLOR with var(--primary) everywhere once CSS-var usage is standardised
-export const BRAND_COLOR = "#F0614A";
+// Single source of truth for brand and semantic colors.
+// These match the CSS variables in theme.css — both must be updated together.
+export const BRAND_COLOR    = "#F0614A"; // --primary
+export const BRAND_TINT     = "#FFF3F0"; // --brand-tint
+export const NAV_INACTIVE   = "#9BA5B4"; // --nav-inactive
+export const POSTPONE_COLOR = "#7C3AED"; // --postpone
+export const SUCCESS_COLOR  = "#22C55E"; // green-500
+export const ERROR_COLOR    = "#EF4444"; // --destructive / red-500
 
 export const ALL_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
