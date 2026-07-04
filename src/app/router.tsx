@@ -229,6 +229,7 @@ function OnboardingLayout() {
   const [conflict, setConflict] = useState<ChallengeConflict | null>(null);
   const [conflictLoading, setConflictLoading] = useState(false);
   const [leavingConflict, setLeavingConflict] = useState(false);
+  const [autoJoinError, setAutoJoinError] = useState<string | null>(null);
 
   // No code → show join-or-create landing (handled below, skip resolution)
   useEffect(() => {
@@ -306,6 +307,9 @@ function OnboardingLayout() {
         }).catch((err: unknown) => {
           if (err instanceof TeamInviteError) {
             navigate(`/error/team-invite-${err.reason}`, { replace: true });
+          } else {
+            setAutoJoinError("Не удалось вступить в челлендж. Пожалуйста, попробуйте снова.");
+            setStep("profile");
           }
         });
       } else {
@@ -318,6 +322,9 @@ function OnboardingLayout() {
         ).then(() => {
           setSelectedId(invite.challengeId);
           navigate("/app/home", { replace: true });
+        }).catch(() => {
+          setAutoJoinError("Не удалось вступить в челлендж. Пожалуйста, попробуйте снова.");
+          setStep("profile");
         });
       }
     } else if (userProfile && !invite && !inviteError) {
@@ -372,34 +379,31 @@ function OnboardingLayout() {
 
   const handleProfileDone = async (data: { name: string; ini: string }) => {
     if (currentUser && invite) {
-      try {
-        if (invite.type === "team") {
-          const { challengeId } = await acceptTeamInvite(code, currentUser.uid, {
-            name:     data.name,
-            ini:      data.ini,
-            tz:       detectTz(),
-            photoUrl: currentUser.photoURL ?? null,
-          });
-          setSelectedId(challengeId);
-        } else {
-          await joinChallengeAsParticipant(
-            invite.challengeId,
-            currentUser.uid,
-            { name: data.name, ini: data.ini, tz: detectTz(),
-              photoUrl: currentUser.photoURL ?? null },
-            invite.startingLives
-          );
-          setSelectedId(invite.challengeId);
-        }
-      } catch (err: unknown) {
-        if (err instanceof TeamInviteError) {
-          navigate(`/error/team-invite-${err.reason}`, { replace: true });
-          return;
-        }
-        throw err;
+      if (invite.type === "team") {
+        const { challengeId } = await acceptTeamInvite(code, currentUser.uid, {
+          name:     data.name,
+          ini:      data.ini,
+          tz:       detectTz(),
+          photoUrl: currentUser.photoURL ?? null,
+        }).catch((err: unknown) => {
+          if (err instanceof TeamInviteError) {
+            navigate(`/error/team-invite-${err.reason}`, { replace: true });
+          }
+          throw err;
+        });
+        setSelectedId(challengeId);
+      } else {
+        await joinChallengeAsParticipant(
+          invite.challengeId,
+          currentUser.uid,
+          { name: data.name, ini: data.ini, tz: detectTz(),
+            photoUrl: currentUser.photoURL ?? null },
+          invite.startingLives
+        );
+        setSelectedId(invite.challengeId);
       }
     }
-    navigate("/app/home");
+    navigate("/app/home", { replace: true });
   };
 
   const [codeInput, setCodeInput] = useState("");
@@ -517,7 +521,7 @@ function OnboardingLayout() {
             <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} onGoogleAuth={handleGoogleAuthOnboarding} />
           )}
           {step === "profile" && (
-            <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} />
+            <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} initialError={autoJoinError} />
           )}
         </div>
       </div>

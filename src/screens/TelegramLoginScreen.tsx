@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { BRAND_COLOR, BRAND_TINT } from "../constants/design";
 
@@ -53,13 +53,84 @@ type TelegramLoginCallback = (result: {
 // Numeric Client ID from BotFather → Bot Settings → Web Login
 const CLIENT_ID = parseInt(import.meta.env.VITE_TELEGRAM_CLIENT_ID ?? "0", 10);
 
+// On mobile, tapping "Continue with Telegram" often hands off to the native
+// Telegram app, which returns the user via its own in-app browser/WebView —
+// a different browsing context than the tab that started the login. That
+// context doesn't share sessionStorage (tab-scoped) or in-memory refs
+// (destroyed if the OS reclaims the original tab), so the nonce is kept in
+// localStorage instead, which is shared across contexts on the same origin.
+const NONCE_STORAGE_KEY = "displine_tg_login_nonce";
+const NONCE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const NONCE_EXPIRED_MESSAGE =
+  "Срок входа истёк или возникла ошибка браузера. Пожалуйста, попробуйте войти снова.";
+
+function storeNonce(value: string) {
+  try {
+    localStorage.setItem(NONCE_STORAGE_KEY, JSON.stringify({ value, expiresAt: Date.now() + NONCE_TTL_MS }));
+  } catch {
+    // localStorage unavailable (e.g. private browsing) — auth will surface
+    // NONCE_EXPIRED_MESSAGE below once consumeNonce() comes up empty.
+  }
+}
+
+// Single-use: always removes the stored nonce, valid or not, so it can never be replayed.
+function consumeNonce(): string | null {
+  let raw: string | null = null;
+  try {
+    raw = localStorage.getItem(NONCE_STORAGE_KEY);
+    localStorage.removeItem(NONCE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { value?: string; expiresAt?: number };
+    if (!parsed.value || !parsed.expiresAt || Date.now() > parsed.expiresAt) return null;
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
 export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, onInviteCode }: TelegramLoginScreenProps) {
-  const nonceRef = useRef<string>("");
   const [scriptReady, setScriptReady] = useState(false);
   const [loading, setLoading]         = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError]             = useState<string | null>(null);
   const [inviteInput, setInviteInput] = useState("");
+
+  // Fallback for the mobile hand-off case: if the OS reclaims/reloads the
+  // original tab while the user is in the Telegram app, oauth.telegram.org
+  // completes the flow by redirecting the (possibly fresh) page back with
+  // `#tgAuthResult=<base64 json>` in the URL — there's no live JS callback
+  // to receive it, so pick it up here on mount instead.
+  useEffect(() => {
+    const match = window.location.hash.match(/tgAuthResult=([^&]+)/);
+    if (!match) return;
+
+    // Strip it immediately so a refresh doesn't reprocess a stale result.
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    try {
+      const decoded = JSON.parse(atob(decodeURIComponent(match[1]))) as { id_token?: string };
+      if (!decoded.id_token) return;
+
+      const storedNonce = consumeNonce();
+      if (!storedNonce) {
+        setError(NONCE_EXPIRED_MESSAGE);
+        return;
+      }
+
+      setLoading(true);
+      onAuth({ id_token: decoded.id_token, nonce: storedNonce }).catch(err => {
+        setError(err instanceof Error ? err.message : "Ошибка входа. Попробуйте снова.");
+        setLoading(false);
+      });
+    } catch {
+      // Malformed payload — ignore; the user can just retry manually.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!CLIENT_ID) {
@@ -81,9 +152,10 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, onInviteC
   const handleLogin = () => {
     if (!scriptReady || loading || !window.Telegram?.Login) return;
 
-    // Fresh nonce per attempt — stored in ref so the callback closure can read it
+    // Fresh nonce per attempt, persisted to localStorage (survives the
+    // Telegram-app hand-off, unlike sessionStorage or an in-memory ref).
     const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    nonceRef.current = nonce;
+    storeNonce(nonce);
 
     setError(null);
 
@@ -94,9 +166,14 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, onInviteC
           setError(result.error ?? "Вход через Telegram отменён или не удался. Попробуйте снова.");
           return;
         }
+        const storedNonce = consumeNonce();
+        if (!storedNonce) {
+          setError(NONCE_EXPIRED_MESSAGE);
+          return;
+        }
         setLoading(true);
         try {
-          await onAuth({ id_token: result.id_token, nonce: nonceRef.current });
+          await onAuth({ id_token: result.id_token, nonce: storedNonce });
         } catch (err) {
           setError(err instanceof Error ? err.message : "Ошибка входа. Попробуйте снова.");
           setLoading(false);

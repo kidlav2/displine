@@ -229,7 +229,9 @@ export function snapToAchievement(snap: QueryDocumentSnapshot<DocumentData>): im
 /** Create or update the user's profile document after onboarding. */
 export async function writeUserProfile(
   uid: string,
-  profile: Omit<UserProfile, "uid">
+  // Partial<Omit> so callers can do field-level updates without specifying every
+  // required field — setDoc with merge:true only touches the provided keys.
+  profile: Partial<Omit<UserProfile, "uid">>
 ): Promise<void> {
   // Firestore rejects undefined field values outright. Strip them here so
   // callers can safely spread Auth user fields without checking each one

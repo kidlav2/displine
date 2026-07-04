@@ -8,8 +8,9 @@ import { SecLabel } from "../components/atoms";
 import type { TelegramProfile } from "../types";
 
 interface ProfileSetupScreenProps {
-  onDone: (data: { name: string; ini: string }) => void;
+  onDone: (data: { name: string; ini: string }) => Promise<void>;
   telegramData?: TelegramProfile;
+  initialError?: string | null;
 }
 
 function toIni(name: string): string {
@@ -18,13 +19,13 @@ function toIni(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenProps) {
+export function ProfileSetupScreen({ onDone, telegramData, initialError }: ProfileSetupScreenProps) {
   const { currentUser } = useAuthContext();
   const [name, setName]   = useState(telegramData?.displayName ?? currentUser?.displayName ?? "");
   const [thumb, setThumb] = useState<string | null>(telegramData?.photoUrl ?? currentUser?.photoURL ?? null);
   const [bio, setBio]     = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(initialError ?? null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -46,11 +47,13 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
       // Only include auth fields that are actually present — Firestore rejects
       // undefined values, and omitting is cleaner than storing null for a field
       // that doesn't apply to this auth method (phone vs email vs Google).
+      // NOTE: challengeRoles is intentionally omitted so existing roles are never
+      // overwritten — new users get their first role via addChallengeRole in
+      // joinChallengeAsParticipant, which is called by onDone below.
       await writeUserProfile(currentUser.uid, {
         name:     trimmed,
         ini,
         timezone: detectTz(),
-        challengeRoles: {},
         ...(bio.trim()              && { bio: bio.trim() }),
         ...(currentUser.phoneNumber != null && { phone: currentUser.phoneNumber }),
         ...(currentUser.email       != null && { email: currentUser.email }),
@@ -62,7 +65,9 @@ export function ProfileSetupScreen({ onDone, telegramData }: ProfileSetupScreenP
         ...(telegramData?.telegramId       != null && { telegramId:       telegramData.telegramId }),
         ...(telegramData?.telegramUsername != null && { telegramUsername: telegramData.telegramUsername }),
       });
-      onDone({ name: trimmed, ini });
+      // Await so that join errors are caught here and shown as a visible error
+      // message instead of being silently swallowed as unhandled rejections.
+      await onDone({ name: trimmed, ini });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось сохранить профиль. Попробуйте снова.");
     } finally {
