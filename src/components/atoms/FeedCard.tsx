@@ -40,7 +40,7 @@ export function FeedCard({ item, onLike, onComment, onViewParticipant, participa
     checklist:          <CheckSquare size={12} className="text-green-500 shrink-0" />,
     streak:             <Flame size={12} style={{ color: BRAND_COLOR }} className="shrink-0" />,
     eliminated:         <XCircle size={12} className="text-gray-400 shrink-0" />,
-    joined:             <CheckCircle2 size={12} className="text-purple-400 shrink-0" />,
+    "system:joined":    <CheckCircle2 size={12} className="text-purple-400 shrink-0" />,
     "system:removed":   <UserX size={12} className="text-red-400 shrink-0" />,
     "system:promoted":  <ArrowUpCircle size={12} className="text-blue-400 shrink-0" />,
     "system:demoted":   <ArrowDownCircle size={12} className="text-gray-400 shrink-0" />,

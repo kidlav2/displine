@@ -168,6 +168,7 @@ service cloud.firestore {
           request.resource.data.isAdmin == isOrganizer(challengeId) &&
           (isOrganizer(challengeId) ||
            request.resource.data.type == "system:left" ||
+           request.resource.data.type == "system:joined" ||
            !request.resource.data.type.matches('system:.*'));
         allow update: if isOrganizer(challengeId) ||
           (isParticipant(challengeId) &&

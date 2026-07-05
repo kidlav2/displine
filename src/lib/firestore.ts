@@ -888,6 +888,12 @@ export async function acceptTeamInvite(
   });
 
   await addChallengeRole(uid, challengeId, role);
+  await writeFeedSystemEvent(
+    challengeId,
+    { uid, name: profile.name, ini: profile.ini, isAdmin: true },
+    "system:joined",
+    "присоединился(-лась) к челленджу",
+  );
   return { challengeId, role };
 }
 
@@ -1158,6 +1164,15 @@ export async function joinChallengeAsParticipant(
   });
   // Register the challenge role in the user's profile
   await addChallengeRole(uid, challengeId, "participant");
+  // Written after the participant doc exists — rules require an existing
+  // participant doc to author a feed post (the mirror image of leaveChallenge,
+  // which writes its feed event before deleting the doc).
+  await writeFeedSystemEvent(
+    challengeId,
+    { uid, name: profile.name, ini: profile.ini, isAdmin: false },
+    "system:joined",
+    "присоединился(-лась) к челленджу",
+  );
 }
 
 // ── Feed pagination ───────────────────────────────────────────────────────────
