@@ -563,14 +563,16 @@ function ChallengesLayout() {
     <div className="min-h-dvh bg-background">
       <ScrollRestoration />
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex h-16 max-w-[1040px] items-center justify-between px-4 sm:px-6 lg:px-10">
+        <div className="mx-auto flex h-16 max-w-[1160px] items-center justify-between px-4 sm:px-6 lg:px-10">
           <Logo />
           <Button variant="ghost" size="sm" onClick={async () => { await signOut(auth); navigate("/", { replace: true }); }}>
             Выйти
           </Button>
         </div>
       </header>
-      <Outlet />
+      <div className="mx-auto max-w-[1160px]">
+        <Outlet />
+      </div>
     </div>
   );
 }

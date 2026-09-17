@@ -45,17 +45,18 @@ export function RatingScreen() {
   }
 
   return (
-    <Page width="md">
+    <Page width="lg">
       <PageHeader title="Рейтинг" description={`Дисциплина за ${challenge.currentDay} ${plural(challenge.currentDay, ["день", "дня", "дней"])} — с первого дня по сегодняшний.`} />
 
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4">
+      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start xl:gap-8">
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-border bg-border sm:grid-cols-4 xl:sticky xl:top-10 xl:order-2 xl:grid-cols-2">
         <Metric label="Касса" value={formatMoney(challenge.totalTreasury, challenge.settings.currency)} />
         <Metric label="В игре" value={`${activeCount} из ${roster.length}`} />
         <Metric label="Пробежки" value={`${avg("runPct")}%`} hint="в среднем" />
         <Metric label="Задания" value={`${avg("taskPct")}%`} hint="в среднем" />
       </dl>
 
-      <section aria-labelledby="rating-title" className="mt-8">
+      <section aria-labelledby="rating-title" className="mt-8 xl:order-1 xl:mt-0">
         <h2 id="rating-title" className="sr-only">Участники по дисциплине</h2>
         <ol className="divide-y divide-border rounded-xl border border-border bg-card">
           {rows.map(({ p, s, unpaid }, i) => (
@@ -89,6 +90,7 @@ export function RatingScreen() {
           ))}
         </ol>
       </section>
+      </div>
 
       <p className="mt-4 text-[13px] text-muted-foreground text-pretty">
         Процент пробежек считается от дней с пробежкой по расписанию, процент заданий — от дней, когда задание было выдано.

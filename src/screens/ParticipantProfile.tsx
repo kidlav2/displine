@@ -68,7 +68,7 @@ export function ParticipantProfile() {
       <PageHeader
         back={{ onClick: back }}
         title={participant.name}
-        description={participant.joinDate ? `В челлендже с ${participant.joinDate}` : undefined}
+        description={participant.role === "participant" && participant.joinDate ? `В списке с ${participant.joinDate}` : undefined}
         actions={isRosterMember ? undefined : <RoleBadge role={participant.role} />}
       />
 

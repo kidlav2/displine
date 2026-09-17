@@ -12,6 +12,19 @@ export function challengeCurrentDay(startDate: string, duration: number): number
   return Math.min(Math.floor((now - startMs) / 86_400_000) + 1, safeDur);
 }
 
+export type ChallengePhase = "upcoming" | "active" | "completed";
+
+/** Where "now" falls relative to the challenge dates (same day math as challengeCurrentDay). */
+export function challengePhase(startDate: string, duration: number): ChallengePhase {
+  if (!startDate) return "active";
+  const startMs = new Date(startDate + "T00:00:00Z").getTime();
+  if (isNaN(startMs)) return "active";
+  const now = Date.now();
+  if (now < startMs) return "upcoming";
+  const safeDur = (!duration || isNaN(duration) || duration <= 0) ? 1 : duration;
+  return Math.floor((now - startMs) / 86_400_000) + 1 > safeDur ? "completed" : "active";
+}
+
 /** Returns today's abbreviated weekday name in the given IANA timezone, matching runSchedule keys ("Mon"–"Sun"). */
 export function todayRunDayInTz(tz: string): string {
   return new Date().toLocaleDateString("en-US", { weekday: "short", timeZone: tz });

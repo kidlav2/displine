@@ -4,7 +4,7 @@ import { Badge, Button, EmptyState, Page, PageHeader, ProgressBar, Section } fro
 import { ROLE_LABELS } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
-import { addDaysISO, challengeCurrentDay, durationFromDates } from "../lib/dates";
+import { addDaysISO, challengeCurrentDay, challengePhase, durationFromDates } from "../lib/dates";
 import { formatDateLong, formatDateShort, localISODate, plural } from "../lib/format";
 import { cn } from "../lib/cn";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
@@ -23,6 +23,7 @@ function ChallengeCard({ ch, role, current, onSelect }: {
   onSelect: () => void;
 }) {
   const day = challengeCurrentDay(ch.startDate, ch.duration);
+  const phase = challengePhase(ch.startDate, ch.duration);
   const end = ch.endDate || (ch.startDate ? addDaysISO(ch.startDate, ch.duration - 1) : "");
   const daysToStart = ch.startDate ? durationFromDates(localISODate(), ch.startDate) - 1 : 0;
 
@@ -51,7 +52,7 @@ function ChallengeCard({ ch, role, current, onSelect }: {
         {current && <Badge>Открыт сейчас</Badge>}
       </span>
 
-      {ch.status === "active" && (
+      {phase === "active" && (
         <span className="mt-4 block w-full">
           <span className="flex justify-between text-[13px]">
             <span className="text-muted-foreground">День {day} из {ch.duration}</span>
@@ -60,14 +61,14 @@ function ChallengeCard({ ch, role, current, onSelect }: {
           <ProgressBar value={day} max={ch.duration} tone="brand" className="mt-1.5" label="Прогресс челленджа" />
         </span>
       )}
-      {ch.status === "upcoming" && ch.startDate && (
+      {phase === "upcoming" && ch.startDate && (
         <span className="mt-4 block text-[13px] text-muted-foreground">
           {daysToStart > 0
             ? `Старт через ${daysToStart} ${plural(daysToStart, ["день", "дня", "дней"])} — ${formatDateLong(ch.startDate)}`
             : `Старт ${formatDateLong(ch.startDate)}`}
         </span>
       )}
-      {ch.status === "completed" && end && (
+      {phase === "completed" && end && (
         <span className="mt-4 block text-[13px] text-muted-foreground">Закончился {formatDateLong(end)}</span>
       )}
     </button>
@@ -118,7 +119,8 @@ export function ChallengesListScreen() {
       ) : (
         <div className="space-y-8">
           {GROUPS.map(({ status, title }) => {
-            const group = challenges.filter(c => c.status === status);
+            // Grouped by dates: the stored status is set once at creation and goes stale.
+            const group = challenges.filter(c => (c.startDate ? challengePhase(c.startDate, c.duration) : c.status) === status);
             if (!group.length) return null;
             return (
               <Section key={status} title={title} grouped={false}>

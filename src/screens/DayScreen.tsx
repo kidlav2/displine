@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type React from "react";
 import { Link, useNavigate } from "react-router";
-import { ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Footprints, ListChecks, UserRound } from "lucide-react";
+import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, UserRound } from "lucide-react";
 import {
   Av, Badge, Button, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Segmented, Sheet, Switch,
 } from "../components/atoms";
@@ -16,8 +16,8 @@ import {
   expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus,
   postponementAway, postponementOnto, rosterParticipants, unpaidPenalties,
 } from "../lib/attendance";
-import { addDaysISO, challengeDayISO, weekdayFromISO } from "../lib/dates";
-import { formatDateLong, formatDateShort, formatMoney, formatWeekdayDate } from "../lib/format";
+import { addDaysISO, challengeDayISO, challengePhase, durationFromDates, weekdayFromISO } from "../lib/dates";
+import { formatDateLong, formatDateShort, formatMoney, formatWeekdayDate, localISODate, plural } from "../lib/format";
 import { notify } from "../lib/notify";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
 import type { AttendanceStatus, ChallengeData, Participant, PostponementRequest } from "../types";
@@ -37,8 +37,11 @@ export function DayScreen() {
 
   useDocumentTitle(`День ${dayNum}`);
 
+  const phase = challengePhase(challenge.startDate, challenge.duration);
   const iso = challengeDayISO(challenge.startDate, dayNum);
-  const isToday = dayNum === today;
+  // "Today" only exists while the challenge is running — before start and after
+  // the finish the day number is clamped, so it must not be labelled as today.
+  const isToday = phase === "active" && dayNum === today;
   const roster = useMemo(() => rosterParticipants(challenge.participants), [challenge.participants]);
   const runDay = isScheduledRunDay(iso, challenge.settings.runSchedule);
   const runDeadline = runDay ? challenge.settings.runSchedule[weekdayFromISO(iso)] : undefined;
@@ -119,7 +122,7 @@ export function DayScreen() {
   const hasOtherChallenges = challenges.length > 1;
 
   return (
-    <Page width="md">
+    <Page width="lg">
       <header className="mb-6">
         {hasOtherChallenges ? (
           <button
@@ -135,7 +138,7 @@ export function DayScreen() {
           <p className="truncate text-[13px] font-medium text-muted-foreground lg:hidden">{challenge.name}</p>
         )}
 
-        <div className="mt-1 flex items-end justify-between gap-4">
+        <div className="mt-1 flex items-end justify-between gap-4 lg:mt-0">
           <div className="min-w-0">
             <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] tabular">
               День {dayNum}
@@ -147,7 +150,7 @@ export function DayScreen() {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            {!isToday && (
+            {phase === "active" && !isToday && (
               <Button size="sm" variant="ghost" onClick={() => go(today)} className="mr-1">
                 Сегодня
               </Button>
@@ -162,8 +165,11 @@ export function DayScreen() {
         </div>
       </header>
 
-      <section aria-label="Итоги дня" className="rounded-xl border border-border bg-card">
-        <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+      {phase !== "active" && <PhaseBanner challenge={challenge} phase={phase} />}
+
+      <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start xl:gap-8">
+      <section aria-label="Итоги дня" className="rounded-xl border border-border bg-card xl:sticky xl:top-10 xl:order-2">
+        <div className="grid divide-y divide-border sm:grid-cols-2 sm:divide-x sm:divide-y-0 xl:grid-cols-1 xl:divide-x-0 xl:divide-y">
           <SummaryRow
             icon={<Footprints />}
             title="Пробежка"
@@ -194,7 +200,7 @@ export function DayScreen() {
       </section>
 
       {roster.length === 0 ? (
-        <div className="mt-6 rounded-xl border border-dashed border-border-strong">
+        <div className="mt-6 rounded-xl border border-dashed border-border-strong xl:order-1 xl:mt-0">
           <EmptyState
             icon={<UserRound />}
             title="Пока нет участников"
@@ -203,7 +209,7 @@ export function DayScreen() {
           />
         </div>
       ) : (
-        <section aria-labelledby="roster-title" className="mt-8">
+        <section aria-labelledby="roster-title" className="mt-8 xl:order-1 xl:mt-0">
           <div className="rounded-xl border border-border bg-card">
             <div className="sticky top-0 z-10 flex h-11 items-center gap-3 rounded-t-xl border-b border-border bg-card pl-4 pr-2">
               <h2 id="roster-title" className="min-w-0 flex-1 text-[15px] font-semibold">
@@ -237,6 +243,8 @@ export function DayScreen() {
         </section>
       )}
 
+      </div>
+
       {sheetParticipant && (
         <ParticipantDaySheet
           key={`${sheetParticipant.uid}-${iso}`}
@@ -252,6 +260,41 @@ export function DayScreen() {
         />
       )}
     </Page>
+  );
+}
+
+function PhaseBanner({ challenge, phase }: { challenge: ChallengeData; phase: "upcoming" | "completed" }) {
+  const navigate = useNavigate();
+  const end = challengeDayISO(challenge.startDate, challenge.duration);
+  if (phase === "completed") {
+    return (
+      <div className="mb-6 flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center">
+        <Flag className="hidden size-5 shrink-0 text-muted-foreground sm:block" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-medium">Челлендж завершился {formatDateLong(end)}</p>
+          <p className="mt-0.5 text-[13px] text-muted-foreground text-pretty">
+            Показан последний день. Отметки за прошедшие дни можно исправить. Чтобы продолжить, создайте новый челлендж или сдвиньте даты.
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" variant="ghost" onClick={() => navigate("/app/settings")}>Изменить даты</Button>
+          <Button size="sm" variant="primary" onClick={() => navigate("/challenges/create")}>Новый челлендж</Button>
+        </div>
+      </div>
+    );
+  }
+  const daysLeft = Math.max(1, durationFromDates(localISODate(), challenge.startDate) - 1);
+  return (
+    <div className="mb-6 flex flex-col gap-4 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center">
+      <CalendarClock className="hidden size-5 shrink-0 text-muted-foreground sm:block" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-medium">
+          Старт {formatDateLong(challenge.startDate)} — через {daysLeft} {plural(daysLeft, ["день", "дня", "дней"])}
+        </p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">До старта добавьте участников и проверьте расписание.</p>
+      </div>
+      <Button size="sm" variant="secondary" onClick={() => navigate("/app/settings#participants")}>Участники</Button>
+    </div>
   );
 }
 

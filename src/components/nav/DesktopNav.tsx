@@ -5,6 +5,7 @@ import { ROLE_LABELS } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
 import { cn } from "../../lib/cn";
 import { TABS, isTabActive } from "./tabs";
+import { challengePhase } from "../../lib/dates";
 
 export function DesktopNav() {
   const { challenge, userRole, meParticipant } = useAppContext();
@@ -31,7 +32,11 @@ export function DesktopNav() {
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 text-sm font-semibold leading-snug">{challenge.name}</span>
               <span className="block text-xs text-muted-foreground tabular">
-                День {challenge.currentDay} из {challenge.duration}
+                {{
+                  active: `День ${challenge.currentDay} из ${challenge.duration}`,
+                  upcoming: "Ещё не начался",
+                  completed: "Завершён",
+                }[challengePhase(challenge.startDate, challenge.duration)]}
               </span>
             </span>
             <ChevronsUpDown className="size-4 shrink-0 text-subtle-foreground" aria-hidden />

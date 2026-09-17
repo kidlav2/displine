@@ -36,12 +36,15 @@ export function PageHeader({ title, eyebrow, description, actions, back, classNa
   );
 }
 
-/** Centered content column used by every in-app screen. */
+/**
+ * Content column used by every in-app screen. Screens differ in width, but on
+ * desktop they all start at the same left edge so the header never jumps.
+ */
 export function Page({ children, width = "md", className }: { children: React.ReactNode; width?: "sm" | "md" | "lg" | "full"; className?: string }) {
-  const max = { sm: "max-w-[640px]", md: "max-w-[760px]", lg: "max-w-[1040px]", full: "max-w-[1440px]" }[width];
+  const max = { sm: "max-w-[640px]", md: "max-w-[760px]", lg: "max-w-[1080px]", full: "" }[width];
   return (
-    <div className={cn("mx-auto w-full px-4 pb-10 pt-6 sm:px-6 lg:px-10 lg:pt-10", max, className)}>
-      {children}
+    <div className="w-full px-4 pb-10 pt-6 sm:px-6 lg:px-10 lg:pt-10">
+      <div className={cn("mx-auto w-full lg:mx-0", max, className)}>{children}</div>
     </div>
   );
 }
