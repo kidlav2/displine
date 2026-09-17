@@ -100,7 +100,18 @@ service cloud.firestore {
         allow delete: if isOrganizer(challengeId) ||
           (isSignedIn() && request.auth.uid == uid && resource.data.role != "owner");
 
-        allow create: if isSignedIn() && request.auth.uid == uid && (
+        allow create: if (
+          // Operator may add named people who have no auth account.
+          (
+            isOrganizer(challengeId) &&
+            request.resource.data.role == "participant" &&
+            request.resource.data.isAdmin == false &&
+            request.resource.data.km == 0 &&
+            request.resource.data.results.size() == 0 &&
+            request.resource.data.penalties.size() == 0
+          ) ||
+          (
+            isSignedIn() && request.auth.uid == uid && (
           (
             get(/databases/$(database)/documents/challenges/$(challengeId))
               .data.ownerUid == request.auth.uid &&
@@ -154,6 +165,8 @@ service cloud.firestore {
               .data.role == request.resource.data.role &&
             get(/databases/$(database)/documents/invites/$(request.resource.data.inviteCode))
               .data.usedAt == null
+          )
+            )
           )
         );
       }
@@ -242,9 +255,10 @@ service cloud.firestore {
           (resource == null && isParticipant(challengeId)) ||
           (resource != null && isParticipant(challengeId) &&
            resource.data.participantUid == request.auth.uid);
-        allow create: if isParticipant(challengeId) &&
-          request.resource.data.participantUid == request.auth.uid &&
-          request.resource.data.status == "pending";
+        allow create: if isOrganizer(challengeId) ||
+          (isParticipant(challengeId) &&
+           request.resource.data.participantUid == request.auth.uid &&
+           request.resource.data.status == "pending");
         allow update: if isOrganizer(challengeId) &&
           request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(["status", "organizerNote", "resolvedAt"]);

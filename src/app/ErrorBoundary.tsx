@@ -1,4 +1,4 @@
-import { Component, type ReactNode, type ErrorInfo } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props  { children: ReactNode; }
 interface State  { error: Error | null; }
@@ -16,30 +16,28 @@ export class ErrorBoundary extends Component<Props, State> {
 
   render() {
     const { error } = this.state;
-    if (error) {
-      return (
-        <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center gap-4 bg-background">
-          <p className="text-4xl">⚠️</p>
-          <div className="space-y-2 max-w-xs">
-            <p className="font-extrabold text-xl">Что-то пошло не так</p>
-            <p className="text-sm text-muted-foreground">
-              Произошла непредвиденная ошибка. Попробуйте перезагрузить страницу.
-            </p>
-            {import.meta.env.DEV && (
-              <pre className="text-left text-xs text-red-500 bg-red-50 border border-red-200 p-3 rounded-xl mt-2 overflow-auto whitespace-pre-wrap break-all">
-                {error.message}
-              </pre>
-            )}
-          </div>
+    if (!error) return this.props.children;
+    return (
+      <div className="flex min-h-dvh items-center justify-center bg-background px-5">
+        <div className="w-full max-w-[400px]">
+          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Что-то пошло не так</h1>
+          <p className="mt-2 text-[15px] text-muted-foreground">
+            Произошла непредвиденная ошибка. Обновите страницу — данные не потеряются.
+          </p>
+          {import.meta.env.DEV && (
+            <pre className="mt-4 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-danger-subtle p-3 text-left text-xs text-danger-text">
+              {error.message}
+            </pre>
+          )}
           <button
+            type="button"
             onClick={() => window.location.reload()}
-            className="px-6 py-3 rounded-xl font-extrabold text-sm text-white bg-[#FF4F00]"
+            className="pressable mt-8 inline-flex h-12 w-full items-center justify-center rounded-lg bg-primary text-[15px] font-medium text-primary-foreground hover:bg-primary-hover"
           >
-            Перезагрузить
+            Обновить страницу
           </button>
         </div>
-      );
-    }
-    return this.props.children;
+      </div>
+    );
   }
 }

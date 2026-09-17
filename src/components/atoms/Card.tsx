@@ -1,5 +1,5 @@
 import type React from "react";
-import { BRAND_COLOR } from "../../constants/design";
+import { cn } from "../../lib/cn";
 
 interface CardProps {
   children: React.ReactNode;
@@ -8,11 +8,11 @@ interface CardProps {
   style?: React.CSSProperties;
 }
 
-export function Card({ children, className = "", accent = false, style }: CardProps) {
+export function Card({ children, className, accent = false, style }: CardProps) {
   return (
     <div
-      className={`bg-card rounded-2xl border ${className}`}
-      style={{ borderColor: accent ? BRAND_COLOR : "var(--border)", ...style }}
+      className={cn("rounded-xl border bg-card", accent ? "border-brand" : "border-border", className)}
+      style={style}
     >
       {children}
     </div>

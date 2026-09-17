@@ -18,10 +18,11 @@ import { httpsCallable } from "firebase/functions";
 import { db, storage, functions } from "./firebase";
 import { todayISOInTz } from "./dates";
 import type {
-  ChallengeData, ChallengeSettings, DayResult,
+  AttendanceStatus, ChallengeData, DayAttendance, DayResult,
   FeedItem, Participant, Penalty, PostponementRequest, ReviewItem,
   SocialComment, Task, TaskTemplate, TeamMember, UserProfile, UserRole,
 } from "../types";
+import { initialsFromName } from "./attendance";
 
 /** Minimal public data stored in invites/{code} — readable without auth. */
 export interface InviteData {
@@ -86,6 +87,7 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
     joinDate: tsToString(d.joinDate),
     tz:       d.tz       ?? "UTC",
     results:  (d.results ?? []) as DayResult[],
+    days:     (d.days ?? {}) as Record<string, DayAttendance>,
     penalties: (d.penalties ?? []).map((p: DocumentData) => ({
       date:      p.date instanceof Timestamp ? p.date.toDate().toISOString().slice(0, 10) : (p.date ?? ""),
       reason:    p.reason    ?? "",
@@ -301,6 +303,7 @@ export async function createChallenge(
     tz: ownerProfile.timezone,
     results: [],
     penalties: [],
+    days: {},
   });
 
   // Register in user profile
@@ -763,7 +766,7 @@ export async function logPenalty(
 /** Update top-level challenge fields (settings, name, emoji, etc.). */
 export async function updateChallengeDoc(
   challengeId: string,
-  patch: Partial<Pick<ChallengeData, "name" | "emoji" | "description" | "settings" | "currentDay" | "status" | "totalTreasury">>
+  patch: Partial<Pick<ChallengeData, "name" | "emoji" | "description" | "settings" | "currentDay" | "status" | "totalTreasury" | "issuedTaskDays" | "startDate" | "endDate" | "duration">>
 ): Promise<void> {
   await updateDoc(challengeRef(challengeId), patch as DocumentData);
 }
@@ -871,6 +874,7 @@ export async function acceptTeamInvite(
       tz:         profile.tz,
       results:    [],
       penalties:  [],
+      days:       {},
       // Stored so Firestore rules can validate the invite in Path C of the participant
       // create rule without a separate server-side write.
       inviteCode,
@@ -1155,6 +1159,7 @@ export async function joinChallengeAsParticipant(
     tz:       profile.tz,
     results:  [],
     penalties: [],
+    days:     {},
     // Stored so Firestore rules can validate `lives` against the exact public
     // invite the joiner used. The invite is a cached copy of startingLives, so
     // when the owner later edits the setting the invite can lag the challenge —
@@ -1380,6 +1385,132 @@ export async function resolvePostponement(
     organizerNote: organizerNote ?? null,
     resolvedAt:   serverTimestamp(),
   });
+}
+
+export function subscribeToAllPostponements(
+  challengeId: string,
+  callback: (items: PostponementRequest[]) => void,
+): Unsubscribe {
+  return onSnapshot(
+    postponementsCol(challengeId),
+    (snap) => {
+      const items = snap.docs
+        .map(snapToPostponement)
+        .sort((a, b) => (a.requestedAt < b.requestedAt ? 1 : -1));
+      callback(items);
+    },
+    () => callback([]),
+  );
+}
+
+/** Operator records a postponement as already approved — no participant request. */
+export async function recordPostponement(
+  challengeId: string,
+  participant: Pick<Participant, "uid" | "ini" | "name">,
+  payload: {
+    type: "task" | "running";
+    dateISO: string;
+    targetDateISO: string;
+    reason: string;
+  },
+): Promise<string> {
+  const ref = await addDoc(postponementsCol(challengeId), {
+    participantUid:  participant.uid,
+    participantName: participant.name,
+    participantIni:  participant.ini,
+    type:            payload.type,
+    taskId:          null,
+    taskTitle:       payload.type === "running" ? "Пробежка" : "Задание",
+    dateISO:         payload.dateISO,
+    targetDateISO:   payload.targetDateISO,
+    status:          "approved",
+    reason:          payload.reason,
+    requestedAt:     serverTimestamp(),
+    resolvedAt:      serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function addParticipantByName(
+  challengeId: string,
+  name: string,
+  startingLives: number,
+  tz = "Asia/Almaty",
+): Promise<string> {
+  const ref = doc(participantsCol(challengeId));
+  const trimmed = name.trim();
+  await setDoc(ref, {
+    uid:      ref.id,
+    ini:      initialsFromName(trimmed),
+    name:     trimmed,
+    photoUrl: null,
+    role:     "participant",
+    lives:    startingLives,
+    km:       0,
+    active:   true,
+    isAdmin:  false,
+    joinDate: serverTimestamp(),
+    tz,
+    results:  [],
+    penalties: [],
+    days:     {},
+  });
+  return ref.id;
+}
+
+export async function renameParticipant(
+  challengeId: string,
+  uid: string,
+  name: string,
+): Promise<void> {
+  const trimmed = name.trim();
+  await updateDoc(participantRef(challengeId, uid), {
+    name: trimmed,
+    ini:  initialsFromName(trimmed),
+  });
+}
+
+export async function setAttendanceField(
+  challengeId: string,
+  uid: string,
+  dateISO: string,
+  kind: "run" | "task",
+  status: AttendanceStatus | undefined,
+): Promise<void> {
+  await updateDoc(participantRef(challengeId, uid), {
+    [`days.${dateISO}.${kind}`]: status === undefined ? deleteField() : status,
+  });
+}
+
+export async function setTaskIssued(
+  challengeId: string,
+  dateISO: string,
+  issued: boolean,
+  deadline?: string,
+): Promise<void> {
+  const path = `issuedTaskDays.${dateISO}`;
+  if (!issued) {
+    await updateDoc(challengeRef(challengeId), { [path]: deleteField() });
+  } else {
+    await updateDoc(challengeRef(challengeId), {
+      [path]: { issued: true, ...(deadline ? { deadline } : {}) },
+    });
+  }
+}
+
+export function subscribeToOrgNotes(
+  challengeId: string,
+  callback: (notes: Record<string, string>) => void,
+): Unsubscribe {
+  return onSnapshot(
+    collection(db, "challenges", challengeId, "orgNotes"),
+    (snap) => {
+      const notes: Record<string, string> = {};
+      snap.docs.forEach(d => { notes[d.id] = (d.data()?.note as string) ?? ""; });
+      callback(notes);
+    },
+    () => callback({}),
+  );
 }
 
 /** Read a private organizer note for a participant. Returns "" if none exists. */

@@ -1,25 +1,22 @@
-import { createBrowserRouter, Navigate, Outlet, useNavigate, useSearchParams } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, ScrollRestoration, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
 import { signInWithCustomToken, signInWithPopup, GoogleAuthProvider, signOut } from "firebase/auth";
 import { getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "../lib/firebase";
 import {
-  resolveInviteCode, joinChallengeAsParticipant, acceptTeamInvite, TeamInviteError,
+  resolveInviteCode, acceptTeamInvite, TeamInviteError,
   challengeRef, participantRef, leaveChallenge, removeChallengeRole, type InviteData,
 } from "../lib/firestore";
 import { detectTz } from "../lib/timezone";
 import { useAuthContext } from "../contexts/AuthContext";
 import { AppShell } from "./AppShell";
-import { HomeScreen } from "../screens/HomeScreen";
-import { TasksScreen } from "../screens/TasksScreen";
-import { CommunityScreen } from "../screens/CommunityScreen";
-import { ReviewScreen } from "../screens/ReviewScreen";
-import { ManageScreen } from "../screens/ManageScreen";
-import { ManageParticipantsScreen } from "../screens/ManageParticipantsScreen";
+import { DayScreen } from "../screens/DayScreen";
+import { GridScreen } from "../screens/GridScreen";
+import { RatingScreen } from "../screens/RatingScreen";
+import { OperatorSettingsScreen } from "../screens/OperatorSettingsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { TeamScreen } from "../screens/TeamScreen";
-import { ChallengeSettingsScreen } from "../screens/ChallengeSettingsScreen";
 import { ChallengesListScreen } from "../screens/ChallengesListScreen";
 import { CreateChallengeScreen } from "../screens/CreateChallengeScreen";
 import { ParticipantProfile } from "../screens/ParticipantProfile";
@@ -30,15 +27,16 @@ import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
 import { StravaCallbackScreen } from "../screens/StravaCallbackScreen";
 
 import { useAppContext } from "../contexts/AppContext";
-import { Av } from "../components/atoms";
-import { jk } from "../constants/design";
+import { Av, Button, Logo, Spinner } from "../components/atoms";
+import { AuthLayout, AuthMessage } from "../components/AuthLayout";
+import { Lock, Link2Off, UserRoundCheck, Users } from "lucide-react";
 import type { TelegramProfile } from "../types";
 
 // ── Auth guard ────────────────────────────────────────────────────────────────
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { currentUser, authLoading } = useAuthContext();
-  if (authLoading) return null;
+  if (authLoading) return <FullScreenSpinner />;
   if (!currentUser) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
@@ -54,52 +52,58 @@ const verifyTelegramLoginFn = httpsCallable<
 // Plain login entry point. No challenge preview, no invite code.
 // After login: routes based on challengeRoles in Firestore profile.
 
-function NoChallengesStep({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
-  const [codeInput, setCodeInput] = useState("");
-  const submit = () => codeInput.trim() && navigate(`/join?code=${encodeURIComponent(codeInput.trim())}`);
+function operatorIds(roles: Record<string, string> | undefined): string[] {
+  return Object.entries(roles ?? {})
+    .filter(([, r]) => r === "owner" || r === "helper")
+    .map(([id]) => id);
+}
+
+function SignOutButton() {
   return (
-    <div className="flex flex-col items-center justify-center gap-6 px-6 text-center" style={{ minHeight: "min(600px, 100vh)" }}>
-      <p className="text-4xl">🏁</p>
-      <div className="space-y-1">
-        <p className="font-extrabold text-xl">Нет челленджей</p>
-        <p className="text-sm text-muted-foreground max-w-xs">
-          Создайте новый челлендж или введите код приглашения от организатора.
-        </p>
-      </div>
-      <button
-        onClick={() => navigate("/challenges/create")}
-        className="w-full max-w-[280px] px-6 py-3 rounded-2xl font-extrabold text-sm text-white"
-        style={{ background: "#FF4F00" }}
-      >
-        Создать новый челлендж
-      </button>
-      <div className="w-full max-w-[280px] flex items-center gap-3">
-        <div className="flex-1 h-px bg-border" />
-        <span className="text-xs font-semibold text-muted-foreground">или</span>
-        <div className="flex-1 h-px bg-border" />
-      </div>
-      <div className="w-full max-w-[280px] flex gap-2">
-        <input
-          value={codeInput}
-          onChange={e => setCodeInput(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === "Enter" && submit()}
-          placeholder="Код приглашения"
-          className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none placeholder-muted-foreground tracking-wider"
-        />
-        <button
-          onClick={submit}
-          disabled={!codeInput.trim()}
-          className="px-4 py-2.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-40"
-          style={{ background: "#2AABEE" }}
-        >
-          Войти
-        </button>
-      </div>
+    <Button variant="ghost" size="lg" block onClick={() => signOut(auth)}>
+      Выйти из аккаунта
+    </Button>
+  );
+}
+
+function NoChallengesStep({ navigate }: { navigate: ReturnType<typeof useNavigate> }) {
+  return (
+    <AuthMessage
+      title="Создайте первый челлендж"
+      description="Задайте даты, расписание пробежек и штрафы, затем добавьте участников по имени — им входить не нужно."
+    >
+      <Button variant="primary" size="lg" block onClick={() => navigate("/challenges/create")}>
+        Создать челлендж
+      </Button>
+      <p className="text-center text-[13px] text-muted-foreground">
+        Вас пригласили помощником? Откройте ссылку-приглашение от организатора.
+      </p>
+      <SignOutButton />
+    </AuthMessage>
+  );
+}
+
+function NoAccessStep() {
+  return (
+    <AuthMessage
+      icon={<Lock />}
+      title="Нет доступа"
+      description="Трекером пользуются организаторы и помощники. Участников отмечают по имени — отдельный вход им не нужен."
+    >
+      <SignOutButton />
+    </AuthMessage>
+  );
+}
+
+function FullScreenSpinner() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-background">
+      <Spinner />
     </div>
   );
 }
 
-type RootStep = "login" | "profile" | "no-challenges";
+type RootStep = "login" | "profile" | "no-challenges" | "no-access";
 
 function RootLayout() {
   const { currentUser, userProfile, authLoading } = useAuthContext();
@@ -121,12 +125,12 @@ function RootLayout() {
     }
 
     const roles = userProfile.challengeRoles ?? {};
-    const ids = Object.keys(roles);
+    const ids = operatorIds(roles);
     if (ids.length === 0) {
-      setStep("no-challenges");
+      setStep(Object.keys(roles).length > 0 ? "no-access" : "no-challenges");
     } else if (ids.length === 1) {
       setSelectedId(ids[0]);
-      navigate("/app/home", { replace: true });
+      navigate("/app/day", { replace: true });
     } else {
       navigate("/challenges", { replace: true });
     }
@@ -154,47 +158,15 @@ function RootLayout() {
     setStep("no-challenges");
   };
 
-  const inner = (() => {
-    if (authLoading) {
-      return (
-        <div className="min-h-screen bg-background flex items-center justify-center" style={jk}>
-          <p className="text-sm text-muted-foreground">Загрузка…</p>
-        </div>
-      );
-    }
-
-    if (step === "login") {
-      return (
-        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
-          style={{ minHeight: "min(600px, 100vh)" }}>
-          <TelegramLoginScreen
-            onAuth={handleTelegramAuth}
-            onGoogleAuth={handleGoogleAuth}
-            onInviteCode={code => navigate(`/join?code=${encodeURIComponent(code)}`)}
-          />
-        </div>
-      );
-    }
-
-    if (step === "profile") {
-      return (
-        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
-          style={{ minHeight: "min(600px, 100vh)" }}>
-          <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} />
-        </div>
-      );
-    }
-
-    // no-challenges
-    return <NoChallengesStep navigate={navigate} />;
-  })();
+  if (authLoading) return <FullScreenSpinner />;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
-      <div className="flex-1 lg:flex lg:items-center lg:justify-center lg:p-8">
-        {inner}
-      </div>
-    </div>
+    <AuthLayout>
+      {step === "login" && <TelegramLoginScreen onAuth={handleTelegramAuth} onGoogleAuth={handleGoogleAuth} />}
+      {step === "profile" && <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} />}
+      {step === "no-access" && <NoAccessStep />}
+      {step === "no-challenges" && <NoChallengesStep navigate={navigate} />}
+    </AuthLayout>
   );
 }
 
@@ -273,13 +245,16 @@ function OnboardingLayout() {
         getDoc(participantRef(invite.challengeId, currentUser.uid)).then(snap => {
           if (snap.exists()) {
             setSelectedId(invite.challengeId);
-            navigate("/app/home", { replace: true });
+            navigate("/app/day", { replace: true });
           } else {
             removeChallengeRole(currentUser.uid, invite.challengeId).catch(console.error);
           }
         });
         return;
       }
+
+      // Public participant invites are closed — only team (operator) invites join here.
+      if (invite.type !== "team") return;
 
       // Already authenticated but hasn't yet confirmed which account to join as.
       // Hold here — the render shows the account-choice screen; joining only
@@ -334,7 +309,7 @@ function OnboardingLayout() {
           photoUrl: userProfile.photoUrl ?? currentUser.photoURL ?? null,
         }).then(({ challengeId }) => {
           setSelectedId(challengeId);
-          navigate("/app/home", { replace: true });
+          navigate("/app/day", { replace: true });
         }).catch((err: unknown) => {
           if (err instanceof TeamInviteError) {
             navigate(`/error/team-invite-${err.reason}`, { replace: true });
@@ -342,23 +317,6 @@ function OnboardingLayout() {
             setAutoJoinError("Не удалось вступить в челлендж. Пожалуйста, попробуйте снова.");
             setStep("profile");
           }
-        });
-      } else {
-        joinChallengeAsParticipant(
-          invite.challengeId,
-          currentUser.uid,
-          { name: userProfile.name, ini: userProfile.ini, tz: userProfile.timezone,
-            photoUrl: userProfile.photoUrl ?? currentUser.photoURL ?? null },
-          invite.startingLives,
-          code,
-        ).then(() => {
-          setSelectedId(invite.challengeId);
-          navigate("/app/home", { replace: true });
-        }).catch((err: unknown) => {
-          // Surface the failure instead of silently bouncing back to the form.
-          console.error("[OnboardingLayout] auto-join failed:", err);
-          setAutoJoinError("Не удалось вступить в челлендж. Пожалуйста, попробуйте снова.");
-          setStep("profile");
         });
       }
     } else if (userProfile && !invite && !inviteError) {
@@ -379,7 +337,7 @@ function OnboardingLayout() {
       getDoc(participantRef(invite.challengeId, currentUser.uid)).then(snap => {
         if (snap.exists()) {
           setSelectedId(invite.challengeId);
-          navigate("/app/home", { replace: true });
+          navigate("/app/day", { replace: true });
         } else {
           // Stale entry — remove it so the profile form can proceed to join.
           removeChallengeRole(currentUser.uid, invite.challengeId).catch(console.error);
@@ -406,7 +364,7 @@ function OnboardingLayout() {
   const handleStayInCurrentChallenge = () => {
     if (!conflict) return;
     setSelectedId(conflict.challengeId);
-    navigate("/app/home", { replace: true });
+    navigate("/app/day", { replace: true });
   };
 
   // Item 4: account-choice actions for an already-signed-in user on an invite link.
@@ -453,7 +411,7 @@ function OnboardingLayout() {
         const pSnap = await getDoc(participantRef(invite.challengeId, currentUser.uid));
         if (pSnap.exists()) {
           setSelectedId(invite.challengeId);
-          navigate("/app/home", { replace: true });
+          navigate("/app/day", { replace: true });
           return;
         }
         // Stale entry (participant doc gone after failed leave) — fall through to re-join.
@@ -472,123 +430,69 @@ function OnboardingLayout() {
         });
         setSelectedId(challengeId);
       } else {
-        await joinChallengeAsParticipant(
-          invite.challengeId,
-          currentUser.uid,
-          { name: data.name, ini: data.ini, tz: detectTz(),
-            photoUrl: currentUser.photoURL ?? null },
-          invite.startingLives,
-          code,
-        );
-        setSelectedId(invite.challengeId);
+        // Participants are added by name. This invite is not for operators.
+        navigate("/", { replace: true });
+        return;
       }
     }
-    navigate("/app/home", { replace: true });
+    navigate("/app/day", { replace: true });
   };
 
-  const [codeInput, setCodeInput] = useState("");
+  if (inviteLoading) return <FullScreenSpinner />;
 
-  if (inviteLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center" style={jk}>
-        <p className="text-sm text-muted-foreground">Загрузка челленджа…</p>
-      </div>
-    );
-  }
-
-  // No code provided — show join-or-create landing
+  // No code provided — organizer landing
   if (!code) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-center gap-6" style={jk}>
-        <p className="text-5xl">🏁</p>
-        <div className="space-y-1.5">
-          <p className="font-extrabold text-xl">Присоединиться или создать</p>
-          <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
-            Создайте свой челлендж или введите код приглашения от организатора.
-          </p>
-        </div>
-        <div className="w-full max-w-[320px] flex flex-col gap-3">
-          <button
-            onClick={() => navigate("/challenges/create")}
-            className="w-full py-3.5 rounded-2xl font-extrabold text-sm text-white"
-            style={{ background: "#FF4F00" }}
-          >
-            Создать новый челлендж
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-xs font-semibold text-muted-foreground">или</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={codeInput}
-              onChange={e => setCodeInput(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === "Enter" && codeInput.trim() && navigate(`/join?code=${encodeURIComponent(codeInput.trim())}`)}
-              placeholder="Код приглашения"
-              className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none placeholder-muted-foreground tracking-wider"
-            />
-            <button
-              onClick={() => codeInput.trim() && navigate(`/join?code=${encodeURIComponent(codeInput.trim())}`)}
-              disabled={!codeInput.trim()}
-              className="px-4 py-2.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-40"
-              style={{ background: "#2AABEE" }}
-            >
-              Войти
-            </button>
-          </div>
-        </div>
-      </div>
+      <AuthLayout>
+        <AuthMessage
+          title="Трекер для организаторов"
+          description="Участников добавляют по имени. Войдите, если вы организатор или помощник."
+        >
+          <Button variant="primary" size="lg" block onClick={() => navigate("/")}>Войти</Button>
+        </AuthMessage>
+      </AuthLayout>
     );
   }
 
   if (inviteError) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6" style={jk}>
-        <div className="text-center space-y-3 max-w-xs">
-          <p className="text-3xl">🔗</p>
-          <p className="font-extrabold text-lg">Недействительное приглашение</p>
-          <p className="text-sm text-muted-foreground">{inviteError}</p>
-          <button
-            onClick={() => navigate("/join")}
-            className="mt-2 px-6 py-2.5 rounded-xl font-extrabold text-sm text-white"
-            style={{ background: "#FF4F00" }}
-          >
-            Назад
-          </button>
-        </div>
-      </div>
+      <AuthLayout>
+        <AuthMessage icon={<Link2Off />} title="Приглашение недействительно" description={inviteError}>
+          <Button variant="secondary" size="lg" block onClick={() => navigate("/")}>На главную</Button>
+        </AuthMessage>
+      </AuthLayout>
+    );
+  }
+
+  if (invite && invite.type !== "team") {
+    return (
+      <AuthLayout>
+        <AuthMessage
+          icon={<Users />}
+          title="Участникам вход не нужен"
+          description="Организатор добавляет людей по имени и сам отмечает пробежки и задания. Эта ссылка не для входа участников."
+        >
+          <Button variant="primary" size="lg" block onClick={() => navigate("/")}>Вход для организаторов</Button>
+        </AuthMessage>
+      </AuthLayout>
     );
   }
 
   if (conflict) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6" style={jk}>
-        <div className="text-center space-y-4 max-w-xs">
-          <p className="text-3xl">{conflict.emoji}</p>
-          <p className="font-extrabold text-lg">Вы уже в другом челлендже</p>
-          <p className="text-sm text-muted-foreground leading-snug">
-            Вы уже участвуете в другом челлендже — <span className="font-semibold text-foreground">{conflict.name}</span>.
-            Чтобы присоединиться к этому, нужно сначала покинуть текущий.
-          </p>
-          <div className="flex flex-col gap-2 pt-2">
-            <button
-              onClick={handleLeaveConflictAndJoin}
-              disabled={leavingConflict}
-              className="px-6 py-3 rounded-xl font-extrabold text-sm text-destructive-foreground bg-destructive disabled:opacity-40"
-            >
-              {leavingConflict ? "…" : "Покинуть текущий и присоединиться"}
-            </button>
-            <button
-              onClick={handleStayInCurrentChallenge}
-              disabled={leavingConflict}
-              className="px-6 py-2.5 rounded-xl font-bold text-sm border border-border disabled:opacity-40"
-            >
-              Остаться в текущем
-            </button>
-          </div>
-        </div>
-      </div>
+      <AuthLayout>
+        <AuthMessage
+          title="Вы уже в другом челлендже"
+          description={<>Сейчас вы в команде «{conflict.name}». Чтобы присоединиться к новому, сначала нужно покинуть текущий.</>}
+        >
+          <Button variant="danger" size="lg" block onClick={handleLeaveConflictAndJoin} loading={leavingConflict}>
+            Покинуть и присоединиться
+          </Button>
+          <Button variant="secondary" size="lg" block onClick={handleStayInCurrentChallenge} disabled={leavingConflict}>
+            Остаться в текущем
+          </Button>
+        </AuthMessage>
+      </AuthLayout>
     );
   }
 
@@ -601,89 +505,71 @@ function OnboardingLayout() {
     const secondary = currentUser.email
       ?? (userProfile.telegramUsername ? `@${userProfile.telegramUsername}` : null);
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6" style={jk}>
-        <div className="text-center space-y-5 max-w-xs">
-          <p className="text-3xl">{invite.emoji}</p>
-          <div className="space-y-1">
-            <p className="font-extrabold text-lg">Присоединиться к челленджу</p>
-            <p className="text-sm text-muted-foreground leading-snug">
-              <span className="font-semibold text-foreground">{invite.name}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-3 justify-center rounded-2xl border border-border bg-card px-4 py-3">
+      <AuthLayout>
+        <AuthMessage
+          icon={<UserRoundCheck />}
+          title="Присоединиться к команде"
+          description={<>Приглашение в «{invite.name}». Вы вошли в этот аккаунт:</>}
+        >
+          <div className="-mt-2 mb-2 flex items-center gap-3 rounded-xl border border-border px-4 py-3">
             <Av ini={userProfile.ini} photoUrl={userProfile.photoUrl} sz="md" />
-            <div className="text-left min-w-0">
-              <p className="text-sm font-bold truncate">{userProfile.name}</p>
-              {secondary && <p className="text-xs text-muted-foreground truncate">{secondary}</p>}
+            <div className="min-w-0">
+              <p className="truncate text-[15px] font-medium">{userProfile.name}</p>
+              {secondary && <p className="truncate text-[13px] text-muted-foreground">{secondary}</p>}
             </div>
           </div>
-          <p className="text-sm text-muted-foreground">Вы вошли как этот аккаунт. Продолжить?</p>
-          <div className="flex flex-col gap-2 pt-1">
-            <button
-              onClick={handleContinueAsCurrentAccount}
-              className="px-6 py-3 rounded-xl font-extrabold text-sm text-white"
-              style={{ background: "#FF4F00" }}
-            >
-              Продолжить как {userProfile.name}
-            </button>
-            <button
-              onClick={handleSwitchAccount}
-              className="px-6 py-2.5 rounded-xl font-bold text-sm border border-border"
-            >
-              Войти в другой аккаунт
-            </button>
-          </div>
-        </div>
-      </div>
+          <Button variant="primary" size="lg" block onClick={handleContinueAsCurrentAccount}>
+            Продолжить как {userProfile.name.split(" ")[0]}
+          </Button>
+          <Button variant="secondary" size="lg" block onClick={handleSwitchAccount}>
+            Войти в другой аккаунт
+          </Button>
+        </AuthMessage>
+      </AuthLayout>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
-      <div className="flex-1 lg:flex lg:items-center lg:justify-center lg:p-8">
-        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
-          style={{ minHeight: "min(600px, 100vh)" }}>
-          {step === "telegram" && (
-            <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} onGoogleAuth={handleGoogleAuthOnboarding} />
-          )}
-          {step === "profile" && (
-            <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} initialError={autoJoinError} />
-          )}
-        </div>
-      </div>
-    </div>
+    <AuthLayout>
+      {step === "telegram" && (
+        <TelegramLoginScreen challenge={preview} onAuth={handleTelegramAuth} onGoogleAuth={handleGoogleAuthOnboarding} />
+      )}
+      {step === "profile" && (
+        <ProfileSetupScreen onDone={handleProfileDone} telegramData={telegramData} initialError={autoJoinError} />
+      )}
+    </AuthLayout>
   );
 }
 
 function ErrorLayout() {
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
-      <div className="flex-1 flex flex-col lg:flex-row lg:items-center lg:justify-center lg:p-8">
-        <div className="flex flex-col flex-1 lg:flex-none lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
-          style={{ minHeight: "min(600px, 100vh)" }}>
-          <ErrorScreen />
-        </div>
-      </div>
-    </div>
+    <AuthLayout>
+      <ErrorScreen />
+    </AuthLayout>
   );
 }
 
 function OrgLoginLayout() {
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-x-hidden" style={jk}>
-      <div className="flex-1 lg:flex lg:items-center lg:justify-center lg:p-8">
-        <div className="lg:w-[420px] lg:bg-card lg:rounded-3xl lg:border lg:border-border lg:shadow-sm lg:overflow-hidden"
-          style={{ minHeight: "min(600px, 100vh)" }}>
-          <OrgLoginScreen />
-        </div>
-      </div>
-    </div>
+    <AuthLayout>
+      <OrgLoginScreen />
+    </AuthLayout>
   );
 }
 
 function ChallengesLayout() {
+  const navigate = useNavigate();
   return (
-    <div className="min-h-screen bg-background overflow-x-hidden" style={jk}>
+    <div className="min-h-dvh bg-background">
+      <ScrollRestoration />
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex h-16 max-w-[1040px] items-center justify-between px-4 sm:px-6 lg:px-10">
+          <Logo />
+          <Button variant="ghost" size="sm" onClick={async () => { await signOut(auth); navigate("/", { replace: true }); }}>
+            Выйти
+          </Button>
+        </div>
+      </header>
       <Outlet />
     </div>
   );
@@ -715,18 +601,11 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // Participant profile overlay (auth required)
+  // Participant profile — detail screen inside the app frame (no phone tab bar)
   {
     path: "/participants/:uid",
-    element: (
-      <RequireAuth>
-        <div className="min-h-screen bg-background overflow-y-auto overflow-x-hidden" style={{ ...jk, scrollbarWidth: "none" }}>
-          <div className="max-w-[560px] mx-auto min-h-full">
-            <ParticipantProfile />
-          </div>
-        </div>
-      </RequireAuth>
-    ),
+    element: <RequireAuth><AppShell variant="detail" /></RequireAuth>,
+    children: [{ index: true, element: <ParticipantProfile /> }],
   },
 
   // Main app shell (auth required)
@@ -734,16 +613,14 @@ export const router = createBrowserRouter([
     path: "/app",
     element: <RequireAuth><AppShell /></RequireAuth>,
     children: [
-      { index: true,           element: <Navigate to="/app/home" replace /> },
-      { path: "home",          element: <HomeScreen /> },
-      { path: "tasks",         element: <TasksScreen /> },
-      { path: "community",     element: <CommunityScreen /> },
-      { path: "review",        element: <ReviewScreen /> },
-      { path: "manage",        element: <ManageScreen /> },
-      { path: "participants",  element: <ManageParticipantsScreen /> },
-      { path: "settings",      element: <ChallengeSettingsScreen /> },
-      { path: "team",          element: <TeamScreen /> },
-      { path: "profile",       element: <ProfileScreen /> },
+      { index: true,      element: <Navigate to="/app/day" replace /> },
+      { path: "day",      element: <DayScreen /> },
+      { path: "grid",     element: <GridScreen /> },
+      { path: "rating",   element: <RatingScreen /> },
+      { path: "settings", element: <OperatorSettingsScreen /> },
+      { path: "team",     element: <TeamScreen /> },
+      { path: "profile",  element: <ProfileScreen /> },
+      { path: "home",     element: <Navigate to="/app/day" replace /> },
     ],
   },
 ]);

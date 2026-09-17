@@ -1,133 +1,101 @@
-import { Outlet, useNavigate } from "react-router";
-import { Loader2 } from "lucide-react";
+import { Outlet, ScrollRestoration, useNavigate } from "react-router";
+import { Link2Off, Lock, UserX } from "lucide-react";
 import { DesktopNav } from "../components/nav/DesktopNav";
 import { TabBar } from "../components/nav/TabBar";
+import { Button, EmptyState, PageSpinner } from "../components/atoms";
 import { useAuthContext } from "../contexts/AuthContext";
 import { useAppContext } from "../contexts/AppContext";
-import { BRAND_COLOR } from "../constants/design";
+import { cn } from "../lib/cn";
 
-function NoChallengeState() {
+function NoAccessState() {
   const navigate = useNavigate();
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-6 py-16 text-center gap-4">
-      <p className="text-5xl">🔗</p>
-      <div className="space-y-1">
-        <p className="font-extrabold text-xl">Вы ещё не вступили в челлендж</p>
-        <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
-          Похоже, вступление не завершилось. Попросите организатора повторно отправить
-          ссылку-приглашение и нажмите её ещё раз.
-        </p>
-      </div>
-      <button
-        onClick={() => navigate("/join")}
-        className="mt-2 px-8 py-3 rounded-xl font-extrabold text-sm text-white"
-        style={{ background: BRAND_COLOR }}
-      >
-        Использовать ссылку-приглашение
-      </button>
-    </div>
+    <EmptyState
+      className="min-h-[70vh] justify-center"
+      icon={<Lock />}
+      title="Нет доступа к челленджу"
+      description="Трекером пользуются организаторы и помощники. Участникам входить не нужно — их отмечают по имени."
+      action={<Button variant="primary" onClick={() => navigate("/")}>На экран входа</Button>}
+    />
   );
 }
 
-function KickedState({ challengeName, challengeEmoji }: { challengeName?: string; challengeEmoji?: string }) {
+function RemovedState({ challengeName }: { challengeName?: string }) {
   const navigate = useNavigate();
   return (
-    <div className="flex flex-col items-center justify-center min-h-full px-6 py-16 text-center gap-4">
-      <p className="text-5xl">🚫</p>
-      <div className="space-y-1.5">
-        <p className="font-extrabold text-xl">Вы были удалены из челленджа</p>
-        {challengeName ? (
-          <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
-            {challengeEmoji} <span className="font-semibold text-foreground">{challengeName}</span> — организатор удалил вас из этого челленджа.
-          </p>
-        ) : (
-          <p className="text-sm text-muted-foreground max-w-[280px] leading-snug">
-            Организатор удалил вас из челленджа. Чтобы участвовать снова, используйте ссылку-приглашение.
-          </p>
-        )}
-      </div>
-      <button
-        onClick={() => navigate("/join")}
-        className="mt-2 px-8 py-3 rounded-xl font-extrabold text-sm text-white"
-        style={{ background: BRAND_COLOR }}
-      >
-        Вступить в другой челлендж
-      </button>
-    </div>
+    <EmptyState
+      className="min-h-[70vh] justify-center"
+      icon={<UserX />}
+      title="Вас удалили из челленджа"
+      description={challengeName
+        ? `Организатор «${challengeName}» закрыл вам доступ. Чтобы вернуться, попросите новое приглашение в команду.`
+        : "Чтобы вернуться, попросите организатора пригласить вас в команду."}
+      action={<Button variant="primary" onClick={() => navigate("/")}>На экран входа</Button>}
+    />
   );
 }
 
-export function AppShell() {
+/** "tabs" shows the phone tab bar; "detail" screens (participant profile) hide it. */
+export function AppShell({ variant = "tabs" }: { variant?: "tabs" | "detail" }) {
   const { currentUser, userProfile } = useAuthContext();
   const { challenges, loading, challenge, meParticipant } = useAppContext();
 
   const roleCount = userProfile ? Object.keys(userProfile.challengeRoles ?? {}).length : 0;
 
-  // Show the empty state only for real authenticated users whose join step
-  // failed — i.e. they have a profile but no challenge roles and no challenges loaded.
+  // Authenticated user with a profile but no challenge roles and nothing loaded.
   const showNoChallengeState =
-    !loading &&
-    !!currentUser &&
-    !!userProfile &&
-    roleCount === 0 &&
-    challenges.length === 0;
+    !loading && !!currentUser && !!userProfile && roleCount === 0 && challenges.length === 0;
 
-  // Detect "kicked" state in two scenarios:
-  // 1. Challenge is readable but user is absent from participants (participant doc deleted).
-  // 2. Challenge is no longer readable at all (Firestore rules denied access after removal) —
-  //    recognised by: loading done, no challenge loaded, but userProfile still lists roles.
-  const showKickedState =
+  // "Removed" in two scenarios:
+  // 1. Challenge is readable but the user is absent from participants.
+  // 2. Challenge is no longer readable (rules denied access after removal) —
+  //    loading done, nothing loaded, but the profile still lists roles.
+  const showRemovedState =
     !loading && (
       (!!challenge && challenge.participants.length > 0 && !meParticipant) ||
       (!challenge && !!currentUser && !!userProfile && roleCount > 0 && challenges.length === 0)
     );
 
   const inner = (() => {
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center h-full min-h-[50vh]">
-          <Loader2 size={28} className="animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-    if (showNoChallengeState) return <NoChallengeState />;
-    if (showKickedState) return <KickedState challengeName={challenge?.name} challengeEmoji={challenge?.emoji} />;
-    // Challenges loaded but selectedId points to a doc that didn't come back
-    // (e.g. stale ID after challenge deletion). Show recovery UI rather than crash.
+    if (loading) return <PageSpinner />;
+    if (showNoChallengeState) return <NoAccessState />;
+    if (showRemovedState) return <RemovedState challengeName={challenge?.name} />;
+    if (meParticipant && meParticipant.role === "participant") return <NoAccessState />;
+    // selectedId points to a challenge that didn't load (e.g. deleted).
     if (!challenge) {
       return (
-        <div className="flex flex-col items-center justify-center h-full min-h-[50vh] px-6 text-center gap-3">
-          <p className="text-3xl">🔗</p>
-          <p className="font-extrabold text-lg">Челлендж не найден</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Не удалось загрузить данные. Попробуйте обновить страницу.
-          </p>
-          <button onClick={() => window.location.reload()}
-            className="px-6 py-3 rounded-xl font-extrabold text-sm text-white mt-1"
-            style={{ background: BRAND_COLOR }}>
-            Обновить
-          </button>
-        </div>
+        <EmptyState
+          className="min-h-[70vh] justify-center"
+          icon={<Link2Off />}
+          title="Челлендж не найден"
+          description="Не удалось загрузить данные. Проверьте подключение и обновите страницу."
+          action={<Button variant="primary" onClick={() => window.location.reload()}>Обновить</Button>}
+        />
       );
     }
     return <Outlet />;
   })();
 
   return (
-    <div className="min-h-screen bg-background flex overflow-x-hidden">
+    <div className="min-h-dvh bg-background">
+      <a
+        href="#main"
+        className="fixed left-4 top-4 z-[60] -translate-y-20 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground focus-visible:translate-y-0"
+      >
+        Перейти к содержимому
+      </a>
+      <ScrollRestoration />
       <DesktopNav />
-
-      <div className="flex-1 min-h-screen flex flex-col min-w-0 lg:ml-60">
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden pb-20 lg:pb-8" style={{ scrollbarWidth: "none" }}>
-          {inner}
-        </div>
-
-        {/* Mobile bottom tab bar */}
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50">
-          <TabBar />
-        </div>
-      </div>
+      <main
+        id="main"
+        className={cn(
+          "min-h-dvh lg:pl-64",
+          variant === "tabs" && "pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-0",
+        )}
+      >
+        {inner}
+      </main>
+      {variant === "tabs" && <TabBar />}
     </div>
   );
 }

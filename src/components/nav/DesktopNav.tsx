@@ -1,81 +1,82 @@
-import { Home, CheckSquare, Users, User, Settings } from "lucide-react";
-import { useLocation, useNavigate } from "react-router";
-import { BRAND_COLOR, BRAND_TINT, NAV_INACTIVE } from "../../constants/design";
+import { Link, useLocation, useNavigate } from "react-router";
+import { ChevronsUpDown } from "lucide-react";
+import { Av, Logo } from "../atoms";
+import { ROLE_LABELS } from "../../constants/design";
 import { useAppContext } from "../../contexts/AppContext";
-import type { UserRole } from "../../types";
-
-type TabDef = { path: string; Icon: React.ElementType; label: string };
-
-const USER_TABS: TabDef[] = [
-  { path: "/app/home",      Icon: Home,        label: "Главная"    },
-  { path: "/app/tasks",     Icon: CheckSquare, label: "Задания"    },
-  { path: "/app/community", Icon: Users,       label: "Сообщество" },
-  { path: "/app/profile",   Icon: User,        label: "Профиль"    },
-];
-
-const HELPER_TABS: TabDef[] = [
-  { path: "/app/home",      Icon: Home,        label: "Главная"    },
-  { path: "/app/review",    Icon: CheckSquare, label: "Проверка"   },
-  { path: "/app/community", Icon: Users,       label: "Сообщество" },
-  { path: "/app/profile",   Icon: User,        label: "Профиль"    },
-];
-
-const OWNER_TABS: TabDef[] = [
-  { path: "/app/home",      Icon: Home,        label: "Главная"    },
-  { path: "/app/review",    Icon: CheckSquare, label: "Проверка"   },
-  { path: "/app/community", Icon: Users,       label: "Сообщество" },
-  { path: "/app/manage",    Icon: Settings,    label: "Управление" },
-  { path: "/app/profile",   Icon: User,        label: "Профиль"    },
-];
-
-function tabsForRole(role: UserRole): TabDef[] {
-  return role === "owner" ? OWNER_TABS : role === "helper" ? HELPER_TABS : USER_TABS;
-}
+import { cn } from "../../lib/cn";
+import { TABS, isTabActive } from "./tabs";
 
 export function DesktopNav() {
-  const { challenge, userRole, postponementQueue } = useAppContext();
-  const location = useLocation();
+  const { challenge, userRole, meParticipant } = useAppContext();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
-  const tabs = tabsForRole(userRole);
-  const reviewBadge = (challenge?.queue?.length ?? 0) + (postponementQueue?.length ?? 0);
 
   return (
-    <aside className="hidden lg:flex flex-col fixed inset-y-0 left-0 z-30 w-60 bg-card border-r border-border">
-      <div className="px-5 pt-6 pb-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center text-base" style={{ background: BRAND_TINT }}>🔥</div>
-          <div>
-            <p className="font-extrabold text-sm leading-none">Discipline</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {userRole === "owner" ? "Владелец" : userRole === "helper" ? "Организатор" : "Участник"}
-            </p>
-          </div>
-        </div>
-        {challenge && (
-          <p className="text-xs font-semibold text-muted-foreground mt-3 truncate">{challenge.emoji} {challenge.name}</p>
-        )}
+    <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-border bg-card lg:flex">
+      <div className="flex h-16 shrink-0 items-center px-5">
+        <Logo />
       </div>
 
-      <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto" style={{ scrollbarWidth: "none" }}>
-        {tabs.map(({ path, Icon, label }) => {
-          const active = location.pathname === path;
-          const badge = path === "/app/review" && reviewBadge > 0 ? reviewBadge : 0;
-          return (
-            <button key={path} onClick={() => navigate(path)}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-colors"
-              style={active ? { background: BRAND_TINT, color: BRAND_COLOR } : { color: NAV_INACTIVE }}>
-              <Icon size={18} strokeWidth={active ? 2.5 : 1.5} style={{ color: active ? BRAND_COLOR : NAV_INACTIVE }} />
-              {label}
-              {badge > 0 && (
-                <span className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-extrabold text-white flex items-center justify-center" style={{ background: BRAND_COLOR }}>
-                  {badge > 99 ? "99+" : badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {challenge && (
+        <div className="px-3">
+          <button
+            type="button"
+            onClick={() => navigate("/challenges")}
+            className="flex w-full items-center gap-3 rounded-lg border border-border px-2.5 py-2 text-left transition-colors duration-150 hover:bg-hover"
+            aria-label={`Сменить челлендж. Сейчас: ${challenge.name}`}
+          >
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-base" aria-hidden>
+              {challenge.emoji}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="line-clamp-2 text-sm font-semibold leading-snug">{challenge.name}</span>
+              <span className="block text-xs text-muted-foreground tabular">
+                День {challenge.currentDay} из {challenge.duration}
+              </span>
+            </span>
+            <ChevronsUpDown className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
+          </button>
+        </div>
+      )}
+
+      <nav aria-label="Основная навигация" className="mt-5 flex-1 overflow-y-auto px-3">
+        <ul className="space-y-0.5">
+          {TABS.map(tab => {
+            const active = isTabActive(tab, pathname);
+            const { Icon } = tab;
+            return (
+              <li key={tab.path}>
+                <Link
+                  to={tab.path}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex h-9 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150",
+                    active ? "bg-hover text-foreground" : "text-muted-foreground hover:bg-hover hover:text-foreground",
+                  )}
+                >
+                  <Icon size={18} strokeWidth={active ? 2.25 : 1.75} className={active ? "text-brand" : undefined} aria-hidden />
+                  {tab.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </nav>
 
+      {meParticipant && (
+        <div className="shrink-0 border-t border-border p-3">
+          <Link
+            to="/app/profile"
+            className="flex items-center gap-3 rounded-lg px-2 py-2 transition-colors duration-150 hover:bg-hover"
+          >
+            <Av ini={meParticipant.ini} photoUrl={meParticipant.photoUrl} sz="sm" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{meParticipant.name}</span>
+              <span className="block text-xs text-muted-foreground">{ROLE_LABELS[userRole]}</span>
+            </span>
+          </Link>
+        </div>
+      )}
     </aside>
   );
 }

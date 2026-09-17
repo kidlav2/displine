@@ -73,7 +73,26 @@ export function durationFromDates(startDate: string, endDate: string): number {
 
 /** Add N days to a "YYYY-MM-DD" string, return new "YYYY-MM-DD". */
 export function addDays(dateStr: string, days: number): string {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return addDaysISO(dateStr, days);
+}
+
+/** UTC-safe add of N days to a "YYYY-MM-DD" string. */
+export function addDaysISO(iso: string, days: number): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+}
+
+/** Weekday key ("Mon"–"Sun") for an ISO date, using UTC calendar day. */
+export function weekdayFromISO(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dt.getUTCDay()] ?? "Mon";
+}
+
+/** ISO date of challenge day number (1-based) from startDate. */
+export function challengeDayISO(startDate: string, dayNumber: number): string {
+  if (!startDate) return "";
+  return addDaysISO(startDate, Math.max(1, dayNumber) - 1);
 }

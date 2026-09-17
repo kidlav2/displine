@@ -1,300 +1,268 @@
 import { useState } from "react";
-import { ChevronLeft, Plus, CheckCircle2, AlertCircle, XCircle, Copy, Check, UserRoundPlus, ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Av, Card, SecLabel, RoleBadge } from "../components/atoms";
-import { BRAND_COLOR } from "../constants/design";
+import { Check, Copy, Link2, Plus, UserPlus, X } from "lucide-react";
+import {
+  Av, Badge, Button, ConfirmDialog, Field, IconButton, InlineAlert, Input, Page, PageHeader, RoleBadge, Section,
+  Segmented, Select, Sheet,
+} from "../components/atoms";
+import { ROLE_LABELS } from "../constants/design";
 import { useAppContext } from "../contexts/AppContext";
-import { inviteTeamMember, updateTeamMemberRole, removeTeamMember, demoteTeamMember, promoteParticipantToTeam } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
+import {
+  demoteTeamMember, inviteTeamMember, promoteParticipantToTeam, removeTeamMember, updateTeamMemberRole,
+} from "../lib/firestore";
+import { notify } from "../lib/notify";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 import type { OrgRole, TeamMember } from "../types";
+
+const ROLE_OPTIONS = [
+  { value: "helper" as const, label: ROLE_LABELS.helper },
+  { value: "owner" as const, label: "Совладелец" },
+];
+
+const ROLE_HINT: Record<OrgRole, string> = {
+  helper: "Отмечает участников, записывает штрафы и переносы, меняет настройки челленджа.",
+  owner: "Всё то же, что помощник, плюс управление командой.",
+};
 
 export function TeamScreen() {
   const { challenge } = useAppContext();
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
+  useDocumentTitle("Команда");
 
-  // Path B — invite link
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteRole, setInviteRole] = useState<OrgRole>("helper");
-  const [generatedLink, setGeneratedLink] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [promoteOpen, setPromoteOpen] = useState(false);
+  const [toRemove, setToRemove] = useState<TeamMember | null>(null);
+  const [removing, setRemoving] = useState(false);
 
-  // Path A — promote existing participant
-  const [showPromote, setShowPromote] = useState(false);
-  const [promoteUid, setPromoteUid] = useState("");
-  const [promoteRole, setPromoteRole] = useState<OrgRole>("helper");
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Participants not already in the team (role === "participant")
-  const eligibleParticipants = challenge.participants.filter(
-    p => p.role === "participant" && p.uid !== currentUser?.uid
-  );
-
-  const generateInvite = async () => {
-    if (loading) return;
-    setLoading(true);
-    setError(null);
+  const changeRole = async (member: TeamMember, role: OrgRole) => {
     try {
-      const code = await inviteTeamMember(challenge.id, challenge.name, challenge.emoji, inviteRole);
-      setGeneratedLink(`${window.location.origin}/join?code=${code}`);
-    } catch {
-      setError("Не удалось создать ссылку. Попробуйте снова.");
-    } finally {
-      setLoading(false);
+      await updateTeamMemberRole(challenge.id, member.id, role);
+    } catch (err) {
+      console.error("[Team] updateTeamMemberRole failed:", err);
+      notify.error("Не удалось изменить роль.");
     }
   };
 
-  const copyLink = async () => {
-    if (!generatedLink) return;
-    await navigator.clipboard.writeText(generatedLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const resetInvite = () => {
-    setGeneratedLink(null);
-    setCopied(false);
-    setShowInvite(false);
-  };
-
-  const doPromote = async () => {
-    const p = challenge.participants.find(x => x.uid === promoteUid);
-    if (!p || loading) return;
-    setLoading(true);
-    setError(null);
+  const remove = async () => {
+    if (!toRemove) return;
+    setRemoving(true);
     try {
-      await promoteParticipantToTeam(challenge.id, p.uid, p.name, promoteRole);
-      setShowPromote(false);
-      setPromoteUid("");
-    } catch {
-      setError("Не удалось повысить участника.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const changeRole = async (id: string, role: OrgRole) => {
-    try { await updateTeamMemberRole(challenge.id, id, role); }
-    catch { setError("Не удалось обновить роль."); }
-  };
-
-  const removeMember = async (member: TeamMember) => {
-    try {
-      if (member.status === "active" && member.uid) {
-        // Demote atomically: resets participant role to "participant" AND deletes team doc
-        await demoteTeamMember(challenge.id, member.uid);
+      if (toRemove.status === "active" && toRemove.uid) {
+        // Resets the participant role and deletes the team doc atomically.
+        await demoteTeamMember(challenge.id, toRemove.uid);
       } else {
-        // Invited-but-not-joined: no participant doc yet, just cancel the invite slot
-        await removeTeamMember(challenge.id, member.id);
+        // Invite that was never accepted: just drop the slot.
+        await removeTeamMember(challenge.id, toRemove.id);
       }
-    } catch {
-      setError("Не удалось удалить участника.");
+      setToRemove(null);
+    } catch (err) {
+      console.error("[Team] remove failed:", err);
+      notify.error("Не удалось удалить из команды.");
+    } finally {
+      setRemoving(false);
     }
-  };
-
-  const roleBadge = (role: OrgRole, status: TeamMember["status"]) => {
-    if (status === "invited") return (
-      <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200 shrink-0">Приглашён</span>
-    );
-    return <RoleBadge role={role} />;
   };
 
   return (
-    <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-6 max-w-[600px] mx-auto">
-      <div className="flex items-center gap-3 mb-5">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          <ChevronLeft size={16} /> Назад
-        </button>
-        <p className="font-extrabold text-lg">Команда</p>
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => { setShowPromote(v => !v); setShowInvite(false); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs border-2 border-border bg-card">
-            <UserRoundPlus size={13} /> Повысить
-          </button>
-          <button
-            onClick={() => { setShowInvite(v => !v); setShowPromote(false); }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs text-white"
-            style={{ background: BRAND_COLOR }}>
-            <Plus size={13} /> Пригласить
-          </button>
-        </div>
-      </div>
+    <Page width="sm">
+      <PageHeader
+        back={{ label: "Настройки", onClick: () => navigate("/app/settings") }}
+        title="Команда"
+        description="Кто может вести этот челлендж. Участникам доступ не нужен."
+        actions={
+          <Button variant="primary" onClick={() => setInviteOpen(true)}>
+            <Plus /> Пригласить
+          </Button>
+        }
+      />
 
-      {error && <p className="text-xs font-bold text-red-500 mb-3">{error}</p>}
-
-      {/* Path A — promote existing participant */}
-      {showPromote && (
-        <Card className="!p-4 mb-4 border-blue-100 bg-blue-50">
-          <p className="font-bold text-sm mb-3">Повысить участника</p>
-          {eligibleParticipants.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-2">
-              Все участники уже являются организаторами.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <div>
-                <SecLabel>Участник</SecLabel>
-                <div className="relative mt-1.5">
-                  <select
-                    value={promoteUid}
-                    onChange={e => setPromoteUid(e.target.value)}
-                    className="w-full appearance-none bg-card border border-border rounded-xl px-3 py-2.5 text-sm font-semibold outline-none pr-8">
-                    <option value="">Выберите участника…</option>
-                    {eligibleParticipants.map(p => (
-                      <option key={p.uid} value={p.uid}>{p.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <SecLabel>Роль</SecLabel>
-                <div className="flex gap-2 mt-1.5">
-                  {(["helper", "owner"] as OrgRole[]).map(r => (
-                    <button key={r} onClick={() => setPromoteRole(r)}
-                      className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
-                      style={promoteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                      {r === "owner" ? "Совладелец" : "Организатор"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {promoteRole === "owner" && (
-                <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-                  <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">Совладельцы получают полный доступ, включая настройки челленджа и управление командой.</p>
-                </div>
-              )}
-              <button
-                onClick={doPromote}
-                disabled={!promoteUid || loading}
-                className="w-full py-3 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
-                style={{ background: BRAND_COLOR }}>
-                {loading ? "Повышение…" : "Повысить"}
-              </button>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {/* Path B — invite link */}
-      {showInvite && (
-        <Card className="!p-4 mb-4 border-amber-100 bg-amber-50">
-          {generatedLink ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 size={16} className="text-green-500 shrink-0" />
-                <p className="font-bold text-sm text-green-700">Ссылка создана!</p>
-              </div>
-              <div className="flex items-center gap-2 bg-card border border-border rounded-xl px-3 py-2.5">
-                <p className="flex-1 text-xs font-mono text-muted-foreground truncate">{generatedLink}</p>
-                <button onClick={copyLink}
-                  className="shrink-0 flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                  style={copied ? { background: "#22c55e", color: "#fff" } : { background: BRAND_COLOR, color: "#fff" }}>
-                  {copied ? <><Check size={12} /> Скопировано</> : <><Copy size={12} /> Копировать</>}
-                </button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Действительна <strong>24 часа</strong> · Только <strong>один раз</strong>
-              </p>
-              <button onClick={resetInvite}
-                className="text-xs font-semibold text-muted-foreground underline">
-                Создать ещё одну ссылку
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <p className="font-bold text-sm">Создать ссылку-приглашение</p>
-              <div>
-                <SecLabel>Роль</SecLabel>
-                <div className="flex gap-2 mt-1.5">
-                  {(["helper", "owner"] as OrgRole[]).map(r => (
-                    <button key={r} onClick={() => setInviteRole(r)}
-                      className="flex-1 py-2.5 rounded-xl text-xs font-bold border-2 transition-colors"
-                      style={inviteRole === r ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)" }}>
-                      {r === "owner" ? "Совладелец" : "Организатор"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {inviteRole === "owner" && (
-                <div className="flex items-start gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl">
-                  <AlertCircle size={13} className="text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-700">Совладельцы получают полный доступ, включая настройки челленджа и управление командой.</p>
-                </div>
-              )}
-              <div className="p-2.5 bg-blue-50 border border-blue-100 rounded-xl">
-                <p className="text-xs text-blue-600 font-semibold">Доступ организатора включает:</p>
-                <p className="text-xs text-blue-500 mt-0.5">Проверка и одобрение отправок · Просмотр статистики · Не может изменять настройки или корректировать жизни/очки</p>
-              </div>
-              <button onClick={generateInvite} disabled={loading}
-                className="w-full py-3 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
-                style={{ background: BRAND_COLOR }}>
-                {loading ? "Создание…" : "Создать ссылку"}
-              </button>
-            </div>
-          )}
-        </Card>
-      )}
-
-      <div className="space-y-2">
+      <Section title={<>В команде <span className="font-normal text-subtle-foreground tabular">{challenge.team.length}</span></>}>
+        {challenge.team.length === 0 && (
+          <p className="px-4 py-6 text-center text-sm text-muted-foreground">Пока в команде только вы.</p>
+        )}
         {challenge.team.map(member => {
           const participant = challenge.participants.find(p => p.uid === member.uid);
           const isMe = member.uid === currentUser?.uid;
-          const canNavigate = member.status === "active" && member.uid;
+          const invited = member.status === "invited";
+          const initials = member.name.split(" ").map(w => w[0]).join("").slice(0, 2);
           return (
-            <Card key={member.id} className={`!p-4 ${member.status === "invited" ? "opacity-70" : ""}`}>
-              <div className="flex items-center gap-3">
-                <Av
-                  ini={member.name.split(" ").map(w => w[0]).join("").slice(0, 2)}
-                  photoUrl={participant?.photoUrl}
-                  sz="md"
-                  admin={member.role !== "participant"}
-                  onClick={canNavigate ? () => navigate(`/participants/${member.uid}`) : undefined}
-                />
-                <div
-                  className={`flex-1 min-w-0 ${canNavigate && !isMe ? "cursor-pointer" : ""}`}
-                  onClick={canNavigate && !isMe ? () => navigate(`/participants/${member.uid}`) : undefined}
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="font-bold text-sm">{member.name}</p>
-                    {roleBadge(member.role, member.status)}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {member.status === "invited" ? "Приглашение отправлено" : "Активен с"} {member.since}
-                  </p>
+            <div key={member.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+              <Av ini={initials} photoUrl={participant?.photoUrl} sz="md" />
+              <div className="min-w-0 flex-1 basis-[calc(100%-52px)] sm:basis-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="truncate text-[15px] font-medium sm:text-sm">{member.name}</span>
+                  {isMe ? <Badge>Вы</Badge> : invited ? <Badge tone="warning">Ждёт входа</Badge> : <RoleBadge role={member.role} />}
                 </div>
-                {!isMe ? (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <select value={member.role} onChange={e => changeRole(member.id, e.target.value as OrgRole)}
-                      className="text-xs font-bold bg-muted border border-border rounded-lg px-2 py-1 outline-none cursor-pointer">
-                      <option value="helper">Организатор</option>
-                      <option value="owner">Совладелец</option>
-                    </select>
-                    <button onClick={() => removeMember(member)}
-                      className="w-8 h-8 rounded-lg border border-red-200 bg-red-50 flex items-center justify-center text-red-400 hover:bg-red-100 transition-colors">
-                      <XCircle size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <span className="text-xs text-muted-foreground italic shrink-0">вы</span>
-                )}
+                <p className="mt-0.5 truncate text-[13px] text-muted-foreground">
+                  {[member.email, invited ? `приглашение от ${member.since}` : member.since ? `в команде с ${member.since}` : null]
+                    .filter(Boolean).join(" · ")}
+                </p>
               </div>
-            </Card>
+              {!isMe && (
+                <div className="ml-[52px] flex items-center gap-1 sm:ml-0">
+                  <Select
+                    aria-label={`Роль: ${member.name}`}
+                    value={member.role}
+                    onChange={e => changeRole(member, e.target.value as OrgRole)}
+                    className="h-9 w-auto text-[13px] sm:h-9"
+                  >
+                    {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </Select>
+                  <IconButton label={`Убрать из команды: ${member.name}`} size="md" onClick={() => setToRemove(member)} className="hover:text-danger-text">
+                    <X />
+                  </IconButton>
+                </div>
+              )}
+            </div>
           );
         })}
+      </Section>
+
+      <div className="mt-4">
+        <Button variant="ghost" onClick={() => setPromoteOpen(true)} className="-ml-2">
+          <UserPlus /> Повысить участника
+        </Button>
       </div>
 
-      <div className="mt-5 p-3.5 bg-muted rounded-xl border border-border">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          <span className="font-bold text-foreground">Все решения по проверке публичны.</span>{" "}
-          Каждая отправка, одобрение, отказ и комментарий организатора видны в ленте активности всем участникам — поэтому любой помощник может проверять любую отправку, в том числе от людей, которых знает лично. Ответственность достигается прозрачностью, а не ограничениями.
-        </p>
-      </div>
-    </div>
+      {inviteOpen && <InviteSheet onClose={() => setInviteOpen(false)} />}
+      {promoteOpen && <PromoteSheet onClose={() => setPromoteOpen(false)} />}
+
+      <ConfirmDialog
+        open={!!toRemove}
+        onOpenChange={open => { if (!open && !removing) setToRemove(null); }}
+        title={toRemove?.status === "invited" ? "Отменить приглашение?" : `Убрать ${toRemove?.name ?? ""} из команды?`}
+        description={toRemove?.status === "invited"
+          ? "Ссылка перестанет работать."
+          : "Человек потеряет доступ к управлению челленджем. Вернуть можно новым приглашением."}
+        confirmLabel={toRemove?.status === "invited" ? "Отменить приглашение" : "Убрать"}
+        loading={removing}
+        onConfirm={remove}
+      />
+    </Page>
+  );
+}
+
+function InviteSheet({ onClose }: { onClose: () => void }) {
+  const { challenge } = useAppContext();
+  const [open, setOpen] = useState(true);
+  const [role, setRole] = useState<OrgRole>("helper");
+  const [link, setLink] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const close = () => { setOpen(false); setTimeout(onClose, 250); };
+
+  const generate = async () => {
+    setLoading(true);
+    try {
+      const code = await inviteTeamMember(challenge.id, challenge.name, challenge.emoji, role);
+      setLink(`${window.location.origin}/join?code=${code}`);
+    } catch (err) {
+      console.error("[Team] inviteTeamMember failed:", err);
+      notify.error("Не удалось создать ссылку. Приглашать может только создатель челленджа.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copy = async () => {
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      notify.error("Не удалось скопировать. Выделите ссылку вручную.");
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={o => { if (!o) close(); }} title="Пригласить в команду" description="Одноразовая ссылка, действует 24 часа.">
+      {link ? (
+        <div className="space-y-4">
+          <Field label={`Ссылка для роли «${role === "owner" ? "Совладелец" : ROLE_LABELS.helper}»`}>
+            {({ id }) => (
+              <Input id={id} readOnly value={link} onFocus={e => e.currentTarget.select()} className="font-mono text-[13px] sm:text-[13px]" />
+            )}
+          </Field>
+          <Button variant="primary" block onClick={copy}>
+            {copied ? <><Check /> Скопировано</> : <><Copy /> Скопировать ссылку</>}
+          </Button>
+          <Button variant="ghost" block onClick={() => { setLink(null); setCopied(false); }}>
+            Создать ещё одну
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-muted-foreground">Роль</p>
+            <Segmented aria-label="Роль" block value={role} onChange={setRole} options={ROLE_OPTIONS} />
+            <p className="mt-2 text-[13px] text-muted-foreground text-pretty">{ROLE_HINT[role]}</p>
+          </div>
+          <Button variant="primary" block loading={loading} onClick={generate}>
+            <Link2 /> Создать ссылку
+          </Button>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function PromoteSheet({ onClose }: { onClose: () => void }) {
+  const { challenge } = useAppContext();
+  const { currentUser } = useAuthContext();
+  const [open, setOpen] = useState(true);
+  const [uid, setUid] = useState("");
+  const [role, setRole] = useState<OrgRole>("helper");
+  const [loading, setLoading] = useState(false);
+  const close = () => { setOpen(false); setTimeout(onClose, 250); };
+
+  const eligible = challenge.participants.filter(p => p.role === "participant" && p.uid !== currentUser?.uid);
+
+  const promote = async () => {
+    const p = challenge.participants.find(x => x.uid === uid);
+    if (!p) return;
+    setLoading(true);
+    try {
+      await promoteParticipantToTeam(challenge.id, p.uid, p.name, role);
+      notify.success(`${p.name} теперь в команде`);
+      close();
+    } catch (err) {
+      console.error("[Team] promote failed:", err);
+      notify.error("Не удалось повысить участника.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={o => { if (!o) close(); }} title="Повысить участника">
+      {eligible.length === 0 ? (
+        <p className="py-4 text-sm text-muted-foreground">Некого повышать — все участники уже в команде.</p>
+      ) : (
+        <div className="space-y-4">
+          <InlineAlert tone="warning">
+            Подходит только тем, кто уже входил в Displine со своим аккаунтом. Участник, добавленный по имени, войти не сможет.
+          </InlineAlert>
+          <Field label="Участник">
+            {({ id }) => (
+              <Select id={id} value={uid} onChange={e => setUid(e.target.value)}>
+                <option value="">Выберите…</option>
+                {eligible.map(p => <option key={p.uid} value={p.uid}>{p.name}</option>)}
+              </Select>
+            )}
+          </Field>
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-muted-foreground">Роль</p>
+            <Segmented aria-label="Роль" block value={role} onChange={setRole} options={ROLE_OPTIONS} />
+            <p className="mt-2 text-[13px] text-muted-foreground text-pretty">{ROLE_HINT[role]}</p>
+          </div>
+          <Button variant="primary" block loading={loading} disabled={!uid} onClick={promote}>
+            Повысить
+          </Button>
+        </div>
+      )}
+    </Sheet>
   );
 }

@@ -1,9 +1,22 @@
 export type ScoreKey = "running_on_time" | "running_late" | "task_completed" | "missed";
 
+export type OperatorTab = "day" | "grid" | "rating" | "settings";
 export type UserTab   = "home" | "tasks"   | "community" | "profile";
 export type OwnerTab  = "home" | "review" | "community" | "manage" | "profile";
 export type HelperTab = "home" | "review" | "community" | "profile";
-export type AnyTab = UserTab | OwnerTab | HelperTab;
+export type AnyTab = OperatorTab | UserTab | OwnerTab | HelperTab;
+
+export type AttendanceStatus = "done" | "missed";
+export interface DayAttendance {
+  run?: AttendanceStatus;
+  task?: AttendanceStatus;
+}
+
+export interface IssuedTaskDay {
+  issued: boolean;
+  deadline?: string;
+  title?: string;
+}
 
 export type UserRole = "participant" | "helper" | "owner";
 export type OrgRole  = "owner" | "helper";
@@ -55,7 +68,7 @@ export interface SocialComment { ini: string; name: string; text: string; uid?: 
 export interface DayResult { type: "running" | "task"; scoreKey: ScoreKey; }
 
 export interface Participant {
-  uid: string;  // Firestore doc ID = Firebase Auth UID
+  uid: string;  // Firestore doc ID — auth UID for operators, generated id for named people
   ini: string; name: string;
   photoUrl?: string | null;
   lives: number; km: number;
@@ -64,6 +77,7 @@ export interface Participant {
   results: DayResult[];
   tz: string;
   role: UserRole;
+  days: Record<string, DayAttendance>;
 }
 
 export interface FeedItem {
@@ -110,6 +124,8 @@ export interface ChallengeSettings {
   penaltyAmount: number; currency: string; burpees: number;
   startingLives: number;
   scoring: ScoringConfig;
+  /** Default daily task deadline, e.g. "10:00". */
+  taskDeadline: string;
 }
 
 /** A single task instance for a specific date, shown to participants. */
@@ -153,6 +169,7 @@ export interface ChallengeData {
   settings: ChallengeSettings;
   team: TeamMember[];
   totalTreasury: number;   // sum of all penalty amounts paid into the pot
+  issuedTaskDays: Record<string, IssuedTaskDay>;
 }
 
 // ── Telegram ──────────────────────────────────────────────────────────────────

@@ -1,90 +1,150 @@
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * Color tokens. Values were generated in OKLCH and every text/background pair
+ * was measured (WCAG 2 + APCA) in both themes. Components reference only these
+ * semantic names — never raw hex values.
+ *
+ *   brand      the product accent: logo, active navigation, "today", focus ring
+ *   primary    the one filled action per view (neutral, inverse of the page)
+ *   success    attendance done
+ *   danger     attendance missed, destructive actions (kept ~20° away from brand)
+ *   warning    unpaid penalties
+ *   postpone   postponed run / task
+ */
 :root {
-  --font-size: 16px;
-  --font-size: 16px;
-  --background: #F8F9FA;
-  --foreground: #1A1A1A;
+  --background: #FAF9F7;
+  --foreground: #1B1916;
   --card: #FFFFFF;
-  --card-foreground: #1A1A1A;
+  --card-foreground: #1B1916;
   --popover: #FFFFFF;
-  --popover-foreground: #1A1A1A;
-  --primary: #F0614A;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F2F3F5;
-  --secondary-foreground: #1A1A1A;
-  --muted: #F2F3F5;
-  --muted-foreground: #8C8C9A;
+  --popover-foreground: #1B1916;
+
+  --muted: #F4F2EF;
+  --muted-foreground: #64605A;
+  --subtle-foreground: #8A8580;
+  --hover: #EFECEA;
+  --raised: #FFFFFF;
+  --border: #E4E1DF;
+  --border-strong: #CCCAC7;
+  /* Outline of empty checkboxes, switches and unmarked cells — ≥3:1 on every surface */
+  --control-border: #8E8C89;
+  --input: #CCCAC7;
+  --input-background: #FFFFFF;
+
+  --primary: #1B1916;
+  --primary-hover: #353230;
+  --primary-foreground: #FAF9F7;
+  --secondary: #F4F2EF;
+  --secondary-foreground: #1B1916;
+
+  --brand: #F0614A;
+  --brand-text: #B93C27;
+  --brand-subtle: #FEEEEB;
   --accent: #F0614A;
   --accent-foreground: #FFFFFF;
-  --destructive: #EF4444;
-  --destructive-foreground: #ffffff;
-  --border: rgba(0, 0, 0, 0.07);
-  --input: transparent;
-  --input-background: #F2F3F5;
-  --switch-background: #C8CDD6;
-  /* Semantic tokens not covered by Tailwind classes */
-  --brand-tint: #FFF3F0;
-  --nav-inactive: #9BA5B4;
-  --postpone: #7C3AED;
-  --font-weight-medium: 600;
-  --font-weight-normal: 400;
   --ring: #F0614A;
-  --radius: 0.875rem;
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+
+  --success: #2C974F;
+  --success-text: #146D34;
+  --success-subtle: #E1F8E5;
+  --danger: #D22555;
+  --danger-text: #B51446;
+  --danger-subtle: #FEEEEF;
+  --destructive: #D22555;
+  --destructive-foreground: #FFFFFF;
+  --warning: #F0A726;
+  --warning-text: #905211;
+  --warning-subtle: #FFF2D8;
+  --postpone: #735CC7;
+  --postpone-text: #5F49AB;
+  --postpone-subtle: #F2F1FE;
+  /* Partially completed day in the grid */
+  --success-muted: color-mix(in oklab, var(--success) 42%, var(--card));
+
+  --scrim: rgb(20 18 16 / 0.36);
+  --elevation-raised: 0 1px 2px rgb(20 18 16 / 0.06), 0 8px 24px rgb(20 18 16 / 0.08);
+
+  /* Legacy names still read by older components */
+  --brand-tint: var(--brand-subtle);
+  --nav-inactive: var(--muted-foreground);
+  --switch-background: var(--border-strong);
+
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Motion — curves from the animation playbook, not hand-rolled */
+  --curve-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --curve-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  --chart-1: var(--brand);
+  --chart-2: var(--success);
+  --chart-3: var(--postpone);
+  --chart-4: var(--warning);
+  --chart-5: var(--danger);
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--hover);
+  --sidebar-accent-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+  --background: #100F0E;
+  --foreground: #F1F0EE;
+  --card: #181715;
+  --card-foreground: #F1F0EE;
+  --popover: #1D1C1A;
+  --popover-foreground: #F1F0EE;
+
+  --muted: #22201E;
+  --muted-foreground: #BDBAB6;
+  --subtle-foreground: #93908D;
+  --hover: #292726;
+  --raised: #353331;
+  --border: #2F2D2C;
+  --border-strong: #494745;
+  --control-border: #6B6866;
+  --input: #494745;
+  --input-background: #22201E;
+
+  --primary: #F1F0EE;
+  --primary-hover: #D9D7D5;
+  --primary-foreground: #100F0E;
+  --secondary: #22201E;
+  --secondary-foreground: #F1F0EE;
+
+  --brand: #F0614A;
+  --brand-text: #FD967B;
+  --brand-subtle: #3C201B;
+  --accent: #F0614A;
+  --accent-foreground: #FFFFFF;
+  --ring: #F0614A;
+
+  --success: #36A558;
+  --success-text: #72D48A;
+  --success-subtle: #19301E;
+  --danger: #DC3860;
+  --danger-text: #FE9EAA;
+  --danger-subtle: #441D23;
+  --destructive: #DC3860;
+  --destructive-foreground: #FFFFFF;
+  --warning: #F5AE39;
+  --warning-text: #F3BD5C;
+  --warning-subtle: #3C2A0E;
+  --postpone: #816DD2;
+  --postpone-text: #C1BAF6;
+  --postpone-subtle: #2B2742;
+
+  --scrim: rgb(0 0 0 / 0.6);
+  --elevation-raised: 0 0 0 1px rgb(255 255 255 / 0.04), 0 12px 32px rgb(0 0 0 / 0.5);
 }
 
 @theme inline {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -92,29 +152,49 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-hover: var(--hover);
+  --color-raised: var(--raised);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-control-border: var(--control-border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);
   --color-switch-background: var(--switch-background);
   --color-ring: var(--ring);
+
+  --color-brand: var(--brand);
+  --color-brand-text: var(--brand-text);
+  --color-brand-subtle: var(--brand-subtle);
+  --color-success: var(--success);
+  --color-success-text: var(--success-text);
+  --color-success-subtle: var(--success-subtle);
+  --color-danger: var(--danger);
+  --color-danger-text: var(--danger-text);
+  --color-danger-subtle: var(--danger-subtle);
+  --color-warning: var(--warning);
+  --color-warning-text: var(--warning-text);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-postpone: var(--postpone);
+  --color-postpone-text: var(--postpone-text);
+  --color-postpone-subtle: var(--postpone-subtle);
+  --color-success-muted: var(--success-muted);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -123,6 +203,16 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --shadow-raised: var(--elevation-raised);
+  --ease-out: var(--curve-out);
+  --ease-drawer: var(--curve-drawer);
 }
 
 @layer base {
@@ -130,59 +220,100 @@
     @apply border-border outline-ring/50;
   }
 
-  body {
-    @apply bg-background text-foreground;
-    overflow-x: hidden; /* prevent any rogue child from widening the page */
-  }
-
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
-
   html {
-    font-size: var(--font-size);
+    color-scheme: light;
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
   }
 
-  h1 {
-    font-size: var(--text-2xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+  html.dark {
+    color-scheme: dark;
   }
 
-  h2 {
-    font-size: var(--text-xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    overflow-x: hidden;
   }
 
-  h3 {
-    font-size: var(--text-lg);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+  h1, h2, h3 {
+    text-wrap: balance;
   }
 
-  h4 {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+  button, [role="button"], a, input, select, textarea, label {
+    touch-action: manipulation;
   }
 
-  label {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 
-  button {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 28%, transparent);
   }
 
-  input {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-normal);
-    line-height: 1.5;
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 0.55;
+    cursor: pointer;
   }
+
+  .dark input[type="date"]::-webkit-calendar-picker-indicator,
+  .dark input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Press feedback: interface heard the tap. Transform only, 160ms. */
+  .pressable {
+    transition: transform 160ms var(--curve-out), background-color 150ms ease, color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  }
+  .pressable:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+/* Overlays (Radix Dialog / AlertDialog). Keyframes rather than transitions so
+   Radix can wait for the exit animation before unmounting. */
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes overlay-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes sheet-in { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-out { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes dialog-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+@keyframes dialog-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.96); } }
+
+.overlay[data-state="open"] { animation: overlay-in 250ms var(--curve-out); }
+.overlay[data-state="closed"] { animation: overlay-out 250ms var(--curve-out); }
+
+.sheet[data-state="open"] { animation: sheet-in 420ms var(--curve-drawer); }
+.sheet[data-state="closed"] { animation: sheet-out 250ms var(--curve-out); }
+
+.dialog[data-state="open"] { animation: dialog-in 220ms var(--curve-out); }
+.dialog[data-state="closed"] { animation: dialog-out 180ms var(--curve-out); }
+
+@media (min-width: 640px) {
+  .sheet[data-state="open"] { animation: dialog-in 220ms var(--curve-out); }
+  .sheet[data-state="closed"] { animation: dialog-out 180ms var(--curve-out); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pressable:active:not(:disabled) { transform: none; }
+  .sheet[data-state="open"], .dialog[data-state="open"] { animation: overlay-in 200ms ease; }
+  .sheet[data-state="closed"], .dialog[data-state="closed"] { animation: overlay-out 150ms ease; }
 }

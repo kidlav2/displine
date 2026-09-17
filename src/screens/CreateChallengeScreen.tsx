@@ -1,260 +1,216 @@
 import { useState } from "react";
-import { ChevronLeft, Plus, X } from "lucide-react";
+import type React from "react";
 import { useNavigate } from "react-router";
-import { Hearts, Card, SecLabel } from "../components/atoms";
-import { BRAND_COLOR, ALL_DAYS, CURRENCIES, DAY_LABELS, bc } from "../constants/design";
+import { CircleCheck } from "lucide-react";
+import { Button, EmptyState, Field, InlineAlert, Input, Page, PageHeader, Section, Segmented, Textarea } from "../components/atoms";
+import { LivesStepper, RunScheduleSection } from "../components/ChallengeFields";
+import { CURRENCIES } from "../constants/design";
 import { DEFAULT_SCORING } from "../constants/scoring";
+import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { createChallenge } from "../lib/firestore";
-import { durationFromDates, addDays } from "../lib/dates";
-import type { ScoringEntry } from "../types";
+import { addDaysISO, durationFromDates } from "../lib/dates";
+import { formatDateLong, localISODate, plural } from "../lib/format";
+import { cn } from "../lib/cn";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
 
-const EMOJIS = ["🔥", "❄️", "🍂", "💪", "🧘", "📚", "🏃", "⚡", "🎯", "🌟"];
+const EMOJIS = ["🔥", "🏃", "💪", "⚡", "🎯", "🧘", "📚", "❄️", "🍂", "🌟"];
 
 export function CreateChallengeScreen() {
   const { currentUser, userProfile } = useAuthContext();
+  const { setSelectedId } = useAppContext();
   const navigate = useNavigate();
+  useDocumentTitle("Новый челлендж");
 
-  const [step, setStep] = useState<"form" | "done">("form");
+  const tomorrow = addDaysISO(localISODate(), 1);
+  const [createdId, setCreatedId] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [emoji, setEmoji] = useState("🔥");
+  const [emoji, setEmoji] = useState(EMOJIS[0]);
   const [desc, setDesc] = useState("");
-  const [startDate, setStartDate] = useState("2026-07-01");
-  const [endDate, setEndDate]     = useState("2026-08-19"); // 50 days from Jul 1
+  const [startDate, setStartDate] = useState(tomorrow);
+  const [endDate, setEndDate] = useState(addDaysISO(tomorrow, 49));
   const [runSchedule, setRunSchedule] = useState<Record<string, string>>({ Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" });
   const [penaltyAmount, setPenaltyAmount] = useState("5000");
-  const [currency, setCurrency] = useState("KZT");
+  const [currency, setCurrency] = useState<string>("KZT");
   const [burpees, setBurpees] = useState("20");
   const [startingLives, setStartingLives] = useState(5);
-  const [scoring, setScoring] = useState<ScoringEntry[]>([...DEFAULT_SCORING]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const toggleDay = (d: string) => setRunSchedule(p => {
-    if (d in p) {
-      const next = { ...p };
-      delete next[d];
-      return next;
-    }
-    return { ...p, [d]: "06:00" };
-  });
-
-  const setDayTime = (d: string, time: string) =>
-    setRunSchedule(p => ({ ...p, [d]: time }));
-
+  const duration = durationFromDates(startDate, endDate);
   const currencySymbol = CURRENCIES.find(c => c.code === currency)?.symbol ?? currency;
 
-  const submit = async () => {
-    if (!name.trim() || !currentUser || !userProfile || loading) return;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) { setError("Введите название челленджа."); return; }
+    if (!currentUser || !userProfile || loading) return;
     setLoading(true);
     setError(null);
     try {
       const inviteCode = `${name.slice(0, 4).toUpperCase()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-      await createChallenge(
+      const id = await createChallenge(
         currentUser.uid,
         { name: userProfile.name, ini: userProfile.ini, timezone: userProfile.timezone, telegramUsername: userProfile.telegramUsername },
         {
           name: name.trim(), emoji, description: desc.trim(),
-          startDate, endDate, duration: durationFromDates(startDate, endDate) || 50, currentDay: 0,
+          startDate, endDate, duration: duration || 50, currentDay: 0,
           status: "upcoming", inviteCode,
           settings: {
             runSchedule,
-            penaltyAmount: parseInt(penaltyAmount) || 5000,
+            penaltyAmount: parseInt(penaltyAmount, 10) || 0,
             currency: currencySymbol,
-            burpees: parseInt(burpees) || 20,
+            burpees: parseInt(burpees, 10) || 0,
             startingLives,
-            scoring,
+            scoring: [...DEFAULT_SCORING],
+            taskDeadline: "10:00",
           },
-        }
+          issuedTaskDays: {},
+        },
       );
-      setStep("done");
+      setCreatedId(id);
     } catch {
-      setError("Не удалось создать челлендж. Попробуйте снова.");
+      setError("Не удалось создать челлендж. Проверьте подключение и попробуйте снова.");
     } finally {
       setLoading(false);
     }
   };
 
-  if (step === "done") return (
-    <div className="flex flex-col items-center justify-center min-h-screen gap-4 px-6 text-center">
-      <p className="text-5xl">{emoji}</p>
-      <p className="font-extrabold text-2xl">{name}</p>
-      <p className="text-sm text-muted-foreground">Челлендж создан! Участники могут присоединиться с помощью кода приглашения.</p>
-      <button onClick={() => navigate("/challenges")} className="mt-4 px-8 py-3 rounded-xl font-extrabold text-sm text-white" style={{ background: BRAND_COLOR }}>Готово</button>
-    </div>
-  );
+  if (createdId) {
+    return (
+      <Page width="sm">
+        <EmptyState
+          className="min-h-[60vh] justify-center"
+          icon={<CircleCheck className="text-success-text" />}
+          title={`«${name.trim()}» создан`}
+          description="Осталось добавить участников по имени — после этого можно отмечать их каждый день."
+          action={
+            <>
+              <Button variant="primary" onClick={() => { setSelectedId(createdId); navigate("/app/settings#participants"); }}>
+                Добавить участников
+              </Button>
+              <Button variant="ghost" onClick={() => navigate("/challenges")}>К списку</Button>
+            </>
+          }
+        />
+      </Page>
+    );
+  }
 
   return (
-    <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[600px] mx-auto overflow-x-hidden" style={{ scrollbarWidth: "none" }}>
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="flex items-center gap-1 text-sm font-semibold text-muted-foreground">
-          <ChevronLeft size={16} /> Назад
-        </button>
-        <p className="font-extrabold text-lg">Создать челлендж</p>
-      </div>
+    <Page width="sm">
+      <PageHeader back={{ label: "Челленджи", onClick: () => navigate("/challenges") }} title="Новый челлендж" />
 
-      <Card className="!p-4 space-y-3">
-        <div>
-          <SecLabel>Эмодзи</SecLabel>
-          <div className="flex gap-2 mt-2 flex-wrap">
-            {EMOJIS.map(e => (
-              <button key={e} onClick={() => setEmoji(e)}
-                className={`text-2xl w-11 h-11 rounded-xl border-2 ${emoji === e ? "border-primary bg-primary/5" : "border-border bg-muted"}`}>{e}</button>
-            ))}
+      <form onSubmit={submit} className="space-y-8" noValidate>
+        <Section title="Основное" grouped={false}>
+          <div className="space-y-5 rounded-xl border border-border bg-card p-4">
+            <Field label="Название" error={error && !name.trim() ? error : null}>
+              {({ id, describedBy, invalid }) => (
+                <Input
+                  id={id}
+                  value={name}
+                  onChange={e => { setName(e.target.value); setError(null); }}
+                  placeholder="Например, Осенняя дисциплина"
+                  aria-invalid={invalid || undefined}
+                  aria-describedby={describedBy}
+                  autoComplete="off"
+                  autoFocus
+                />
+              )}
+            </Field>
+            <Field label="Описание" hint="Необязательно. Увидят помощники в приглашении.">
+              {({ id, describedBy }) => (
+                <Textarea id={id} value={desc} onChange={e => setDesc(e.target.value)} rows={2} aria-describedby={describedBy} />
+              )}
+            </Field>
+            <fieldset>
+              <legend className="mb-2 text-[13px] font-medium text-muted-foreground">Иконка</legend>
+              <div className="flex flex-wrap gap-2">
+                {EMOJIS.map(e => (
+                  <label key={e} className="relative">
+                    <input type="radio" name="emoji" value={e} checked={emoji === e} onChange={() => setEmoji(e)} className="peer sr-only" />
+                    <span
+                      className={cn(
+                        "flex size-11 cursor-pointer items-center justify-center rounded-lg border bg-card text-xl transition-colors duration-150",
+                        "peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ring",
+                        emoji === e ? "border-brand bg-brand-subtle" : "border-border hover:bg-hover",
+                      )}
+                    >
+                      {e}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </div>
-        </div>
-        <div>
-          <SecLabel>Название челленджа</SecLabel>
-          <input placeholder="напр. Летняя дисциплина" value={name} onChange={e => setName(e.target.value)}
-            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm font-semibold outline-none" />
-        </div>
-        <div>
-          <SecLabel>Описание</SecLabel>
-          <textarea placeholder="О чём этот челлендж?" value={desc} onChange={e => setDesc(e.target.value)} rows={2}
-            className="w-full mt-1.5 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none resize-none" />
-        </div>
-      </Card>
+        </Section>
 
-      <Card className="!p-4 space-y-3">
-        <p className="font-bold text-sm">Расписание</p>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <SecLabel>Дата начала</SecLabel>
-            <input
-              type="date" value={startDate}
-              onChange={e => {
-                setStartDate(e.target.value);
-                if (e.target.value && endDate && e.target.value > endDate)
-                  setEndDate(addDays(e.target.value, 49));
-              }}
-              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
-              style={bc}
-            />
-          </div>
-          <div>
-            <SecLabel>Дата окончания</SecLabel>
-            <input
-              type="date" value={endDate} min={startDate}
-              onChange={e => setEndDate(e.target.value)}
-              className="mt-1.5 w-full bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none"
-              style={bc}
-            />
-          </div>
-        </div>
-        {startDate && endDate && (
-          <p className="text-xs text-muted-foreground">
-            Продолжительность: <span className="font-bold" style={{ color: BRAND_COLOR }}>{durationFromDates(startDate, endDate)} дн.</span>
-          </p>
-        )}
-        <div>
-          <SecLabel>Дни пробежек и дедлайны</SecLabel>
-          <div className="mt-2 space-y-2">
-            {ALL_DAYS.map(d => {
-              const selected = d in runSchedule;
-              return (
-                <div key={d} className="flex items-center gap-2">
-                  <button onClick={() => toggleDay(d)}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold border-2 w-14 shrink-0 transition-colors"
-                    style={selected ? { background: BRAND_COLOR, color: "#fff", borderColor: BRAND_COLOR } : { borderColor: "var(--border)", color: "#8C8C9A" }}>
-                    {DAY_LABELS[d]}
-                  </button>
-                  {selected && (
-                    <input
-                      type="time"
-                      value={runSchedule[d]}
-                      onChange={e => setDayTime(d, e.target.value)}
-                      className="bg-muted rounded-xl px-3 py-1.5 text-sm font-extrabold outline-none text-center"
-                      style={{ ...bc, fontSize: 15 }}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </Card>
-
-      <Card className="!p-4 space-y-3">
-        <p className="font-bold text-sm">Штрафы и жизни</p>
-        <div>
-          <SecLabel>Финансовый штраф</SecLabel>
-          <div className="flex gap-2 mt-1.5">
-            <div className="flex gap-1 bg-muted rounded-xl p-0.5 flex-wrap">
-              {CURRENCIES.map(cur => (
-                <button key={cur.code} onClick={() => setCurrency(cur.code)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold"
-                  style={currency === cur.code ? { background: "#fff", color: "#1A1A1A" } : { color: "#8C8C9A" }}>
-                  {cur.symbol}
-                </button>
-              ))}
+        <Section title="Даты" grouped={false}>
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Старт">
+                {({ id }) => (
+                  <Input
+                    id={id}
+                    type="date"
+                    value={startDate}
+                    onChange={e => {
+                      const v = e.target.value;
+                      setStartDate(v);
+                      if (v && endDate && v > endDate) setEndDate(addDaysISO(v, 49));
+                    }}
+                  />
+                )}
+              </Field>
+              <Field label="Финиш">
+                {({ id }) => <Input id={id} type="date" value={endDate} min={startDate} onChange={e => setEndDate(e.target.value)} />}
+              </Field>
             </div>
-            <input type="number" value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)}
-              className="flex-1 bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none" />
+            {duration > 0 && (
+              <p className="mt-3 text-[13px] text-muted-foreground">
+                {duration} {plural(duration, ["день", "дня", "дней"])}: с {formatDateLong(startDate)} по {formatDateLong(endDate)}
+              </p>
+            )}
           </div>
-        </div>
-        <div>
-          <SecLabel>Альтернатива (бёрпи)</SecLabel>
-          <div className="flex items-center gap-2 mt-1.5">
-            <input type="number" value={burpees} onChange={e => setBurpees(e.target.value)}
-              className="w-24 bg-muted rounded-xl px-3 py-2 text-sm font-semibold outline-none text-center" />
-            <span className="text-sm text-muted-foreground font-semibold">бёрпи</span>
-          </div>
-        </div>
-        <div>
-          <SecLabel>Начальные жизни</SecLabel>
-          <div className="flex items-center gap-4 mt-2">
-            <button onClick={() => setStartingLives(v => Math.max(1, v - 1))}
-              className="w-9 h-9 rounded-xl border-2 border-border flex items-center justify-center font-bold text-lg">−</button>
-            <Hearts n={startingLives} sz={22} />
-            <button onClick={() => setStartingLives(v => Math.min(5, v + 1))}
-              className="w-9 h-9 rounded-xl border-2 border-border flex items-center justify-center font-bold text-lg">+</button>
-          </div>
-        </div>
-      </Card>
+        </Section>
 
-      <Card className="!p-4 space-y-3">
-        <p className="font-bold text-sm">Формула очков</p>
-        {scoring.map((entry, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input
-              value={entry.label}
-              onChange={e => setScoring(s => { const n = [...s]; n[i] = { ...n[i], label: e.target.value }; return n; })}
-              placeholder="Описание…"
-              className="flex-1 bg-muted rounded-lg px-2.5 py-1.5 text-sm outline-none min-w-0"
-            />
-            <div className="flex items-center gap-0.5 shrink-0">
-              <span className="text-xs text-muted-foreground">+</span>
-              <input
-                type="number" min={0} value={entry.points}
-                onChange={e => setScoring(s => { const n = [...s]; n[i] = { ...n[i], points: parseInt(e.target.value) || 0 }; return n; })}
-                className="w-14 bg-muted rounded-lg px-2 py-1.5 text-sm font-bold outline-none text-center"
-                style={bc}
+        <RunScheduleSection value={runSchedule} onChange={setRunSchedule} />
+
+        <Section title="Штрафы и жизни" grouped={false}>
+          <div className="space-y-5 rounded-xl border border-border bg-card p-4">
+            <div>
+              <p className="mb-2 text-[13px] font-medium text-muted-foreground">Валюта</p>
+              <Segmented
+                aria-label="Валюта"
+                block
+                value={currency}
+                onChange={setCurrency}
+                options={CURRENCIES.map(c => ({ value: c.code, label: c.symbol, title: c.label }))}
               />
-              <span className="text-xs text-muted-foreground">оч.</span>
             </div>
-            <button onClick={() => setScoring(s => s.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-red-400 transition-colors shrink-0">
-              <X size={14} />
-            </button>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Сумма штрафа">
+                {({ id }) => (
+                  <Input id={id} type="number" inputMode="numeric" min={0} value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)} suffix={currencySymbol} />
+                )}
+              </Field>
+              <Field label="Или бёрпи">
+                {({ id }) => (
+                  <Input id={id} type="number" inputMode="numeric" min={0} value={burpees} onChange={e => setBurpees(e.target.value)} suffix="раз" />
+                )}
+              </Field>
+            </div>
+            <LivesStepper value={startingLives} onChange={setStartingLives} />
           </div>
-        ))}
-        <button onClick={() => setScoring(s => [...s, { key: `custom_${Date.now()}`, label: "", points: 0 }])}
-          className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
-          <Plus size={12} /> Добавить строку
-        </button>
-        <div className="flex items-center justify-between pt-1 border-t border-border">
-          <span className="text-sm text-muted-foreground">Пропущено</span>
-          <span className="text-sm font-bold text-gray-400">0 оч. (всегда)</span>
-        </div>
-      </Card>
+        </Section>
 
-      <div className="pb-2">
-        {error && <p className="text-xs font-bold text-red-500 mb-3">{error}</p>}
-        <button onClick={submit} disabled={!name.trim() || loading}
-          className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white disabled:opacity-35"
-          style={{ background: BRAND_COLOR }}>
-          {loading ? "Создание…" : "Создать челлендж"}
-        </button>
-      </div>
-    </div>
+        {error && name.trim() && <InlineAlert>{error}</InlineAlert>}
+
+        <div className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-background px-4 pb-[calc(16px+env(safe-area-inset-bottom))] pt-4 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0">
+          <Button type="submit" variant="primary" size="lg" block loading={loading}>
+            Создать челлендж
+          </Button>
+        </div>
+      </form>
+    </Page>
   );
 }

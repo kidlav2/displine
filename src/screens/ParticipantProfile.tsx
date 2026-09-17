@@ -1,340 +1,336 @@
-import { useState, useEffect } from "react";
-import { ChevronLeft, Shield, Globe, AlertCircle, Lock, MessageCircle, CheckCircle2, Send, Heart, Instagram, Link as LinkIcon, CheckCheck, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
-import { useParams, useNavigate } from "react-router";
-import { getDoc } from "firebase/firestore";
-import { Av, Hearts, Card, SecLabel, RoleBadge } from "../components/atoms";
-import { BRAND_COLOR, bc } from "../constants/design";
-import { calcScore } from "../lib/scoring";
-import { findCity, localNow, utcLabel } from "../lib/timezone";
+import { useEffect, useMemo, useState } from "react";
+import type React from "react";
+import { useNavigate, useParams } from "react-router";
+import { Check, Plus, UserX } from "lucide-react";
+import {
+  Badge, Button, EmptyState, Field, Hearts, Input, Page, PageHeader, PageSpinner, RoleBadge, Section, Sheet, Textarea,
+} from "../components/atoms";
+import { DayLegend, DAY_KIND_LABEL, dayKind, type DayKind } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
-import { logPenalty, markPenaltyPaid, userRef, getOrgNote, saveOrgNote } from "../lib/firestore";
 import { useAuthContext } from "../contexts/AuthContext";
-import type { Penalty, UserProfile } from "../types";
+import { disciplineStats, unpaidPenalties } from "../lib/attendance";
+import { challengeDayISO, weekdayFromISO } from "../lib/dates";
+import { logPenalty, markPenaltyPaid, saveOrgNote, type FeedActor } from "../lib/firestore";
+import { formatDateLong, formatDateShort, formatMoney } from "../lib/format";
+import { cn } from "../lib/cn";
+import { notify } from "../lib/notify";
+import { useDocumentTitle } from "../lib/useDocumentTitle";
+import type { ChallengeData, Participant, Penalty } from "../types";
 
 export function ParticipantProfile() {
   const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
-  const { challenge, isAdmin, isOwner, scoring, loading } = useAppContext();
+  const { challenge, loading, postponements, orgNotes, meParticipant } = useAppContext();
   const { currentUser } = useAuthContext();
+  const participant = challenge?.participants.find(p => p.uid === uid);
+  useDocumentTitle(participant?.name);
 
-  const meParticipant = challenge?.participants.find(p => p.uid === currentUser?.uid);
-  const actor = (currentUser && meParticipant)
+  const [penaltyOpen, setPenaltyOpen] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  const back = () => (window.history.length > 1 ? navigate(-1) : navigate("/app/day"));
+
+  // This route can be opened directly (deep link / refresh) before data arrives.
+  if (loading || !challenge) return <PageSpinner />;
+
+  if (!participant) {
+    return (
+      <Page width="sm">
+        <PageHeader back={{ onClick: back }} title="Участник" />
+        <EmptyState icon={<UserX />} title="Участник не найден" description="Возможно, его удалили из челленджа." />
+      </Page>
+    );
+  }
+
+  const actor: FeedActor | undefined = currentUser && meParticipant
     ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
     : undefined;
 
-  const participant = challenge?.participants.find(p => p.uid === uid);
+  const isRosterMember = participant.role === "participant";
+  const stats = disciplineStats(participant, challenge.startDate, challenge.currentDay, challenge.settings, challenge.issuedTaskDays, postponements);
+  const unpaid = unpaidPenalties(participant);
+  const penalties = [...participant.penalties].sort((a, b) => Number(!!a.paid) - Number(!!b.paid) || (b.date > a.date ? 1 : -1));
 
-  const [penaltyForm, setPenaltyForm]     = useState(false);
-  const [penaltyReason, setPenaltyReason] = useState("");
-  const [penaltyAmount, setPenaltyAmount] = useState(String(challenge?.settings.penaltyAmount || 5000));
-  const [penaltyBurpees, setPenaltyBurpees] = useState(String(challenge?.settings.burpees || 0));
-  const [orgNoteSaved, setOrgNoteSaved]   = useState(false);
-  const [orgNote, setOrgNote]             = useState("");
-  const [noteLoading, setNoteLoading]     = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [payingId, setPayingId]           = useState<string | null>(null);
-  const [publicProfile, setPublicProfile] = useState<UserProfile | null>(null);
-
-  // Fetch bio + social links from users/{uid}
-  useEffect(() => {
-    if (!uid) return;
-    getDoc(userRef(uid))
-      .then(snap => { if (snap.exists()) setPublicProfile({ uid, ...snap.data() } as UserProfile); })
-      .catch(() => {});
-  }, [uid]);
-
-  // Load any existing organizer note for this participant
-  useEffect(() => {
-    if (!isAdmin || !uid || !challenge?.id) return;
-    getOrgNote(challenge.id, uid).then(setOrgNote).catch(() => {});
-  }, [isAdmin, challenge?.id, uid]);
-
-  // Challenge data may not be loaded yet (this route mounts outside AppShell's
-  // loading gate, e.g. on a deep-link / hard refresh). Guard before reading it.
-  if (loading || !challenge) return (
-    <div className="flex items-center justify-center h-full min-h-[50vh]">
-      <Loader2 size={28} className="animate-spin text-muted-foreground" />
-    </div>
-  );
-
-  if (!participant) return (
-    <div className="flex items-center justify-center h-full text-sm text-muted-foreground">Участник не найден.</div>
-  );
-
-  const score = calcScore(participant.results, scoring);
-
-  const onLogPenalty = async (pen: Omit<Penalty, "date">) => {
-    if (!currentUser) return;
-    setActionLoading(true);
-    try {
-      await logPenalty(challenge.id, participant.uid, { ...pen, loggedBy: currentUser.uid }, actor, participant.name);
-      setPenaltyReason(""); setPenaltyForm(false);
-    } finally { setActionLoading(false); }
-  };
-
-  const onMarkPaid = async (penaltyId: string) => {
+  const markPaid = async (penaltyId: string) => {
     setPayingId(penaltyId);
-    try { await markPenaltyPaid(challenge.id, participant.uid, penaltyId); }
-    finally { setPayingId(null); }
+    try {
+      await markPenaltyPaid(challenge.id, participant.uid, penaltyId);
+    } catch (err) {
+      console.error("[ParticipantProfile] markPenaltyPaid failed:", err);
+      notify.error("Не удалось отметить оплату.");
+    } finally {
+      setPayingId(null);
+    }
   };
-
-  const progressPct = challenge.duration > 0
-    ? Math.min(100, (challenge.currentDay / challenge.duration) * 100)
-    : 0;
 
   return (
-    <div className="px-4 lg:px-6 pt-5 lg:pt-8 pb-8 space-y-4 max-w-[560px] mx-auto">
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm font-semibold text-muted-foreground">
-        <ChevronLeft size={16} /> Назад
-      </button>
-      <div className="flex flex-col items-center text-center pt-2">
-        <Av ini={participant.ini} photoUrl={publicProfile?.photoUrl ?? participant.photoUrl} sz="lg" admin={participant.isAdmin} />
-        <div className="flex items-center gap-2 mt-3">
-          <p className="font-extrabold text-2xl">{participant.name}</p>
-          <RoleBadge role={participant.role} />
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">Вступил {participant.joinDate}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Местное время: {localNow(participant.tz)} ({utcLabel(participant.tz)})
-        </p>
-        {/* Social links remain in the header; bio moves to its own card below */}
-        {(publicProfile?.socialLinks?.instagram || publicProfile?.socialLinks?.other) && (
-          <div className="flex items-center gap-3 mt-2 flex-wrap justify-center">
-            {publicProfile.socialLinks.instagram && (
-              <a href={publicProfile.socialLinks.instagram.startsWith("http") ? publicProfile.socialLinks.instagram : `https://${publicProfile.socialLinks.instagram}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 hover:underline">
-                <Instagram size={13} /> Instagram
-              </a>
-            )}
-            {publicProfile.socialLinks.other && (
-              <a href={publicProfile.socialLinks.other.startsWith("http") ? publicProfile.socialLinks.other : `https://${publicProfile.socialLinks.other}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 hover:underline">
-                <LinkIcon size={13} /> Ссылка
-              </a>
-            )}
+    <Page width="sm">
+      <PageHeader
+        back={{ onClick: back }}
+        title={participant.name}
+        description={participant.joinDate ? `В челлендже с ${participant.joinDate}` : undefined}
+        actions={isRosterMember ? undefined : <RoleBadge role={participant.role} />}
+      />
+
+      <div className="space-y-8">
+        <section aria-label="Сводка" className="rounded-xl border border-border bg-card">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-3.5">
+            <Hearts n={participant.lives} total={challenge.settings.startingLives} sz={18} />
+            <p className="text-sm text-muted-foreground tabular">
+              {participant.lives} из {challenge.settings.startingLives} {challenge.settings.startingLives === 1 ? "жизни" : "жизней"}
+            </p>
+            {!participant.active && <Badge tone="danger" className="ml-auto">Выбыл</Badge>}
           </div>
+          <dl className="grid grid-cols-3 divide-x divide-border">
+            <Stat label="Пробежки" value={stats.runTotal ? `${stats.runPct}%` : "—"} hint={`${stats.runDone} из ${stats.runTotal}`} />
+            <Stat label="Задания" value={stats.taskTotal ? `${stats.taskPct}%` : "—"} hint={`${stats.taskDone} из ${stats.taskTotal}`} />
+            <Stat
+              label="Штрафы"
+              value={String(participant.penalties.length)}
+              hint={unpaid.length ? `${unpaid.length} не оплачено` : participant.penalties.length ? "все оплачены" : "нет"}
+              tone={unpaid.length ? "warning" : undefined}
+            />
+          </dl>
+        </section>
+
+        {isRosterMember && (
+          <Section title="Дни" description="Отметки меняются на экранах «День» и «Таблица»." grouped={false}>
+            <div className="rounded-xl border border-border bg-card p-4">
+              <DayCalendar p={participant} challenge={challenge} postponements={postponements} />
+            </div>
+            <DayLegend className="mt-3" />
+          </Section>
         )}
-        {isAdmin && (() => {
-          const c = findCity(participant.tz);
-          const now = localNow(participant.tz);
-          return (
-            <div className="flex items-center gap-1.5 mt-1.5 px-3 py-1.5 bg-muted rounded-xl text-xs">
-              <Globe size={11} className="text-muted-foreground" />
-              <span className="font-semibold">{c.city}</span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-muted-foreground font-mono">{utcLabel(participant.tz)}</span>
-              <span className="text-muted-foreground">· сейчас</span>
-              <span className="font-mono font-bold" style={{ color: BRAND_COLOR }}>{now}</span>
-            </div>
-          );
-        })()}
+
+        <Section
+          title="Штрафы"
+          action={
+            <Button size="sm" variant="secondary" onClick={() => setPenaltyOpen(true)}>
+              <Plus /> Записать
+            </Button>
+          }
+        >
+          {penalties.length === 0 ? (
+            <p className="px-4 py-6 text-center text-sm text-muted-foreground">Нарушений нет</p>
+          ) : penalties.map((pen, i) => (
+            <PenaltyRow
+              key={pen.penaltyId ?? `${pen.date}-${i}`}
+              pen={pen}
+              currency={challenge.settings.currency}
+              paying={payingId === pen.penaltyId}
+              onMarkPaid={pen.penaltyId && !pen.paid ? () => markPaid(pen.penaltyId!) : undefined}
+            />
+          ))}
+        </Section>
+
+        <NoteSection challengeId={challenge.id} uid={participant.uid} note={orgNotes[participant.uid] ?? ""} />
       </div>
 
-      {/* About / bio — dedicated card, collapsible if long, before stats */}
-      {publicProfile?.bio && <BioBubble bio={publicProfile.bio} />}
+      {penaltyOpen && (
+        <PenaltySheet
+          challenge={challenge}
+          participant={participant}
+          actor={actor}
+          loggedBy={currentUser?.uid ?? ""}
+          onClose={() => setPenaltyOpen(false)}
+        />
+      )}
+    </Page>
+  );
+}
 
-      <Card className="!p-4">
-        <div className="flex justify-between items-baseline mb-2.5">
-          <SecLabel>Прогресс</SecLabel>
-          <span className="text-xs font-bold" style={{ color: BRAND_COLOR }}>День {challenge.currentDay} / {challenge.duration}</span>
-        </div>
-        <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-          <div className="h-full rounded-full" style={{ width: `${progressPct}%`, background: BRAND_COLOR }} />
-        </div>
-      </Card>
+function Stat({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "warning" }) {
+  return (
+    <div className="px-4 py-3">
+      <dt className="text-[13px] text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-xl font-semibold tabular">{value}</dd>
+      <dd className={cn("text-[13px] tabular", tone === "warning" ? "text-warning-text" : "text-subtle-foreground")}>{hint}</dd>
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="!p-4">
-          <SecLabel>Очки в челлендже</SecLabel>
-          <p style={{ ...bc, fontSize: 32, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{score.toLocaleString()}</p>
-          <p className="text-xs text-muted-foreground mt-1">очков</p>
-        </Card>
-        <Card className="!p-4">
-          <SecLabel>Пробежано</SecLabel>
-          <p style={{ ...bc, fontSize: 32, fontWeight: 900, lineHeight: 1, marginTop: 6 }}>{participant.km}</p>
-          <p className="text-xs text-muted-foreground mt-1">км</p>
-        </Card>
+const CAL_CELL: Record<DayKind, string> = {
+  done: "bg-success text-white",
+  partial: "bg-success-muted text-foreground",
+  missed: "bg-danger text-white",
+  postponed: "bg-postpone text-white",
+  pending: "shadow-[inset_0_0_0_1.5px_var(--control-border)] text-foreground",
+  future: "text-subtle-foreground",
+  none: "text-subtle-foreground",
+};
+
+const WEEK = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEK_LABELS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+
+/** Challenge days laid out as a Monday-first calendar. */
+function DayCalendar({ p, challenge, postponements }: {
+  p: Participant;
+  challenge: ChallengeData;
+  postponements: ReturnType<typeof useAppContext>["postponements"];
+}) {
+  const todayIso = challengeDayISO(challenge.startDate, challenge.currentDay || 1);
+  const cells = useMemo(() => {
+    const days = Array.from({ length: challenge.duration }, (_, i) => {
+      const iso = challengeDayISO(challenge.startDate, i + 1);
+      return { n: i + 1, iso, kind: dayKind(p, iso, todayIso, challenge.settings.runSchedule, challenge.issuedTaskDays, postponements) };
+    });
+    const lead = days.length ? WEEK.indexOf(weekdayFromISO(days[0].iso)) : 0;
+    return [...Array.from({ length: Math.max(0, lead) }, () => null), ...days];
+  }, [p, challenge, postponements, todayIso]);
+
+  return (
+    <div className="mx-auto max-w-[360px]">
+      <div className="grid grid-cols-7 gap-1.5 pb-2" aria-hidden>
+        {WEEK_LABELS.map(w => <span key={w} className="text-center text-xs text-subtle-foreground">{w}</span>)}
       </div>
-
-      <Card className="!p-4">
-        <SecLabel>Оставшиеся жизни</SecLabel>
-        <div className="flex gap-3 justify-center py-3">
-          <Hearts n={participant.lives} sz={28} />
-        </div>
-        {!participant.active && <p className="text-center text-xs font-bold text-red-500">Выбыл</p>}
-      </Card>
-
-      <Card className="!p-4">
-        <SecLabel>История штрафов</SecLabel>
-        {participant.penalties.length === 0
-          ? <p className="text-sm text-muted-foreground mt-3 text-center py-2">Нарушений нет ✓</p>
-          : <div className="mt-3">
-              {participant.penalties.map((pen, i) => (
-                <div key={i} className="py-3 border-t border-border first:border-t-0">
-                  <div className="flex items-start gap-3">
-                    <AlertCircle size={13} className={`shrink-0 mt-0.5 ${pen.paid ? "text-green-400" : "text-red-400"}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">{pen.reason}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {pen.date.length === 10
-                          ? `${pen.date.slice(8, 10)}.${pen.date.slice(5, 7)}.${pen.date.slice(0, 4)}`
-                          : pen.date}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      {pen.amount > 0 && (
-                        <p className={`text-sm font-extrabold ${pen.paid ? "text-green-500 line-through" : "text-red-500"}`}>
-                          −{pen.amount.toLocaleString("ru")} ₸
-                        </p>
-                      )}
-                      {(pen.burpees ?? 0) > 0 && (
-                        <p className={`text-xs font-semibold mt-0.5 ${pen.paid ? "text-green-400 line-through" : "text-amber-500"}`}>
-                          {pen.burpees} бёрпи
-                        </p>
-                      )}
-                      {pen.livesLost > 0 && (
-                        <p className="text-xs text-red-400 flex items-center justify-end gap-0.5 mt-0.5">
-                          −{pen.livesLost}<Heart size={9} className="fill-red-400 text-red-400" />
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  {/* Mark as paid — only for organizers, only for unpaid penalties that have a penaltyId */}
-                  {isOwner && !pen.paid && pen.penaltyId && (
-                    <div className="mt-2 flex justify-end">
-                      <button
-                        onClick={() => onMarkPaid(pen.penaltyId!)}
-                        disabled={payingId === pen.penaltyId}
-                        className="flex items-center gap-1.5 text-[11px] font-bold text-green-600 bg-green-50 border border-green-200 px-2.5 py-1 rounded-lg disabled:opacity-40"
-                      >
-                        <CheckCheck size={11} />
-                        {payingId === pen.penaltyId ? "…" : "Отметить как оплачено"}
-                      </button>
-                    </div>
-                  )}
-                  {pen.paid && (
-                    <div className="mt-1.5 flex items-center gap-1 justify-end">
-                      <CheckCircle2 size={11} className="text-green-500" />
-                      <span className="text-[10px] font-semibold text-green-600">Оплачено</span>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-        }
-      </Card>
-
-      {isAdmin && (
-        <>
-          <div className="flex items-center gap-3 py-1">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-[10px] font-extrabold tracking-widest uppercase text-muted-foreground flex items-center gap-1.5">
-              <Shield size={9} className="text-blue-400" />
-              {isOwner ? "Панель владельца" : "Панель организатора"}
-            </span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-          <Card className="!p-4 space-y-3 border-blue-100">
-            {isOwner ? (
-              <button onClick={() => setPenaltyForm(v => !v)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50 text-left">
-                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center shrink-0"><AlertCircle size={16} className="text-amber-500" /></div>
-                <div><p className="text-sm font-bold text-amber-600">Записать штраф</p><p className="text-xs text-amber-400">Зафиксировать штраф вручную</p></div>
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 p-3 bg-muted rounded-xl">
-                <Lock size={13} className="text-muted-foreground shrink-0" />
-                <p className="text-xs text-muted-foreground">Запись штрафов доступна только владельцам челленджа. Вы можете проверять отправки на вкладке «Проверка».</p>
-              </div>
+      <ol className="grid grid-cols-7 gap-1.5">
+        {cells.map((c, i) => c === null ? (
+          <li key={`lead-${i}`} aria-hidden />
+        ) : (
+          <li
+            key={c.iso}
+            title={`День ${c.n}, ${formatDateLong(c.iso)}: ${DAY_KIND_LABEL[c.kind]}`}
+            className={cn(
+              "flex aspect-square items-center justify-center rounded-md text-[13px] font-medium tabular",
+              CAL_CELL[c.kind],
+              c.iso === todayIso && "outline-2 outline-offset-2 outline-brand",
             )}
-            {penaltyForm && (
-              <div className="space-y-2">
-                <input placeholder="Причина…" value={penaltyReason} onChange={e => setPenaltyReason(e.target.value)}
-                  className="w-full bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" />
-                <div className="flex gap-2">
-                  <input type="number" value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)}
-                    className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" placeholder="Сумма" />
-                  <span className="text-sm font-bold text-muted-foreground self-center">{challenge.settings.currency}</span>
-                </div>
-                <div className="flex gap-2">
-                  <input type="number" value={penaltyBurpees} onChange={e => setPenaltyBurpees(e.target.value)}
-                    className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm outline-none" placeholder="Бёрпи" />
-                  <span className="text-sm font-bold text-muted-foreground self-center">бёрпи</span>
-                </div>
-                <button
-                  onClick={() => {
-                    if (!penaltyReason.trim()) return;
-                    const burpees = parseInt(penaltyBurpees) || 0;
-                    onLogPenalty({
-                      reason: penaltyReason.trim(),
-                      livesLost: 1,
-                      amount: parseInt(penaltyAmount) || 0,
-                      burpees: burpees > 0 ? burpees : undefined,
-                    });
-                  }}
-                  disabled={!penaltyReason.trim() || actionLoading}
-                  className="w-full py-2.5 rounded-xl font-bold text-sm text-white disabled:opacity-35" style={{ background: BRAND_COLOR }}>
-                  Подтвердить
-                </button>
-              </div>
-            )}
-            <div>
-              <p className="text-sm font-bold mb-2 flex items-center gap-2"><MessageCircle size={14} className="text-blue-400" /> Заметка организатора</p>
-              {orgNoteSaved
-                ? <div className="flex items-center gap-2 p-3 bg-green-50 rounded-xl border border-green-200"><CheckCircle2 size={13} className="text-green-500" /><span className="text-xs font-semibold text-green-700">Заметка сохранена</span></div>
-                : <div className="flex gap-2">
-                    <textarea placeholder="Приватная заметка…" value={orgNote} onChange={e => setOrgNote(e.target.value)} rows={2}
-                      className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-xs outline-none resize-none placeholder-muted-foreground" />
-                    <button
-                      disabled={noteLoading}
-                      onClick={async () => {
-                        if (!orgNote.trim() || noteLoading || !uid) return;
-                        setNoteLoading(true);
-                        try {
-                          await saveOrgNote(challenge.id, uid, orgNote.trim());
-                          setOrgNoteSaved(true);
-                          setTimeout(() => setOrgNoteSaved(false), 2000);
-                        } catch { /* silent — note save is non-critical */ }
-                        finally { setNoteLoading(false); }
-                      }}
-                      className="self-end pb-0.5 disabled:opacity-40" style={{ color: BRAND_COLOR }}>
-                      <Send size={17} />
-                    </button>
-                  </div>
-              }
-            </div>
-          </Card>
-        </>
+          >
+            <span aria-hidden>{Number(c.iso.slice(8, 10))}</span>
+            <span className="sr-only">День {c.n}, {formatDateLong(c.iso)}: {DAY_KIND_LABEL[c.kind]}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function PenaltyRow({ pen, currency, paying, onMarkPaid }: {
+  pen: Penalty;
+  currency: string;
+  paying: boolean;
+  onMarkPaid?: () => void;
+}) {
+  const cost = [
+    pen.amount > 0 ? formatMoney(pen.amount, currency) : null,
+    (pen.burpees ?? 0) > 0 ? `${pen.burpees} бёрпи` : null,
+  ].filter(Boolean).join(" или ");
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] sm:text-sm">{pen.reason}</p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground tabular">
+          {[pen.date.length === 10 ? formatDateShort(pen.date) : pen.date, cost, pen.livesLost > 0 ? `−${pen.livesLost} жизнь` : null]
+            .filter(Boolean).join(" · ")}
+        </p>
+      </div>
+      {pen.paid ? (
+        <Badge tone="success" icon={<Check />}>Оплачен</Badge>
+      ) : onMarkPaid ? (
+        <Button size="sm" variant="secondary" onClick={onMarkPaid} loading={paying}>Отметить оплату</Button>
+      ) : (
+        <Badge tone="warning">Не оплачен</Badge>
       )}
     </div>
   );
 }
 
-// Preview threshold: bios longer than this get a collapse toggle.
-const BIO_PREVIEW_LEN = 100;
+function NoteSection({ challengeId, uid, note }: { challengeId: string; uid: string; note: string }) {
+  const [draft, setDraft] = useState(note);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setDraft(note); }, [note]);
+  const changed = draft.trim() !== note.trim();
 
-function BioBubble({ bio }: { bio: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = bio.length > BIO_PREVIEW_LEN;
-  const displayed = isLong && !expanded ? bio.slice(0, BIO_PREVIEW_LEN).trimEnd() + "…" : bio;
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await saveOrgNote(challengeId, uid, draft.trim());
+      notify.success("Договорённость сохранена");
+    } catch (err) {
+      console.error("[ParticipantProfile] saveOrgNote failed:", err);
+      notify.error("Не удалось сохранить договорённость.");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
-    <Card className="!p-4">
-      <SecLabel>О себе</SecLabel>
-      <p className="text-sm leading-relaxed mt-2 whitespace-pre-wrap break-words">{displayed}</p>
-      {isLong && (
-        <button
-          onClick={() => setExpanded(v => !v)}
-          className="mt-2 flex items-center gap-1 text-xs font-semibold"
-          style={{ color: "var(--muted-foreground)" }}
-        >
-          {expanded
-            ? <><ChevronUp size={12} /> Свернуть</>
-            : <><ChevronDown size={12} /> Показать полностью</>}
-        </button>
-      )}
-    </Card>
+    <Section title="Договорённость" description="Видна организаторам на экране «День»." grouped={false}>
+      <form onSubmit={save} className="space-y-3">
+        <Textarea
+          aria-label="Договорённость"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder="Например: бегает по субботам вместо воскресенья"
+          rows={3}
+        />
+        {changed && (
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setDraft(note)} disabled={saving}>Отменить</Button>
+            <Button size="sm" variant="primary" type="submit" loading={saving}>Сохранить</Button>
+          </div>
+        )}
+      </form>
+    </Section>
+  );
+}
+
+function PenaltySheet({ challenge, participant, actor, loggedBy, onClose }: {
+  challenge: ChallengeData;
+  participant: Participant;
+  actor?: FeedActor;
+  loggedBy: string;
+  onClose: () => void;
+}) {
+  const [open, setOpen] = useState(true);
+  const [reason, setReason] = useState("");
+  const [amount, setAmount] = useState(String(challenge.settings.penaltyAmount || 0));
+  const [burpees, setBurpees] = useState(String(challenge.settings.burpees || 0));
+  const [saving, setSaving] = useState(false);
+  const close = () => { setOpen(false); setTimeout(onClose, 250); };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    setSaving(true);
+    try {
+      const b = parseInt(burpees, 10) || 0;
+      await logPenalty(challenge.id, participant.uid, {
+        reason: reason.trim(),
+        livesLost: 1,
+        amount: parseInt(amount, 10) || 0,
+        burpees: b > 0 ? b : undefined,
+        loggedBy,
+      }, actor, participant.name);
+      notify.success("Штраф записан");
+      close();
+    } catch (err) {
+      console.error("[ParticipantProfile] logPenalty failed:", err);
+      notify.error("Не удалось записать штраф.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={o => { if (!o) close(); }} title="Записать штраф" description={`${participant.name} · спишется 1 жизнь`}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field label="Причина">
+          {({ id }) => <Input id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Например: пропуск пробежки" autoFocus autoComplete="off" />}
+        </Field>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Сумма">
+            {({ id }) => <Input id={id} type="number" inputMode="numeric" min={0} value={amount} onChange={e => setAmount(e.target.value)} suffix={challenge.settings.currency} />}
+          </Field>
+          <Field label="Или бёрпи">
+            {({ id }) => <Input id={id} type="number" inputMode="numeric" min={0} value={burpees} onChange={e => setBurpees(e.target.value)} suffix="раз" />}
+          </Field>
+        </div>
+        <Button type="submit" variant="primary" block loading={saving} disabled={!reason.trim()}>
+          Записать штраф
+        </Button>
+      </form>
+    </Sheet>
   );
 }

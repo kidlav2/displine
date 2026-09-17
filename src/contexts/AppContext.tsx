@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type React from "react";
 import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import type { Achievement, ChallengeData, Participant, PostponementRequest, ScoringConfig, Task, UserRole } from "../types";
+import type { Achievement, ChallengeData, IssuedTaskDay, Participant, PostponementRequest, ScoringConfig, Task, UserRole } from "../types";
 import { parseScoring, DEFAULT_SCORING } from "../constants/scoring";
 import { detectTz } from "../lib/timezone";
 import { challengeCurrentDay, todayRunDayInTz, todayISO } from "../lib/dates";
@@ -34,7 +34,9 @@ function emptyChallenge(id: string): ChallengeData {
     settings: {
       runSchedule: {}, penaltyAmount: 0, currency: "KZT",
       burpees: 0, startingLives: 3, scoring: DEFAULT_SCORING,
+      taskDeadline: "10:00",
     },
+    issuedTaskDays: {},
   };
 }
 
@@ -42,7 +44,7 @@ import { useAuthContext } from "./AuthContext";
 import {
   challengeRef, participantsCol, tasksCol, teamCol, achievementsCol,
   snapToParticipant, snapToReviewItem, snapToTask, snapToTeamMember, snapToAchievement,
-  subscribeToPostponementQueue,
+  subscribeToAllPostponements, subscribeToOrgNotes,
 } from "../lib/firestore";
 
 // Persist the active challenge so a refresh doesn't reset it. Without a stable
@@ -73,6 +75,8 @@ interface AppContextType {
   scoring: ScoringConfig;
   achievements: Achievement[];
   postponementQueue: PostponementRequest[];
+  postponements: PostponementRequest[];
+  orgNotes: Record<string, string>;
   updateChallenge: (id: string, update: Partial<ChallengeData>) => void;
 }
 
@@ -92,6 +96,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [todayTask, setTodayTask]   = useState<Task | null>(null);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [postponementQueue, setPostponementQueue] = useState<PostponementRequest[]>([]);
+  const [postponements, setPostponements] = useState<PostponementRequest[]>([]);
+  const [orgNotes, setOrgNotes] = useState<Record<string, string>>({});
 
   // ── Load challenge metadata from Firestore ────────────────────────────────
   useEffect(() => {
@@ -143,7 +149,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               burpees:       d.settings?.burpees       ?? 0,
               startingLives: d.settings?.startingLives ?? 3,
               scoring: parseScoring(d.settings?.scoring),
+              taskDeadline:  d.settings?.taskDeadline  ?? "10:00",
             },
+            issuedTaskDays: (d.issuedTaskDays ?? {}) as Record<string, IssuedTaskDay>,
             // Preserve any subcollection data already loaded
             participants: existing?.participants ?? [],
             feed:         existing?.feed         ?? [],
@@ -177,7 +185,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // fall back to the first role — never null while the user has ≥1 challenge.
   useEffect(() => {
     if (!userProfile) return;
-    const ids = Object.keys(userProfile.challengeRoles ?? {});
+    const ids = Object.entries(userProfile.challengeRoles ?? {})
+      .filter(([, r]) => r === "owner" || r === "helper")
+      .map(([id]) => id);
     if (ids.length === 0) { setSelectedId(null); return; }
     setSelectedId(prev => (prev && ids.includes(prev)) ? prev : ids[0]);
   }, [userProfile]);
@@ -304,12 +314,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       (err) => console.error("[AppContext] team subscription error:", err)
     );
 
-    const postponementsUnsub = subscribeToPostponementQueue(
+    const postponementsUnsub = subscribeToAllPostponements(
       selectedId,
-      (items) => setPostponementQueue(items)
+      (items) => {
+        setPostponements(items);
+        setPostponementQueue(items.filter(p => p.status === "pending"));
+      }
     );
 
-    return () => { queueUnsub(); teamUnsub(); postponementsUnsub(); };
+    const orgNotesUnsub = subscribeToOrgNotes(selectedId, setOrgNotes);
+
+    return () => { queueUnsub(); teamUnsub(); postponementsUnsub(); orgNotesUnsub(); };
   }, [selectedId, currentUser, isAdmin]);
 
   // FLAG: updateChallenge only patches local React state. All production writes
@@ -338,12 +353,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     challenge, meParticipant, isAdmin, isOwner, scoring,
     achievements,
     postponementQueue,
+    postponements,
+    orgNotes,
     updateChallenge,
   }), [
     challenges, selectedId, userRole, adminTz, adminTzAuto,
     isRunDay, loading, todayTask, todayDeadline,
     challenge, meParticipant, isAdmin, isOwner, scoring,
-    achievements, postponementQueue, updateChallenge,
+    achievements, postponementQueue, postponements, orgNotes, updateChallenge,
   ]);
 
   return (
