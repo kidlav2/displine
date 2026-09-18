@@ -1525,14 +1525,20 @@ export async function setTaskIssued(
   issued: boolean,
   deadline?: string,
 ): Promise<void> {
+  // Field paths (not a whole-map write) so the day's task text survives
+  // switching the task off and on again.
   const path = `issuedTaskDays.${dateISO}`;
-  if (!issued) {
-    await updateDoc(challengeRef(challengeId), { [path]: deleteField() });
-  } else {
-    await updateDoc(challengeRef(challengeId), {
-      [path]: { issued: true, ...(deadline ? { deadline } : {}) },
-    });
-  }
+  await updateDoc(challengeRef(challengeId), {
+    [`${path}.issued`]: issued,
+    ...(issued && deadline ? { [`${path}.deadline`]: deadline } : {}),
+  });
+}
+
+/** The text of the day's task — kept as a record to look back at later. */
+export async function setTaskText(challengeId: string, dateISO: string, text: string): Promise<void> {
+  await updateDoc(challengeRef(challengeId), {
+    [`issuedTaskDays.${dateISO}.title`]: text.trim() ? text.trim() : deleteField(),
+  });
 }
 
 export function subscribeToOrgNotes(

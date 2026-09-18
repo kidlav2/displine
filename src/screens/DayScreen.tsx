@@ -1,15 +1,15 @@
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { Link, useNavigate } from "react-router";
-import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, MoveRight, Trash2, UserRound } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, MoveRight, Plus, Trash2, UserRound } from "lucide-react";
 import {
-  Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Segmented, Sheet, Switch,
+  Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Segmented, Sheet, Switch, Textarea,
 } from "../components/atoms";
 import { MarkButton, MarkPlaceholder } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import {
-  cancelPostponement, deletePenalty, logPenalty, markPenaltyPaid, recordPostponement, setAttendanceField, setTaskIssued,
+  cancelPostponement, deletePenalty, logPenalty, markPenaltyPaid, recordPostponement, setAttendanceField, setTaskIssued, setTaskText,
   type FeedActor,
 } from "../lib/firestore";
 import {
@@ -209,6 +209,9 @@ export function DayScreen() {
             }
           />
         </div>
+        {taskIssued && (
+          <TaskText key={iso} challengeId={challenge.id} iso={iso} text={challenge.issuedTaskDays?.[iso]?.title ?? ""} />
+        )}
         <div className="flex items-center gap-4 border-t border-border px-4 py-3">
           <p className="shrink-0 text-sm text-muted-foreground">Выполнили всё</p>
           <ProgressBar value={stats.allDone} max={stats.people || 1} label="Выполнили всё" className="flex-1" />
@@ -313,6 +316,102 @@ function PhaseBanner({ challenge, phase }: { challenge: ChallengeData; phase: "u
         <p className="mt-0.5 text-[13px] text-muted-foreground">До старта добавьте участников и проверьте расписание.</p>
       </div>
       <Button size="sm" variant="secondary" onClick={() => navigate("/app/settings#participants")}>Участники</Button>
+    </div>
+  );
+}
+
+/** What the day's task actually was — written once, readable any time later. */
+function TaskText({ challengeId, iso, text }: { challengeId: string; iso: string; text: string }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+  const [saving, setSaving] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
+  const textRef = useRef<HTMLParagraphElement>(null);
+
+  // Long tasks are clamped to a few lines; measure whether the clamp actually cuts text.
+  useLayoutEffect(() => {
+    const el = textRef.current;
+    if (el && !expanded) setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  }, [text, expanded, editing]);
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await setTaskText(challengeId, iso, draft);
+      setEditing(false);
+      notify.success("Задание сохранено");
+    } catch (err) {
+      console.error("[DayScreen] setTaskText failed:", err);
+      notify.error("Не удалось сохранить задание.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <form onSubmit={save} className="border-t border-border px-4 py-3">
+        <Textarea
+          aria-label={`Задание на ${formatDateLong(iso)}`}
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) save(e); }}
+          placeholder="Например: 50 приседаний и планка 2 минуты"
+          rows={4}
+          className="max-h-60 overflow-y-auto"
+          autoFocus
+        />
+        <div className="mt-2 flex justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => { setDraft(text); setEditing(false); }} disabled={saving}>Отмена</Button>
+          <Button size="sm" variant="primary" type="submit" loading={saving}>Сохранить</Button>
+        </div>
+      </form>
+    );
+  }
+
+  if (!text) {
+    return (
+      <div className="border-t border-border px-4 py-3">
+        <button
+          type="button"
+          onClick={() => { setDraft(""); setEditing(true); }}
+          className="pressable flex w-full items-center gap-2 rounded-lg border border-dashed border-control-border px-3 py-2.5 text-left text-sm text-subtle-foreground transition-colors duration-150 hover:bg-hover hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
+        >
+          <Plus className="size-4 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">Записать задание — например: 50 приседаний и планка 2 минуты</span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-border px-4 py-3">
+      <div className="flex items-start gap-3">
+        <p
+          ref={textRef}
+          className={cn(
+            "min-w-0 flex-1 whitespace-pre-wrap break-words text-sm",
+            expanded ? "max-h-64 overflow-y-auto overscroll-contain pr-1" : "line-clamp-4",
+          )}
+        >
+          {text}
+        </p>
+        <Button size="sm" variant="ghost" className="-mr-2 -mt-1 shrink-0" onClick={() => { setDraft(text); setEditing(true); }}>
+          Изменить
+        </Button>
+      </div>
+      {(overflowing || expanded) && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          aria-expanded={expanded}
+          className="mt-1.5 rounded text-[13px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
+        >
+          {expanded ? "Свернуть" : "Показать полностью"}
+        </button>
+      )}
     </div>
   );
 }

@@ -153,7 +153,7 @@ export function GridScreen() {
                           "mx-auto flex w-[30px] flex-col items-center rounded-md py-1 leading-none",
                           today && "bg-brand-subtle",
                         )}
-                        title={`${formatDateLong(d.iso)}${d.run ? " · пробежка" : ""}`}
+                        title={[formatDateLong(d.iso), d.run ? "пробежка" : null, challenge.issuedTaskDays?.[d.iso]?.title ? `задание: ${challenge.issuedTaskDays[d.iso].title}` : null].filter(Boolean).join(" · ")}
                       >
                         <span className={cn("text-xs font-semibold tabular", today ? "text-brand-text" : "text-foreground")}>{d.n}</span>
                         <span className={cn("mt-1 text-[11px]", today ? "text-brand-text" : "text-subtle-foreground")}>{d.weekday}</span>
