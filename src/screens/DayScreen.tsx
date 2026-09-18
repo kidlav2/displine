@@ -1,26 +1,27 @@
 import { useMemo, useState } from "react";
 import type React from "react";
 import { Link, useNavigate } from "react-router";
-import { CalendarClock, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, UserRound } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, MoveRight, Trash2, UserRound } from "lucide-react";
 import {
-  Av, Badge, Button, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Segmented, Sheet, Switch,
+  Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Segmented, Sheet, Switch,
 } from "../components/atoms";
 import { MarkButton, MarkPlaceholder } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import {
-  logPenalty, markPenaltyPaid, recordPostponement, setAttendanceField, setTaskIssued,
+  cancelPostponement, deletePenalty, logPenalty, markPenaltyPaid, recordPostponement, setAttendanceField, setTaskIssued,
   type FeedActor,
 } from "../lib/firestore";
 import {
-  expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus,
+  approvedPostponements, expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus,
   postponementAway, postponementOnto, rosterParticipants, unpaidPenalties,
 } from "../lib/attendance";
 import { addDaysISO, challengeDayISO, challengePhase, durationFromDates, weekdayFromISO } from "../lib/dates";
 import { formatDateLong, formatDateShort, formatMoney, formatWeekdayDate, localISODate, plural } from "../lib/format";
+import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
-import type { AttendanceStatus, ChallengeData, Participant, PostponementRequest } from "../types";
+import type { AttendanceStatus, ChallengeData, Participant, Penalty, PostponementRequest } from "../types";
 
 type Kind = "run" | "task";
 
@@ -138,23 +139,12 @@ export function DayScreen() {
           <p className="truncate text-[13px] font-medium text-muted-foreground lg:hidden">{challenge.name}</p>
         )}
 
-        <div className="mt-1 flex items-end justify-between gap-4 lg:mt-0">
-          <div className="min-w-0">
-            <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] tabular">
-              День {dayNum}
-              <span className="font-normal text-subtle-foreground"> из {challenge.duration}</span>
-            </h1>
-            <p className="mt-1 text-[15px] text-muted-foreground">
-              {formatWeekdayDate(iso)}
-              {isToday && <span className="text-brand-text"> · сегодня</span>}
-            </p>
-          </div>
+        <div className="mt-1 flex items-center justify-between gap-4 lg:mt-0">
+          <h1 className="whitespace-nowrap text-[28px] font-semibold leading-tight tracking-[-0.02em] tabular">
+            День {dayNum}
+            <span className="font-normal text-subtle-foreground"> из {challenge.duration}</span>
+          </h1>
           <div className="flex shrink-0 items-center gap-1.5">
-            {phase === "active" && !isToday && (
-              <Button size="sm" variant="ghost" onClick={() => go(today)} className="mr-1">
-                Сегодня
-              </Button>
-            )}
             <IconButton label="Предыдущий день" variant="secondary" onClick={() => go(dayNum - 1)} disabled={dayNum <= 1}>
               <ChevronLeft />
             </IconButton>
@@ -162,6 +152,35 @@ export function DayScreen() {
               <ChevronRight />
             </IconButton>
           </div>
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+          <label className="relative inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md text-[15px] text-muted-foreground hover:text-foreground">
+            <CalendarDays className="size-4 shrink-0" aria-hidden />
+            <span>
+              {formatWeekdayDate(iso)}
+              {isToday && <span className="text-brand-text"> · сегодня</span>}
+            </span>
+            <ChevronDown className="size-3.5 shrink-0" aria-hidden />
+            {/* Native date picker over the label: opens on tap (phones) and via showPicker (desktop). */}
+            <input
+              type="date"
+              aria-label="Выбрать дату"
+              value={iso}
+              min={challenge.startDate}
+              max={challengeDayISO(challenge.startDate, challenge.duration)}
+              onClick={e => { try { e.currentTarget.showPicker(); } catch { /* unsupported */ } }}
+              onChange={e => {
+                const picked = e.target.value;
+                if (picked) go(durationFromDates(challenge.startDate, picked));
+              }}
+              className="absolute inset-0 cursor-pointer opacity-0"
+            />
+          </label>
+          {phase === "active" && !isToday && (
+            <Button size="sm" variant="ghost" onClick={() => go(today)} className="-ml-1">
+              Вернуться к сегодня
+            </Button>
+          )}
         </div>
       </header>
 
@@ -383,6 +402,8 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, note, run, ta
   );
 }
 
+const QUICK_REASONS = ["Пропуск пробежки", "Задание не сдано", "Опоздание"];
+
 function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, actor, loggedBy, onClose }: {
   p: Participant;
   iso: string;
@@ -398,16 +419,24 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
   const needRun = expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements);
   const [reason, setReason] = useState("");
   const [savingPenalty, setSavingPenalty] = useState(false);
-  const [payingId, setPayingId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<Penalty | null>(null);
   const [postponeType, setPostponeType] = useState<"running" | "task">(needRun ? "running" : "task");
   const [target, setTarget] = useState(addDaysISO(iso, 1));
   const [postponeNote, setPostponeNote] = useState("");
   const [savingPostpone, setSavingPostpone] = useState(false);
 
   const { penaltyAmount, burpees, currency } = challenge.settings;
-  const unpaid = unpaidPenalties(p);
   const [open, setOpen] = useState(true);
   const close = () => { setOpen(false); setTimeout(onClose, 250); };
+
+  // This day's penalties first, then unpaid ones, then the rest (newest first).
+  const penalties = [...p.penalties].sort((a, b) =>
+    Number(b.date === iso) - Number(a.date === iso) ||
+    Number(!!a.paid) - Number(!!b.paid) ||
+    (b.date > a.date ? 1 : -1));
+  const dayPostponements = approvedPostponements(postponements)
+    .filter(x => x.participantUid === p.uid && (x.dateISO === iso || x.targetDateISO === iso));
 
   const submitPenalty = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -420,6 +449,7 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         amount: penaltyAmount,
         burpees: burpees > 0 ? burpees : undefined,
         loggedBy,
+        forDate: iso,
       }, actor, p.name);
       setReason("");
       notify.success(`Штраф записан: ${p.name}`);
@@ -431,16 +461,16 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
     }
   };
 
-  const markPaid = async (penaltyId: string) => {
-    setPayingId(penaltyId);
+  const run = async (id: string, action: () => Promise<void>, ok: string, fail: string) => {
+    setBusyId(id);
     try {
-      await markPenaltyPaid(challenge.id, p.uid, penaltyId);
-      notify.success("Штраф отмечен как оплаченный");
+      await action();
+      notify.success(ok);
     } catch (err) {
-      console.error("[DayScreen] markPenaltyPaid failed:", err);
-      notify.error("Не удалось отметить оплату.");
+      console.error("[DayScreen]", fail, err);
+      notify.error(fail);
     } finally {
-      setPayingId(null);
+      setBusyId(null);
     }
   };
 
@@ -483,37 +513,28 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         {note && <p className="min-w-0 truncate text-[13px] text-muted-foreground">{note}</p>}
       </div>
 
-      {unpaid.length > 0 && (
-        <div className="mt-5">
-          <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">Не оплачено</h3>
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {unpaid.map(pen => (
-              <li key={pen.penaltyId ?? `${pen.date}-${pen.reason}`} className="flex items-center gap-3 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{pen.reason}</p>
-                  <p className="text-[13px] text-muted-foreground tabular">
-                    {[pen.amount > 0 ? formatMoney(pen.amount, currency) : null, (pen.burpees ?? 0) > 0 ? `${pen.burpees} бёрпи` : null]
-                      .filter(Boolean).join(" или ")}
-                  </p>
-                </div>
-                {pen.penaltyId && (
-                  <Button size="sm" onClick={() => markPaid(pen.penaltyId!)} loading={payingId === pen.penaltyId}>
-                    Отметить оплату
-                  </Button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <form onSubmit={submitPenalty} className="mt-6">
-        <h3 className="text-[15px] font-semibold">Штраф</h3>
+        <h3 className="text-[15px] font-semibold">Штраф за {formatDateLong(iso)}</h3>
         <p className="mt-0.5 text-[13px] text-muted-foreground">{penaltyParts}</p>
         <div className="mt-3 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Быстрая причина">
+            {QUICK_REASONS.map(r => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setReason(r)}
+                className={cn(
+                  "pressable h-8 rounded-full border px-3 text-[13px] transition-colors duration-150",
+                  reason === r ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-hover",
+                )}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
           <Field label="Причина">
             {({ id }) => (
-              <Input id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Например: пропуск пробежки" autoComplete="off" />
+              <Input id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Или напишите свою" autoComplete="off" />
             )}
           </Field>
           <Button type="submit" variant="secondary" block loading={savingPenalty} disabled={!reason.trim()}>
@@ -522,9 +543,70 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         </div>
       </form>
 
+      {penalties.length > 0 && (
+        <div className="mt-6">
+          <h3 className="mb-2 text-[13px] font-medium text-muted-foreground">Все штрафы</h3>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {penalties.map((pen, i) => (
+              <li key={pen.penaltyId ?? `${pen.date}-${i}`} className="flex items-center gap-2 py-2 pl-3 pr-1.5">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm">{pen.reason}</p>
+                  <p className="text-[13px] text-muted-foreground tabular">
+                    {[
+                      pen.date.length === 10 ? formatDateShort(pen.date) : pen.date,
+                      pen.amount > 0 ? formatMoney(pen.amount, currency) : null,
+                      pen.paid ? "оплачен" : null,
+                    ].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                {pen.penaltyId && !pen.paid && (
+                  <Button
+                    size="sm"
+                    loading={busyId === `pay-${pen.penaltyId}`}
+                    onClick={() => run(`pay-${pen.penaltyId}`, () => markPenaltyPaid(challenge.id, p.uid, pen.penaltyId!), "Оплата отмечена", "Не удалось отметить оплату.")}
+                  >
+                    Оплачен
+                  </Button>
+                )}
+                {pen.penaltyId && (
+                  <IconButton label={`Удалить штраф: ${pen.reason}`} size="sm" onClick={() => setToDelete(pen)} className="hover:text-danger-text">
+                    <Trash2 />
+                  </IconButton>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <form onSubmit={submitPostpone} className="mt-7 border-t border-border pt-6">
         <h3 className="text-[15px] font-semibold">Перенос</h3>
         <p className="mt-0.5 text-[13px] text-muted-foreground">День не будет считаться пропуском</p>
+
+        {dayPostponements.length > 0 && (
+          <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
+            {dayPostponements.map(x => (
+              <li key={x.id} className="flex items-center gap-3 py-2 pl-3 pr-1.5">
+                <MoveRight className="size-4 shrink-0 text-postpone-text" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm">
+                    {x.type === "running" ? "Пробежка" : "Задание"}: {formatDateShort(x.dateISO)} → {formatDateShort(x.targetDateISO)}
+                  </p>
+                  {x.reason && <p className="truncate text-[13px] text-muted-foreground">{x.reason}</p>}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={busyId === `pp-${x.id}`}
+                  onClick={() => run(`pp-${x.id}`, () => cancelPostponement(challenge.id, x.id), "Перенос отменён", "Не удалось отменить перенос.")}
+                >
+                  Отменить
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
         <div className="mt-3 flex flex-col gap-3">
           <Segmented
             aria-label="Что переносим"
@@ -554,6 +636,21 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
       <Button variant="ghost" block className="mt-4" onClick={() => { close(); navigate(`/participants/${p.uid}`); }}>
         Открыть профиль
       </Button>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={o => { if (!o && !busyId) setToDelete(null); }}
+        title="Удалить штраф?"
+        description={toDelete ? `«${toDelete.reason}». Жизнь вернётся участнику${toDelete.amount > 0 ? `, ${formatMoney(toDelete.amount, currency)} уйдёт из кассы` : ""}.` : undefined}
+        confirmLabel="Удалить"
+        loading={!!busyId && busyId.startsWith("del-")}
+        onConfirm={async () => {
+          const pen = toDelete;
+          if (!pen?.penaltyId) return;
+          await run(`del-${pen.penaltyId}`, () => deletePenalty(challenge.id, p.uid, pen.penaltyId!), "Штраф удалён", "Не удалось удалить штраф.");
+          setToDelete(null);
+        }}
+      />
     </Sheet>
   );
 }

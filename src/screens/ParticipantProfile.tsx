@@ -1,16 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { useNavigate, useParams } from "react-router";
-import { Check, Plus, UserX } from "lucide-react";
+import { Check, Plus, Trash2, UserX } from "lucide-react";
 import {
-  Badge, Button, EmptyState, Field, Hearts, Input, Page, PageHeader, PageSpinner, RoleBadge, Section, Sheet, Textarea,
+  Badge, Button, ConfirmDialog, EmptyState, Field, Hearts, IconButton, Input, Page, PageHeader, PageSpinner, RoleBadge, Section, Sheet, Textarea,
 } from "../components/atoms";
 import { DayLegend, DAY_KIND_LABEL, dayKind, type DayKind } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { disciplineStats, unpaidPenalties } from "../lib/attendance";
 import { challengeDayISO, weekdayFromISO } from "../lib/dates";
-import { logPenalty, markPenaltyPaid, saveOrgNote, type FeedActor } from "../lib/firestore";
+import { deletePenalty, logPenalty, markPenaltyPaid, saveOrgNote, type FeedActor } from "../lib/firestore";
 import { formatDateLong, formatDateShort, formatMoney } from "../lib/format";
 import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
@@ -27,6 +27,8 @@ export function ParticipantProfile() {
 
   const [penaltyOpen, setPenaltyOpen] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [toDelete, setToDelete] = useState<Penalty | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const back = () => (window.history.length > 1 ? navigate(-1) : navigate("/app/day"));
 
@@ -119,12 +121,36 @@ export function ParticipantProfile() {
               currency={challenge.settings.currency}
               paying={payingId === pen.penaltyId}
               onMarkPaid={pen.penaltyId && !pen.paid ? () => markPaid(pen.penaltyId!) : undefined}
+              onDelete={pen.penaltyId ? () => setToDelete(pen) : undefined}
             />
           ))}
         </Section>
 
         <NoteSection challengeId={challenge.id} uid={participant.uid} note={orgNotes[participant.uid] ?? ""} />
       </div>
+
+      <ConfirmDialog
+        open={!!toDelete}
+        onOpenChange={o => { if (!o && !deleting) setToDelete(null); }}
+        title="Удалить штраф?"
+        description={toDelete ? `«${toDelete.reason}». Жизнь вернётся участнику${toDelete.amount > 0 ? `, ${formatMoney(toDelete.amount, challenge.settings.currency)} уйдёт из кассы` : ""}.` : undefined}
+        confirmLabel="Удалить"
+        loading={deleting}
+        onConfirm={async () => {
+          if (!toDelete?.penaltyId) return;
+          setDeleting(true);
+          try {
+            await deletePenalty(challenge.id, participant.uid, toDelete.penaltyId);
+            notify.success("Штраф удалён");
+            setToDelete(null);
+          } catch (err) {
+            console.error("[ParticipantProfile] deletePenalty failed:", err);
+            notify.error("Не удалось удалить штраф.");
+          } finally {
+            setDeleting(false);
+          }
+        }}
+      />
 
       {penaltyOpen && (
         <PenaltySheet
@@ -205,11 +231,12 @@ function DayCalendar({ p, challenge, postponements }: {
   );
 }
 
-function PenaltyRow({ pen, currency, paying, onMarkPaid }: {
+function PenaltyRow({ pen, currency, paying, onMarkPaid, onDelete }: {
   pen: Penalty;
   currency: string;
   paying: boolean;
   onMarkPaid?: () => void;
+  onDelete?: () => void;
 }) {
   const cost = [
     pen.amount > 0 ? formatMoney(pen.amount, currency) : null,
@@ -230,6 +257,11 @@ function PenaltyRow({ pen, currency, paying, onMarkPaid }: {
         <Button size="sm" variant="secondary" onClick={onMarkPaid} loading={paying}>Отметить оплату</Button>
       ) : (
         <Badge tone="warning">Не оплачен</Badge>
+      )}
+      {onDelete && (
+        <IconButton label={`Удалить штраф: ${pen.reason}`} size="sm" onClick={onDelete} className="-mr-1.5 hover:text-danger-text">
+          <Trash2 />
+        </IconButton>
       )}
     </div>
   );

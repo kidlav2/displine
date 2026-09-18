@@ -705,7 +705,7 @@ export async function removeLife(
 export async function logPenalty(
   challengeId: string,
   participantUid: string,
-  penalty: Omit<Penalty, "date"> & { loggedBy: string },
+  penalty: Omit<Penalty, "date"> & { loggedBy: string; forDate?: string },
   actor?: FeedActor,
   targetName?: string,
 ): Promise<void> {
@@ -721,7 +721,8 @@ export async function logPenalty(
 
     const newLives = Math.max(0, (current.lives ?? 1) - (penalty.livesLost ?? 0));
     const arrayItem: Record<string, unknown> = {
-      date:      Timestamp.now(),
+      // A penalty written for a past day keeps that day as its date.
+      date:      penalty.forDate ?? Timestamp.now(),
       reason:    penalty.reason,
       livesLost: penalty.livesLost,
       amount:    penalty.amount,
@@ -750,6 +751,7 @@ export async function logPenalty(
     paid:      false,
     penaltyId,
     date:      serverTimestamp(),
+    ...(penalty.forDate ? { forDate: penalty.forDate } : {}),
   };
   if (penalty.burpees !== undefined) subcollDoc.burpees = penalty.burpees;
   await setDoc(penaltyDocRef, subcollDoc);
@@ -855,8 +857,9 @@ export async function acceptTeamInvite(
     challengeId = d.challengeId;
     role = d.role ?? "helper";
 
-    const chalSnap = await tx.get(challengeRef(challengeId));
-    const startingLives = chalSnap.exists() ? (chalSnap.data()?.settings?.startingLives ?? 3) : 3;
+    // The joiner isn't a member yet, so the challenge doc is unreadable here —
+    // lives don't matter for team members anyway.
+    const startingLives = 5;
 
     tx.update(invRef, { usedAt: serverTimestamp() });
 
@@ -1257,6 +1260,40 @@ export async function markPenaltyPaid(
   await updateDoc(doc(penaltiesCol(challengeId), penaltyId), {
     paid: true, paidAt: serverTimestamp(),
   });
+}
+
+/**
+ * Remove a penalty written by mistake: drops it from the participant, gives
+ * the life back and takes the amount out of the treasury.
+ */
+export async function deletePenalty(
+  challengeId: string,
+  participantUid: string,
+  penaltyId: string,
+): Promise<void> {
+  const pRef = participantRef(challengeId, participantUid);
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(pRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const penalties = (data.penalties ?? []) as Array<Record<string, unknown>>;
+    const target = penalties.find(p => p.penaltyId === penaltyId);
+    if (!target) return;
+    const lives = (data.lives ?? 0) + Number(target.livesLost ?? 0);
+    tx.update(pRef, {
+      penalties: penalties.filter(p => p.penaltyId !== penaltyId),
+      lives,
+      active: lives > 0,
+    });
+    const amount = Number(target.amount ?? 0);
+    if (amount) tx.update(challengeRef(challengeId), { totalTreasury: increment(-amount) });
+  });
+  await deleteDoc(doc(penaltiesCol(challengeId), penaltyId));
+}
+
+/** Undo a postponement: the day counts as a normal day again. */
+export async function cancelPostponement(challengeId: string, postponementId: string): Promise<void> {
+  await resolvePostponement(challengeId, postponementId, "rejected", "Отменено организатором");
 }
 
 /**

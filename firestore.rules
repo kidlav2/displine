@@ -30,10 +30,14 @@ service cloud.firestore {
 
     match /invites/{code} {
       allow read: if true;
+      // The creator or any co-owner may issue invites.
       allow create: if isSignedIn() &&
         exists(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId)) &&
-        get(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId))
-          .data.ownerUid == request.auth.uid;
+        (
+          get(/databases/$(database)/documents/challenges/$(request.resource.data.challengeId))
+            .data.ownerUid == request.auth.uid ||
+          isOwner(request.resource.data.challengeId)
+        );
       allow update: if isSignedIn() && (
         // Anyone may mark a single-use (team) invite consumed, exactly once.
         (
@@ -221,7 +225,8 @@ service cloud.firestore {
         allow read: if isOrganizer(challengeId) ||
           resource.data.participantUid == request.auth.uid;
         allow create, update: if isOrganizer(challengeId);
-        allow delete: if isOwner(challengeId);
+        // Any organizer may remove a penalty written by mistake.
+        allow delete: if isOrganizer(challengeId);
       }
 
       match /achievements/{achievementId} {
@@ -232,6 +237,21 @@ service cloud.firestore {
       match /team/{memberId} {
         allow read:   if isOrganizer(challengeId);
         allow create, update: if isOwner(challengeId);
+        // Accepting a team invite: the joiner writes their own team doc in the
+        // same transaction that creates their participant doc from the invite.
+        allow create: if isSignedIn() && request.auth.uid == memberId &&
+          request.resource.data.uid == request.auth.uid &&
+          request.resource.data.status == "active" &&
+          getAfter(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid))
+            .data.inviteCode is string &&
+          get(/databases/$(database)/documents/invites/$(getAfter(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)).data.inviteCode))
+            .data.type == "team" &&
+          get(/databases/$(database)/documents/invites/$(getAfter(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)).data.inviteCode))
+            .data.challengeId == challengeId &&
+          get(/databases/$(database)/documents/invites/$(getAfter(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)).data.inviteCode))
+            .data.role == request.resource.data.role &&
+          get(/databases/$(database)/documents/invites/$(getAfter(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)).data.inviteCode))
+            .data.usedAt == null;
         // Owner can remove any team member; a helper may remove themselves (leaving).
         allow delete: if isOwner(challengeId) || (isSignedIn() && request.auth.uid == memberId);
       }
