@@ -21,10 +21,24 @@ export function isTaskIssued(iso: string, issuedTaskDays: Record<string, IssuedT
   return !!issuedTaskDays?.[iso]?.issued;
 }
 
+/** Tap cycle on the day list: came → late → absent → clear. */
 export function nextAttendanceStatus(cur?: AttendanceStatus): AttendanceStatus | undefined {
   if (!cur) return "done";
-  if (cur === "done") return "missed";
+  if (cur === "done") return "late";
+  if (cur === "late") return "missed";
   return undefined;
+}
+
+export function isAttendanceComplete(status?: AttendanceStatus): boolean {
+  return status === "done" || status === "late";
+}
+
+export function attendancePenaltySource(kind: "run" | "task", iso: string): string {
+  return `attendance:${kind}:${iso}`;
+}
+
+export function absenceReason(kind: "run" | "task"): string {
+  return kind === "run" ? "Пропуск пробежки" : "Задание не сдано";
 }
 
 export function approvedPostponements(list: PostponementRequest[]): PostponementRequest[] {
@@ -103,11 +117,11 @@ export function disciplineStats(
     if (!iso) continue;
     if (expectedRun(iso, p.uid, settings.runSchedule, postponements)) {
       runTotal++;
-      if (p.days?.[iso]?.run === "done") runDone++;
+      if (isAttendanceComplete(p.days?.[iso]?.run)) runDone++;
     }
     if (expectedTask(iso, p.uid, issuedTaskDays, postponements)) {
       taskTotal++;
-      if (p.days?.[iso]?.task === "done") taskDone++;
+      if (isAttendanceComplete(p.days?.[iso]?.task)) taskDone++;
     }
   }
   return {

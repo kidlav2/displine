@@ -1,15 +1,16 @@
-import { Check, MoveRight, X } from "lucide-react";
+import { Check, Clock, MoveRight, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { expectedRun, expectedTask, postponementAway } from "../../lib/attendance";
 import type { AttendanceStatus, IssuedTaskDay, Participant, PostponementRequest } from "../../types";
 
 // ── Day status (grid cells, profile history) ─────────────────────────────────
 
-export type DayKind = "done" | "partial" | "missed" | "postponed" | "pending" | "future" | "none";
+export type DayKind = "done" | "partial" | "late" | "missed" | "postponed" | "pending" | "future" | "none";
 
 export const DAY_KIND_LABEL: Record<DayKind, string> = {
   done: "всё выполнено",
   partial: "выполнено частично",
+  late: "опоздание",
   missed: "пропуск",
   postponed: "перенос",
   pending: "не отмечено",
@@ -31,17 +32,21 @@ export function dayKind(
   if (away) return "postponed";
   if (!needRun && !needTask) return "none";
 
-  const statuses = [needRun && p.days?.[iso]?.run, needTask && p.days?.[iso]?.task].filter(s => s !== false);
+  const statuses = [needRun && p.days?.[iso]?.run, needTask && p.days?.[iso]?.task].filter(s => s !== false) as AttendanceStatus[];
   if (statuses.includes("missed")) return "missed";
-  const done = statuses.filter(s => s === "done").length;
-  if (done === statuses.length) return "done";
-  if (done > 0) return "partial";
+  const complete = statuses.filter(s => s === "done" || s === "late").length;
+  if (complete === statuses.length) {
+    if (statuses.includes("late")) return "late";
+    return "done";
+  }
+  if (complete > 0) return "partial";
   return iso > todayISO ? "future" : "pending";
 }
 
 const CELL: Record<DayKind, string> = {
   done: "bg-success text-white",
   partial: "bg-success-muted",
+  late: "bg-warning text-white",
   missed: "bg-danger text-white",
   postponed: "bg-postpone text-white",
   pending: "shadow-[inset_0_0_0_1.5px_var(--control-border)]",
@@ -64,6 +69,7 @@ export function DayCellVisual({ kind, size = 26, icons = "status", className }: 
       aria-hidden
     >
       {kind === "missed" && <X size={iconSize} strokeWidth={3} />}
+      {kind === "late" && <Clock size={iconSize} strokeWidth={2.75} />}
       {kind === "postponed" && <MoveRight size={iconSize} strokeWidth={2.75} />}
       {kind === "done" && icons === "all" && <Check size={iconSize} strokeWidth={3} />}
       {kind === "none" && <span className="size-[3px] rounded-full bg-border-strong" />}
@@ -72,7 +78,7 @@ export function DayCellVisual({ kind, size = 26, icons = "status", className }: 
 }
 
 export function DayLegend({ className }: { className?: string }) {
-  const items: DayKind[] = ["done", "partial", "missed", "postponed", "pending", "none"];
+  const items: DayKind[] = ["done", "late", "partial", "missed", "postponed", "pending", "none"];
   return (
     <ul className={cn("flex flex-wrap items-center gap-x-4 gap-y-2 text-[13px] text-muted-foreground", className)}>
       {items.map(k => (
@@ -87,7 +93,7 @@ export function DayLegend({ className }: { className?: string }) {
 
 // ── Mark button (Day screen) ─────────────────────────────────────────────────
 
-const STATUS_TEXT = { done: "выполнено", missed: "пропуск" } as const;
+const STATUS_TEXT = { done: "пришёл", late: "опоздал", missed: "не был" } as const;
 
 interface MarkButtonProps {
   status?: AttendanceStatus;
@@ -108,13 +114,16 @@ export function MarkButton({ status, onClick, label }: MarkButtonProps) {
         "pressable relative inline-flex size-10 items-center justify-center rounded-[10px] border-[1.5px]",
         "after:absolute after:-inset-1 after:content-['']",
         status === "done" && "border-success bg-success text-white",
+        status === "late" && "border-warning bg-warning text-white",
         status === "missed" && "border-danger bg-danger text-white",
         !status && "border-control-border text-transparent hover:bg-hover",
       )}
     >
       {status === "missed"
         ? <X size={20} strokeWidth={2.75} aria-hidden />
-        : <Check size={20} strokeWidth={2.75} aria-hidden className={cn(!status && "opacity-0")} />}
+        : status === "late"
+          ? <Clock size={20} strokeWidth={2.5} aria-hidden />
+          : <Check size={20} strokeWidth={2.75} aria-hidden className={cn(!status && "opacity-0")} />}
     </button>
   );
 }

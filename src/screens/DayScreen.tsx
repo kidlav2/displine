@@ -9,11 +9,11 @@ import { MarkButton, MarkPlaceholder } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import {
-  cancelPostponement, deletePenalty, logPenalty, markPenaltyPaid, recordPostponement, setAttendanceField, setTaskIssued, setTaskText,
+  cancelPostponement, deletePenalty, logPenalty, markAttendance, markPenaltyPaid, recordPostponement, setTaskIssued, setTaskText,
   type FeedActor,
 } from "../lib/firestore";
 import {
-  approvedPostponements, expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus,
+  approvedPostponements, expectedRun, expectedTask, isAttendanceComplete, isScheduledRunDay, nextAttendanceStatus,
   postponementAway, postponementOnto, rosterParticipants, unpaidPenalties,
 } from "../lib/attendance";
 import { addDaysISO, challengeDayISO, challengePhase, durationFromDates, weekdayFromISO } from "../lib/dates";
@@ -75,11 +75,11 @@ export function DayScreen() {
       const needTask = expectedTask(iso, p.uid, issuedDays, postponements);
       const run = statusOf(p, "run");
       const task = statusOf(p, "task");
-      if (needRun) { runNeed++; if (run === "done") runDone++; }
-      if (needTask) { taskNeed++; if (task === "done") taskDone++; }
+      if (needRun) { runNeed++; if (isAttendanceComplete(run)) runDone++; }
+      if (needTask) { taskNeed++; if (isAttendanceComplete(task)) taskDone++; }
       if (needRun || needTask) {
         people++;
-        if ((!needRun || run === "done") && (!needTask || task === "done")) allDone++;
+        if ((!needRun || isAttendanceComplete(run)) && (!needTask || isAttendanceComplete(task))) allDone++;
       }
     }
     return { runDone, runNeed, taskDone, taskNeed, allDone, people };
@@ -92,9 +92,15 @@ export function DayScreen() {
     const next = nextAttendanceStatus(statusOf(p, kind));
     setOptimistic(o => ({ ...o, [key]: next ?? null }));
     try {
-      await setAttendanceField(challenge.id, p.uid, iso, kind, next);
+      await markAttendance(challenge.id, p.uid, iso, kind, next, {
+        amount: Number(challenge.settings.penaltyAmount) || 0,
+        burpees: Number(challenge.settings.burpees) > 0 ? Number(challenge.settings.burpees) : undefined,
+        loggedBy: currentUser?.uid ?? "",
+        actor,
+        targetName: p.name,
+      });
     } catch (err) {
-      console.error("[DayScreen] setAttendanceField failed:", err);
+      console.error("[DayScreen] markAttendance failed:", err);
       notify.error("Не удалось сохранить отметку. Проверьте подключение.");
     } finally {
       setOptimistic(o => {
@@ -243,6 +249,9 @@ export function DayScreen() {
               </div>
               <span className="w-8" aria-hidden />
             </div>
+            <p className="border-b border-border px-4 py-2 text-[13px] text-muted-foreground">
+              Нажатие: пришёл → опоздал → не был (штраф и −1 жизнь) → сброс
+            </p>
 
             <ul className="divide-y divide-border">
               {roster.map(p => (

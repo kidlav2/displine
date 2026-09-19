@@ -6,7 +6,7 @@ export type OwnerTab  = "home" | "review" | "community" | "manage" | "profile";
 export type HelperTab = "home" | "review" | "community" | "profile";
 export type AnyTab = OperatorTab | UserTab | OwnerTab | HelperTab;
 
-export type AttendanceStatus = "done" | "missed";
+export type AttendanceStatus = "done" | "late" | "missed";
 export interface DayAttendance {
   run?: AttendanceStatus;
   task?: AttendanceStatus;
@@ -62,6 +62,8 @@ export interface Penalty {
   burpees?: number;
   paid?: boolean;
   penaltyId?: string;
+  /** Auto-penalty from a day mark, e.g. "attendance:run:2026-09-19". */
+  source?: string;
 }
 export interface SocialComment { ini: string; name: string; text: string; uid?: string; photoUrl?: string | null; }
 

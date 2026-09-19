@@ -178,6 +178,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
 const CAL_CELL: Record<DayKind, string> = {
   done: "bg-success text-white",
   partial: "bg-success-muted text-foreground",
+  late: "bg-warning text-white",
   missed: "bg-danger text-white",
   postponed: "bg-postpone text-white",
   pending: "shadow-[inset_0_0_0_1.5px_var(--control-border)] text-foreground",

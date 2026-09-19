@@ -5,7 +5,8 @@ import { UserRound } from "lucide-react";
 import { Button, EmptyState, Page, PageHeader } from "../components/atoms";
 import { DAY_KIND_LABEL, DayCellVisual, DayLegend, dayKind } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
-import { setAttendanceField } from "../lib/firestore";
+import { useAuthContext } from "../contexts/AuthContext";
+import { markAttendance } from "../lib/firestore";
 import {
   expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus, rosterParticipants,
 } from "../lib/attendance";
@@ -25,7 +26,8 @@ function shortName(name: string): string {
 }
 
 export function GridScreen() {
-  const { challenge, postponements } = useAppContext();
+  const { challenge, postponements, meParticipant } = useAppContext();
+  const { currentUser } = useAuthContext();
   const navigate = useNavigate();
   useDocumentTitle("Таблица");
 
@@ -62,7 +64,7 @@ export function GridScreen() {
     if (!needRun && !needTask) return;
 
     const current = dayOf(p, iso) ?? {};
-    // When both are expected, one tap moves both together (done → missed → clear).
+    // When both are expected, one tap moves both together (came → late → absent → clear).
     const next = nextAttendanceStatus(needRun ? current.run : current.task);
     const updated: DayAttendance = { ...current };
     if (needRun) updated.run = next;
@@ -71,10 +73,19 @@ export function GridScreen() {
     setOverrides(o => ({ ...o, [key]: updated }));
 
     try {
-      if (needRun) await setAttendanceField(challenge.id, p.uid, iso, "run", next);
-      if (needTask) await setAttendanceField(challenge.id, p.uid, iso, "task", next);
+      const penalty = {
+        amount: Number(challenge.settings.penaltyAmount) || 0,
+        burpees: Number(challenge.settings.burpees) > 0 ? Number(challenge.settings.burpees) : undefined,
+        loggedBy: currentUser?.uid ?? "",
+        actor: currentUser && meParticipant
+          ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
+          : undefined,
+        targetName: p.name,
+      };
+      if (needRun) await markAttendance(challenge.id, p.uid, iso, "run", next, penalty);
+      if (needTask) await markAttendance(challenge.id, p.uid, iso, "task", next, penalty);
     } catch (err) {
-      console.error("[GridScreen] setAttendanceField failed:", err);
+      console.error("[GridScreen] markAttendance failed:", err);
       notify.error("Не удалось сохранить отметку. Проверьте подключение.");
     } finally {
       setOverrides(o => {
@@ -123,7 +134,7 @@ export function GridScreen() {
     <Page width="full">
       <PageHeader
         title="Таблица"
-        description={`${roster.length} участников · ${challenge.duration} дней. Нажмите на клетку, чтобы поставить или снять отметку.`}
+        description={`${roster.length} участников · ${challenge.duration} дней. Клетка: пришёл → опоздал → не был (штраф) → сброс.`}
       />
 
       <DayLegend className="mb-4" />

@@ -22,7 +22,7 @@ import type {
   FeedItem, Participant, Penalty, PostponementRequest, ReviewItem,
   SocialComment, Task, TaskTemplate, TeamMember, UserProfile, UserRole,
 } from "../types";
-import { initialsFromName } from "./attendance";
+import { initialsFromName, absenceReason, attendancePenaltySource } from "./attendance";
 
 /** Minimal public data stored in invites/{code} — readable without auth. */
 export interface InviteData {
@@ -96,6 +96,7 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
       burpees:   p.burpees   ?? undefined,
       paid:      p.paid      ?? false,
       penaltyId: p.penaltyId ?? undefined,
+      source:    p.source    ?? undefined,
     })) as Penalty[],
   };
 }
@@ -739,6 +740,7 @@ export async function logPenalty(
       penaltyId,
     };
     if (burpees !== undefined && burpees > 0) arrayItem.burpees = burpees;
+    if (penalty.source) arrayItem.source = penalty.source;
 
     tx.update(pRef, {
       lives:    newLives,
@@ -764,6 +766,7 @@ export async function logPenalty(
     forDate:   dateStr,
   };
   if (burpees !== undefined && burpees > 0) subcollDoc.burpees = burpees;
+  if (penalty.source) subcollDoc.source = penalty.source;
   try {
     await setDoc(penaltyDocRef, subcollDoc);
   } catch (e) {
@@ -1535,6 +1538,121 @@ export async function setAttendanceField(
   await updateDoc(participantRef(challengeId, uid), {
     [`days.${dateISO}.${kind}`]: status === undefined ? deleteField() : status,
   });
+}
+
+export interface AttendancePenaltyOpts {
+  amount: number;
+  burpees?: number;
+  loggedBy: string;
+  actor?: FeedActor;
+  targetName?: string;
+}
+
+/**
+ * Set a day mark and, for an absence, write the matching penalty (life + pot).
+ * Clearing or changing the mark undoes only the auto-penalty for that day/kind.
+ */
+export async function markAttendance(
+  challengeId: string,
+  uid: string,
+  dateISO: string,
+  kind: "run" | "task",
+  status: AttendanceStatus | undefined,
+  penalty: AttendancePenaltyOpts,
+): Promise<void> {
+  const pRef = participantRef(challengeId, uid);
+  const source = attendancePenaltySource(kind, dateISO);
+  const reason = absenceReason(kind);
+  const penaltyDocRef = doc(penaltiesCol(challengeId));
+  const newPenaltyId = penaltyDocRef.id;
+  const livesLost = 1;
+  const amount = Number(penalty.amount) || 0;
+  const burpees = penalty.burpees == null ? undefined : (Number(penalty.burpees) || 0);
+
+  let added: Record<string, unknown> | null = null;
+  let removed: Record<string, unknown> | null = null;
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(pRef);
+    if (!snap.exists()) throw new Error("Participant not found");
+    const current = snap.data();
+    const penalties = (current.penalties ?? []) as Array<Record<string, unknown>>;
+    const auto = penalties.find(p => p.source === source);
+    const alreadySameReason = penalties.some(p =>
+      p.source === source ||
+      (!p.paid && p.date === dateISO && p.reason === reason),
+    );
+
+    const patch: Record<string, unknown> = {
+      [`days.${dateISO}.${kind}`]: status === undefined ? deleteField() : status,
+    };
+
+    if (status === "missed") {
+      if (!alreadySameReason) {
+        const lives = Math.max(0, (current.lives ?? 1) - livesLost);
+        added = {
+          date: dateISO,
+          reason,
+          livesLost,
+          amount,
+          paid: false,
+          penaltyId: newPenaltyId,
+          source,
+        };
+        if (burpees !== undefined && burpees > 0) added.burpees = burpees;
+        patch.lives = lives;
+        patch.active = lives > 0;
+        patch.penalties = arrayUnion(added);
+        tx.update(challengeRef(challengeId), { totalTreasury: increment(amount) });
+      }
+    } else if (auto) {
+      removed = auto;
+      const restored = (current.lives ?? 0) + Number(auto.livesLost ?? 0);
+      patch.lives = restored;
+      patch.active = restored > 0;
+      patch.penalties = penalties.filter(p => p.source !== source);
+      const refund = Number(auto.amount ?? 0);
+      if (refund) tx.update(challengeRef(challengeId), { totalTreasury: increment(-refund) });
+    }
+
+    tx.update(pRef, patch);
+  });
+
+  if (added) {
+    const subcollDoc: Record<string, unknown> = {
+      participantUid: uid,
+      reason,
+      livesLost,
+      amount,
+      loggedBy: penalty.loggedBy,
+      paid: false,
+      penaltyId: newPenaltyId,
+      date: serverTimestamp(),
+      forDate: dateISO,
+      source,
+    };
+    if (burpees !== undefined && burpees > 0) subcollDoc.burpees = burpees;
+    try { await setDoc(penaltyDocRef, subcollDoc); }
+    catch (e) { console.warn("[markAttendance] penalty doc write failed:", e); }
+
+    if (penalty.actor && penalty.targetName) {
+      const amountStr = amount > 0 ? `, ${amount.toLocaleString("ru")} ₸` : "";
+      const burpStr = (burpees ?? 0) > 0 ? ` + ${burpees} бёрпи` : "";
+      try {
+        await writeFeedSystemEvent(
+          challengeId,
+          penalty.actor,
+          "system:penalty",
+          `оштрафовал ${penalty.targetName}: ${reason} −1 ❤️${amountStr}${burpStr}`,
+        );
+      } catch (e) { console.warn("[markAttendance] feed event failed:", e); }
+    }
+  }
+
+  if (removed?.penaltyId) {
+    try { await deleteDoc(doc(penaltiesCol(challengeId), String(removed.penaltyId))); }
+    catch (e) { console.warn("[markAttendance] penalty doc delete failed:", e); }
+  }
 }
 
 export async function setTaskIssued(
