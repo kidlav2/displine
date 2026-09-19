@@ -537,16 +537,16 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
   const dayPostponements = approvedPostponements(postponements)
     .filter(x => x.participantUid === p.uid && (x.dateISO === iso || x.targetDateISO === iso));
 
-  const submitPenalty = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!reason.trim()) return;
+  const savePenalty = async (reasonText: string) => {
+    const trimmed = reasonText.trim();
+    if (!trimmed || savingPenalty) return;
     setSavingPenalty(true);
     try {
       await logPenalty(challenge.id, p.uid, {
-        reason: reason.trim(),
+        reason: trimmed,
         livesLost: 1,
-        amount: penaltyAmount,
-        burpees: burpees > 0 ? burpees : undefined,
+        amount: Number(penaltyAmount) || 0,
+        burpees: Number(burpees) > 0 ? Number(burpees) : undefined,
         loggedBy,
         forDate: iso,
       }, actor, p.name);
@@ -558,6 +558,11 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
     } finally {
       setSavingPenalty(false);
     }
+  };
+
+  const submitPenalty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await savePenalty(reason);
   };
 
   const run = async (id: string, action: () => Promise<void>, ok: string, fail: string) => {
@@ -616,21 +621,20 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         <h3 className="text-[15px] font-semibold">Штраф за {formatDateLong(iso)}</h3>
         <p className="mt-0.5 text-[13px] text-muted-foreground">{penaltyParts}</p>
         <div className="mt-3 flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Быстрая причина">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Записать штраф по причине">
             {QUICK_REASONS.map(r => (
               <button
                 key={r}
                 type="button"
-                onClick={() => setReason(r)}
-                className={cn(
-                  "pressable h-8 rounded-full border px-3 text-[13px] transition-colors duration-150",
-                  reason === r ? "border-primary bg-primary text-primary-foreground" : "border-border-strong hover:bg-hover",
-                )}
+                disabled={savingPenalty}
+                onClick={() => savePenalty(r)}
+                className="pressable h-8 rounded-full border border-border-strong px-3 text-[13px] transition-colors duration-150 hover:bg-hover disabled:opacity-50"
               >
                 {r}
               </button>
             ))}
           </div>
+          <p className="text-[13px] text-muted-foreground">Нажатие сразу записывает штраф за этот день</p>
           <Field label="Причина">
             {({ id }) => (
               <Input id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Или напишите свою" autoComplete="off" />

@@ -16,7 +16,7 @@ import {
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { db, storage, functions } from "./firebase";
-import { todayISOInTz } from "./dates";
+import { todayISO, todayISOInTz } from "./dates";
 import type {
   AttendanceStatus, ChallengeData, DayAttendance, DayResult,
   FeedItem, Participant, Penalty, PostponementRequest, ReviewItem,
@@ -713,23 +713,32 @@ export async function logPenalty(
   // Generate the subcollection doc ref upfront so we can embed the ID in the array item.
   const penaltyDocRef = doc(penaltiesCol(challengeId));
   const penaltyId = penaltyDocRef.id;
+  // Settings and older docs sometimes store these as strings. increment() and
+  // arrayUnion reject non-numbers, which made lateness/penalty writes look like
+  // they "just didn't save" while attendance checkmarks still worked.
+  const livesLost = Number(penalty.livesLost) || 0;
+  const amount = Number(penalty.amount) || 0;
+  const burpees = penalty.burpees == null ? undefined : (Number(penalty.burpees) || 0);
+  const dateStr = penalty.forDate && /^\d{4}-\d{2}-\d{2}$/.test(penalty.forDate)
+    ? penalty.forDate
+    : todayISO();
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(pRef);
-    if (!snap.exists()) return;
+    if (!snap.exists()) throw new Error("Participant not found");
     const current = snap.data();
 
-    const newLives = Math.max(0, (current.lives ?? 1) - (penalty.livesLost ?? 0));
+    const newLives = Math.max(0, (current.lives ?? 1) - livesLost);
     const arrayItem: Record<string, unknown> = {
-      // A penalty written for a past day keeps that day as its date.
-      date:      penalty.forDate ?? Timestamp.now(),
+      // Always an ISO day string so the UI can group/filter by the day it was for.
+      date:      dateStr,
       reason:    penalty.reason,
-      livesLost: penalty.livesLost,
-      amount:    penalty.amount,
+      livesLost,
+      amount,
       paid:      false,
       penaltyId,
     };
-    if (penalty.burpees !== undefined) arrayItem.burpees = penalty.burpees;
+    if (burpees !== undefined && burpees > 0) arrayItem.burpees = burpees;
 
     tx.update(pRef, {
       lives:    newLives,
@@ -737,31 +746,40 @@ export async function logPenalty(
       penalties: arrayUnion(arrayItem),
     });
     tx.update(challengeRef(challengeId), {
-      totalTreasury: increment(penalty.amount),
+      totalTreasury: increment(amount),
     });
   });
 
-  // Write to penalties subcollection using the pre-generated ref.
+  // Subcollection + feed are bookkeeping. The roster reads participant.penalties,
+  // so a later permission error must not report the penalty as unsaved.
   const subcollDoc: Record<string, unknown> = {
     participantUid,
     reason:    penalty.reason,
-    livesLost: penalty.livesLost,
-    amount:    penalty.amount,
+    livesLost,
+    amount,
     loggedBy:  penalty.loggedBy,
     paid:      false,
     penaltyId,
     date:      serverTimestamp(),
-    ...(penalty.forDate ? { forDate: penalty.forDate } : {}),
+    forDate:   dateStr,
   };
-  if (penalty.burpees !== undefined) subcollDoc.burpees = penalty.burpees;
-  await setDoc(penaltyDocRef, subcollDoc);
+  if (burpees !== undefined && burpees > 0) subcollDoc.burpees = burpees;
+  try {
+    await setDoc(penaltyDocRef, subcollDoc);
+  } catch (e) {
+    console.warn("[logPenalty] penalty doc write failed:", e);
+  }
 
   if (actor && targetName) {
-    const livesStr  = penalty.livesLost > 0 ? ` −${penalty.livesLost} ❤️` : "";
-    const amountStr = penalty.amount > 0 ? `, ${penalty.amount.toLocaleString("ru")} ₸` : "";
-    const burpStr   = (penalty.burpees ?? 0) > 0 ? ` + ${penalty.burpees} бёрпи` : "";
-    await writeFeedSystemEvent(challengeId, actor, "system:penalty",
-      `оштрафовал ${targetName}: ${penalty.reason}${livesStr}${amountStr}${burpStr}`);
+    const livesStr  = livesLost > 0 ? ` −${livesLost} ❤️` : "";
+    const amountStr = amount > 0 ? `, ${amount.toLocaleString("ru")} ₸` : "";
+    const burpStr   = (burpees ?? 0) > 0 ? ` + ${burpees} бёрпи` : "";
+    try {
+      await writeFeedSystemEvent(challengeId, actor, "system:penalty",
+        `оштрафовал ${targetName}: ${penalty.reason}${livesStr}${amountStr}${burpStr}`);
+    } catch (e) {
+      console.warn("[logPenalty] feed event failed:", e);
+    }
   }
 }
 

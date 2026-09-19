@@ -15,10 +15,15 @@ service cloud.firestore {
           .data.role == "owner";
     }
 
+    function participantData(challengeId) {
+      return get(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)).data;
+    }
+
     function isOrganizer(challengeId) {
       return isSignedIn() &&
-        get(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid))
-          .data.isAdmin == true;
+        exists(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid)) &&
+        (participantData(challengeId).isAdmin == true ||
+         participantData(challengeId).role in ["owner", "helper"]);
     }
 
     function isParticipant(challengeId) {

@@ -144,9 +144,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             totalTreasury: d.totalTreasury ?? 0,
             settings: {
               runSchedule:   d.settings?.runSchedule   ?? {},
-              penaltyAmount: d.settings?.penaltyAmount ?? 0,
+              penaltyAmount: Number(d.settings?.penaltyAmount) || 0,
               currency:      d.settings?.currency      ?? "KZT",
-              burpees:       d.settings?.burpees       ?? 0,
+              burpees:       Number(d.settings?.burpees) || 0,
               startingLives: d.settings?.startingLives ?? 3,
               scoring: parseScoring(d.settings?.scoring),
               taskDeadline:  d.settings?.taskDeadline  ?? "10:00",
