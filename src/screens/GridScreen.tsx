@@ -8,10 +8,10 @@ import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { markAttendance } from "../lib/firestore";
 import {
-  expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus, rosterParticipants,
+  expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus, postponementAway, rosterParticipants,
 } from "../lib/attendance";
 import { challengeDayISO } from "../lib/dates";
-import { formatDateLong, formatWeekdayShort } from "../lib/format";
+import { formatDateLong, formatDateShort, formatWeekdayShort } from "../lib/format";
 import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
@@ -64,7 +64,7 @@ export function GridScreen() {
     if (!needRun && !needTask) return;
 
     const current = dayOf(p, iso) ?? {};
-    // When both are expected, one tap moves both together (came → late → absent → clear).
+    // When both are expected, one tap moves both together (done → late → missed → clear).
     const next = nextAttendanceStatus(needRun ? current.run : current.task);
     const updated: DayAttendance = { ...current };
     if (needRun) updated.run = next;
@@ -134,7 +134,7 @@ export function GridScreen() {
     <Page width="full">
       <PageHeader
         title="Таблица"
-        description={`${roster.length} участников · ${challenge.duration} дней. Клетка: пришёл → опоздал → не был (штраф) → сброс.`}
+        description={`${roster.length} участников · ${challenge.duration} дней`}
       />
 
       <DayLegend className="mb-4" />
@@ -203,7 +203,11 @@ export function GridScreen() {
                         expectedRun(d.iso, p.uid, challenge.settings.runSchedule, postponements) ||
                         expectedTask(d.iso, p.uid, challenge.issuedTaskDays, postponements);
                       const today = d.iso === todayIso;
-                      const label = `${p.name}, день ${d.n}, ${formatDateLong(d.iso)}: ${DAY_KIND_LABEL[kind]}`;
+                      const away = postponementAway(postponements, p.uid, d.iso, "running") || postponementAway(postponements, p.uid, d.iso, "task");
+                      const status = away
+                        ? [away.reason, `перенос на ${formatDateShort(away.targetDateISO)}`].filter(Boolean).join(" · ")
+                        : DAY_KIND_LABEL[kind];
+                      const label = `${p.name}, день ${d.n}, ${formatDateLong(d.iso)}: ${status}`;
                       const tabIndex = focus[0] === r && focus[1] === c ? 0 : -1;
                       return (
                         <td key={d.n} className={cn("h-9 p-0 text-center", today && "bg-brand-subtle/60")}>

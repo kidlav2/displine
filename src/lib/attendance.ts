@@ -1,4 +1,4 @@
-import { challengeDayISO, weekdayFromISO } from "./dates";
+import { addDaysISO, challengeDayISO, weekdayFromISO } from "./dates";
 import type {
   AttendanceStatus, ChallengeSettings, IssuedTaskDay, Participant, PostponementRequest,
 } from "../types";
@@ -21,7 +21,7 @@ export function isTaskIssued(iso: string, issuedTaskDays: Record<string, IssuedT
   return !!issuedTaskDays?.[iso]?.issued;
 }
 
-/** Tap cycle on the day list: came → late → absent → clear. */
+/** Tap cycle: completed → late → missed → clear. */
 export function nextAttendanceStatus(cur?: AttendanceStatus): AttendanceStatus | undefined {
   if (!cur) return "done";
   if (cur === "done") return "late";
@@ -73,8 +73,8 @@ export function expectedRun(
   runSchedule: Record<string, string>,
   postponements: PostponementRequest[],
 ): boolean {
-  if (postponementAway(postponements, uid, iso, "running")) return false;
   if (postponementOnto(postponements, uid, iso, "running")) return true;
+  if (postponementAway(postponements, uid, iso, "running")) return false;
   return isScheduledRunDay(iso, runSchedule);
 }
 
@@ -129,6 +129,20 @@ export function disciplineStats(
     runPct: runTotal > 0 ? Math.round((runDone / runTotal) * 100) : 0,
     taskPct: taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0,
   };
+}
+
+/** ISO dates in [fromISO, toISO] whose weekday is in the run schedule. */
+export function scheduledDates(fromISO: string, toISO: string, runSchedule: Record<string, string>): string[] {
+  if (!fromISO || !toISO || fromISO > toISO || !runSchedule || Object.keys(runSchedule).length === 0) return [];
+  const out: string[] = [];
+  let cur = fromISO;
+  while (cur <= toISO) {
+    if (weekdayFromISO(cur) in runSchedule) out.push(cur);
+    const next = addDaysISO(cur, 1);
+    if (next === cur) break;
+    cur = next;
+  }
+  return out;
 }
 
 export function formatDayShort(iso: string): string {

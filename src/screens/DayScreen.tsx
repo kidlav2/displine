@@ -1,22 +1,23 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { Link, useNavigate } from "react-router";
-import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, MoveRight, Plus, Trash2, UserRound } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, Plus, Trash2, UserRound } from "lucide-react";
 import {
-  Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Segmented, Sheet, Switch, Textarea,
+  Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Sheet, Switch, Textarea,
 } from "../components/atoms";
-import { MarkButton, MarkPlaceholder } from "../components/attendance";
+import { MarkField, MarkGroup, MarkPlaceholder } from "../components/attendance";
+import { PostponeForm, PostponeList, personPostponements } from "../components/PostponeForm";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import {
-  cancelPostponement, deletePenalty, logPenalty, markAttendance, markPenaltyPaid, recordPostponement, setTaskIssued, setTaskText,
+  cancelPostponement, deletePenalty, logPenalty, markAttendance, markPenaltyPaid, setTaskIssued, setTaskText,
   type FeedActor,
 } from "../lib/firestore";
 import {
-  approvedPostponements, expectedRun, expectedTask, isAttendanceComplete, isScheduledRunDay, nextAttendanceStatus,
+  expectedRun, expectedTask, isAttendanceComplete, isScheduledRunDay,
   postponementAway, postponementOnto, rosterParticipants, unpaidPenalties,
 } from "../lib/attendance";
-import { addDaysISO, challengeDayISO, challengePhase, durationFromDates, weekdayFromISO } from "../lib/dates";
+import { challengeDayISO, challengePhase, durationFromDates, weekdayFromISO } from "../lib/dates";
 import { formatDateLong, formatDateShort, formatMoney, formatWeekdayDate, localISODate, plural } from "../lib/format";
 import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
@@ -87,9 +88,8 @@ export function DayScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roster, iso, challenge.settings.runSchedule, issuedDays, postponements, optimistic]);
 
-  const toggle = async (p: Participant, kind: Kind) => {
+  const setMark = async (p: Participant, kind: Kind, next?: AttendanceStatus) => {
     const key = `${p.uid}|${iso}|${kind}`;
-    const next = nextAttendanceStatus(statusOf(p, kind));
     setOptimistic(o => ({ ...o, [key]: next ?? null }));
     try {
       await markAttendance(challenge.id, p.uid, iso, kind, next, {
@@ -124,6 +124,14 @@ export function DayScreen() {
     }
   };
 
+  const showRun = useMemo(
+    () => runDay || roster.some(p => expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements)),
+    [runDay, roster, iso, challenge.settings.runSchedule, postponements],
+  );
+  const showTask = useMemo(
+    () => roster.some(p => expectedTask(iso, p.uid, issuedDays, postponements)),
+    [roster, iso, issuedDays, postponements],
+  );
   const go = (n: number) => setDayNum(Math.min(challenge.duration, Math.max(1, n)));
   const sheetParticipant = roster.find(p => p.uid === sheetUid) ?? null;
   const hasOtherChallenges = challenges.length > 1;
@@ -239,20 +247,18 @@ export function DayScreen() {
       ) : (
         <section aria-labelledby="roster-title" className="mt-8 xl:order-1 xl:mt-0">
           <div className="rounded-xl border border-border bg-card">
-            <div className="sticky top-0 z-10 flex h-11 items-center gap-3 rounded-t-xl border-b border-border bg-card pl-4 pr-2">
+            <div className="sticky top-0 z-10 flex h-11 items-center gap-3 rounded-t-xl border-b border-border bg-card px-4">
               <h2 id="roster-title" className="min-w-0 flex-1 text-[15px] font-semibold">
                 Участники <span className="font-normal text-subtle-foreground tabular">{roster.length}</span>
               </h2>
-              <div className="flex gap-2 text-xs font-medium text-muted-foreground" aria-hidden>
-                <span className="w-10 text-center">Бег</span>
-                <span className="w-10 text-center">Задание</span>
-              </div>
-              <span className="w-8" aria-hidden />
+              {(showRun || showTask) && (
+                <div className="hidden gap-3 text-xs font-medium text-muted-foreground sm:flex" aria-hidden>
+                  {showRun && <span className="w-[7.25rem] text-center">Бег</span>}
+                  {showTask && <span className="w-[7.25rem] text-center">Задание</span>}
+                </div>
+              )}
+              <span className="hidden w-8 sm:block" aria-hidden />
             </div>
-            <p className="border-b border-border px-4 py-2 text-[13px] text-muted-foreground">
-              Нажатие: пришёл → опоздал → не был (штраф и −1 жизнь) → сброс
-            </p>
-
             <ul className="divide-y divide-border">
               {roster.map(p => (
                 <RosterRow
@@ -262,10 +268,12 @@ export function DayScreen() {
                   challenge={challenge}
                   postponements={postponements}
                   issuedDays={issuedDays}
+                  showRun={showRun}
+                  showTask={showTask}
                   note={orgNotes[p.uid]}
                   run={statusOf(p, "run")}
                   task={statusOf(p, "task")}
-                  onToggle={kind => toggle(p, kind)}
+                  onMark={(kind, next) => setMark(p, kind, next)}
                   onMore={() => setSheetUid(p.uid)}
                 />
               ))}
@@ -449,16 +457,18 @@ function SummaryRow({ icon, title, meta, value, trailing }: {
   );
 }
 
-function RosterRow({ p, iso, challenge, postponements, issuedDays, note, run, task, onToggle, onMore }: {
+function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, showTask, note, run, task, onMark, onMore }: {
   p: Participant;
   iso: string;
   challenge: ChallengeData;
   postponements: PostponementRequest[];
   issuedDays: ChallengeData["issuedTaskDays"];
+  showRun: boolean;
+  showTask: boolean;
   note?: string;
   run?: AttendanceStatus;
   task?: AttendanceStatus;
-  onToggle: (kind: Kind) => void;
+  onMark: (kind: Kind, next?: AttendanceStatus) => void;
   onMore: () => void;
 }) {
   const needRun = expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements);
@@ -470,47 +480,63 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, note, run, ta
   const unpaidAmount = unpaid.reduce((sum, x) => sum + (x.amount ?? 0), 0);
   const unpaidBurpees = unpaid.reduce((sum, x) => sum + (x.burpees ?? 0), 0);
   const firstName = p.name.split(" ")[0];
+  const both = showRun && showTask;
 
   return (
-    <li className="flex items-center gap-3 py-2.5 pl-4 pr-2">
-      <Link
-        to={`/participants/${p.uid}`}
-        className="-my-1 -ml-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 pl-1.5 transition-colors duration-150 hover:bg-hover"
-      >
-        <Av ini={p.ini} photoUrl={p.photoUrl} sz="md" className="hidden sm:inline-flex" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-medium">{p.name}</span>
-          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-            <Lives n={p.lives} />
-            {!p.active && <Badge tone="danger">Выбыл</Badge>}
-            {unpaid.length > 0 && (
-              <span className="text-[13px] font-medium text-warning-text" title="Есть неоплаченный штраф">
-                {unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : `${unpaidBurpees} бёрпи`}
+    <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <Link
+          to={`/participants/${p.uid}`}
+          className="-my-1 -ms-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 ps-1.5 transition-colors duration-150 hover:bg-hover"
+        >
+          <Av ini={p.ini} photoUrl={p.photoUrl} sz="md" className="shrink-0" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-medium">{p.name}</span>
+            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Lives n={p.lives} />
+              {!p.active && <Badge tone="danger">Выбыл</Badge>}
+              {unpaid.length > 0 && (
+                <span className="text-[13px] font-medium text-warning-text" title="Есть неоплаченный штраф">
+                  {unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : `${unpaidBurpees} бёрпи`}
+                </span>
+              )}
+              {movedHere && <Badge tone="postpone">Перенос</Badge>}
+            </span>
+            {(runAway?.reason || taskAway?.reason || (note && needRun)) && (
+              <span className="mt-1 block truncate text-[13px] text-subtle-foreground">
+                {runAway?.reason || taskAway?.reason || note}
               </span>
             )}
-            {movedHere && <Badge tone="postpone">Перенос</Badge>}
           </span>
-          {note && needRun && <span className="mt-1 block truncate text-[13px] text-subtle-foreground">{note}</span>}
-        </span>
-      </Link>
-
-      <div className="flex gap-2">
-        {needRun
-          ? <MarkButton status={run} onClick={() => onToggle("run")} label={`${firstName}, пробежка`} />
-          : <MarkPlaceholder postponedTo={runAway ? formatDateShort(runAway.targetDateISO) : undefined} />}
-        {needTask
-          ? <MarkButton status={task} onClick={() => onToggle("task")} label={`${firstName}, задание`} />
-          : <MarkPlaceholder postponedTo={taskAway ? formatDateShort(taskAway.targetDateISO) : undefined} />}
+        </Link>
+        <IconButton label={`Штраф или перенос: ${p.name}`} size="sm" onClick={onMore} className="shrink-0">
+          <Ellipsis />
+        </IconButton>
       </div>
 
-      <IconButton label={`Штраф или перенос: ${p.name}`} size="sm" onClick={onMore}>
-        <Ellipsis />
-      </IconButton>
+      {(showRun || showTask) && (
+        <div className={cn("flex gap-3 sm:shrink-0", both && "grid grid-cols-2 sm:flex")}>
+          {showRun && (
+            <MarkField caption="Бег" showCaption>
+              {needRun
+                ? <MarkGroup fill status={run} kind="run" onChange={next => onMark("run", next)} label={`${firstName}, пробежка`} />
+                : <MarkPlaceholder fill postponedTo={runAway ? formatDateShort(runAway.targetDateISO) : undefined} />}
+            </MarkField>
+          )}
+          {showTask && (
+            <MarkField caption="Задание" showCaption>
+              {needTask
+                ? <MarkGroup fill status={task} kind="task" onChange={next => onMark("task", next)} label={`${firstName}, задание`} />
+                : <MarkPlaceholder fill postponedTo={taskAway ? formatDateShort(taskAway.targetDateISO) : undefined} />}
+            </MarkField>
+          )}
+        </div>
+      )}
     </li>
   );
 }
 
-const QUICK_REASONS = ["Пропуск пробежки", "Задание не сдано", "Опоздание"];
+const QUICK_REASONS = ["Пропуск пробежки", "Задание не сдано"];
 
 function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, actor, loggedBy, onClose }: {
   p: Participant;
@@ -524,15 +550,11 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
   onClose: () => void;
 }) {
   const navigate = useNavigate();
-  const needRun = expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements);
   const [reason, setReason] = useState("");
   const [savingPenalty, setSavingPenalty] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [editPp, setEditPp] = useState<PostponementRequest | null>(null);
   const [toDelete, setToDelete] = useState<Penalty | null>(null);
-  const [postponeType, setPostponeType] = useState<"running" | "task">(needRun ? "running" : "task");
-  const [target, setTarget] = useState(addDaysISO(iso, 1));
-  const [postponeNote, setPostponeNote] = useState("");
-  const [savingPostpone, setSavingPostpone] = useState(false);
 
   const { penaltyAmount, burpees, currency } = challenge.settings;
   const [open, setOpen] = useState(true);
@@ -543,8 +565,7 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
     Number(b.date === iso) - Number(a.date === iso) ||
     Number(!!a.paid) - Number(!!b.paid) ||
     (b.date > a.date ? 1 : -1));
-  const dayPostponements = approvedPostponements(postponements)
-    .filter(x => x.participantUid === p.uid && (x.dateISO === iso || x.targetDateISO === iso));
+  const postponementsForPerson = personPostponements(postponements, p.uid);
 
   const savePenalty = async (reasonText: string) => {
     const trimmed = reasonText.trim();
@@ -587,27 +608,6 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
     }
   };
 
-  const submitPostpone = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!target) return;
-    setSavingPostpone(true);
-    try {
-      await recordPostponement(challenge.id, p, {
-        type: postponeType,
-        dateISO: iso,
-        targetDateISO: target,
-        reason: postponeNote.trim(),
-      });
-      setPostponeNote("");
-      notify.success(`${postponeType === "running" ? "Пробежка" : "Задание"} перенесено на ${formatDateLong(target)}`);
-    } catch (err) {
-      console.error("[DayScreen] recordPostponement failed:", err);
-      notify.error("Не удалось сохранить перенос.");
-    } finally {
-      setSavingPostpone(false);
-    }
-  };
-
   const penaltyParts = [
     "−1 жизнь",
     penaltyAmount > 0 ? formatMoney(penaltyAmount, currency) : null,
@@ -643,7 +643,6 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
               </button>
             ))}
           </div>
-          <p className="text-[13px] text-muted-foreground">Нажатие сразу записывает штраф за этот день</p>
           <Field label="Причина">
             {({ id }) => (
               <Input id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Или напишите свою" autoComplete="off" />
@@ -691,59 +690,32 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         </div>
       )}
 
-      <form onSubmit={submitPostpone} className="mt-7 border-t border-border pt-6">
+      <div className="mt-7 border-t border-border pt-6">
         <h3 className="text-[15px] font-semibold">Перенос</h3>
-        <p className="mt-0.5 text-[13px] text-muted-foreground">День не будет считаться пропуском</p>
-
-        {dayPostponements.length > 0 && (
-          <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
-            {dayPostponements.map(x => (
-              <li key={x.id} className="flex items-center gap-3 py-2 pl-3 pr-1.5">
-                <MoveRight className="size-4 shrink-0 text-postpone-text" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm">
-                    {x.type === "running" ? "Пробежка" : "Задание"}: {formatDateShort(x.dateISO)} → {formatDateShort(x.targetDateISO)}
-                  </p>
-                  {x.reason && <p className="truncate text-[13px] text-muted-foreground">{x.reason}</p>}
-                </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  loading={busyId === `pp-${x.id}`}
-                  onClick={() => run(`pp-${x.id}`, () => cancelPostponement(challenge.id, x.id), "Перенос отменён", "Не удалось отменить перенос.")}
-                >
-                  Отменить
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
         <div className="mt-3 flex flex-col gap-3">
-          <Segmented
-            aria-label="Что переносим"
-            value={postponeType}
-            onChange={setPostponeType}
-            block
-            options={[{ value: "running", label: "Пробежку" }, { value: "task", label: "Задание" }]}
+          <PostponeList
+            items={postponementsForPerson}
+            busyId={busyId}
+            editingId={editPp?.id}
+            onEdit={setEditPp}
+            onCancel={id => {
+              if (editPp?.id === id) setEditPp(null);
+              void run(id, () => cancelPostponement(challenge.id, id), "Перенос отменён", "Не удалось отменить перенос.");
+            }}
           />
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="На дату">
-              {({ id }) => (
-                <Input id={id} type="date" value={target} min={addDaysISO(iso, 1)} onChange={e => setTarget(e.target.value)} />
-              )}
-            </Field>
-            <Field label="Комментарий">
-              {({ id }) => (
-                <Input id={id} value={postponeNote} onChange={e => setPostponeNote(e.target.value)} placeholder="Из чата" autoComplete="off" />
-              )}
-            </Field>
-          </div>
-          <Button type="submit" variant="secondary" block loading={savingPostpone} disabled={!target}>
-            {target ? `Перенести на ${formatDateLong(target)}` : "Перенести"}
-          </Button>
+          <PostponeForm
+            challengeId={challenge.id}
+            participant={p}
+            startDate={challenge.startDate}
+            endDate={challengeDayISO(challenge.startDate, challenge.duration)}
+            runSchedule={challenge.settings.runSchedule}
+            postponements={postponements}
+            defaultFrom={iso}
+            editing={editPp}
+            onCancelEdit={() => setEditPp(null)}
+          />
         </div>
-      </form>
+      </div>
 
       <Button variant="ghost" block className="mt-4" onClick={() => { close(); navigate(`/participants/${p.uid}`); }}>
         Открыть профиль

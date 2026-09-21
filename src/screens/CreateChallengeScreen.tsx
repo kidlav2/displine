@@ -30,7 +30,7 @@ export function CreateChallengeScreen() {
   const [startDate, setStartDate] = useState(tomorrow);
   const [endDate, setEndDate] = useState(addDaysISO(tomorrow, 49));
   const [runSchedule, setRunSchedule] = useState<Record<string, string>>({ Tue: "06:00", Thu: "06:00", Sat: "06:00", Sun: "07:00" });
-  const [penaltyAmount, setPenaltyAmount] = useState("5000");
+  const [penaltyAmount, setPenaltyAmount] = useState("20000");
   const [currency, setCurrency] = useState<string>("KZT");
   const [burpees, setBurpees] = useState("20");
   const [startingLives, setStartingLives] = useState(5);
@@ -188,9 +188,9 @@ export function CreateChallengeScreen() {
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Сумма штрафа">
-                {({ id }) => (
-                  <Input id={id} type="number" inputMode="numeric" min={0} value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)} suffix={currencySymbol} />
+              <Field label="Сумма за отсутствие" hint="Списывается с отметки «не был». Опоздание без штрафа — сумму можно поменять потом в настройках.">
+                {({ id, describedBy }) => (
+                  <Input id={id} type="number" inputMode="numeric" min={0} value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)} suffix={currencySymbol} aria-describedby={describedBy} />
                 )}
               </Field>
               <Field label="Или бёрпи">

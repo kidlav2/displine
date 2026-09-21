@@ -1,26 +1,25 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type React from "react";
 import { useNavigate, useParams } from "react-router";
 import { Check, Plus, Trash2, UserX } from "lucide-react";
-import {
-  Badge, Button, ConfirmDialog, EmptyState, Field, Hearts, IconButton, Input, Page, PageHeader, PageSpinner, RoleBadge, Section, Sheet, Textarea,
-} from "../components/atoms";
+import { Badge, Button, ConfirmDialog, EmptyState, Field, Hearts, IconButton, Input, Page, PageHeader, PageSpinner, RoleBadge, Section, Sheet } from "../components/atoms";
 import { DayLegend, DAY_KIND_LABEL, dayKind, type DayKind } from "../components/attendance";
+import { PostponeForm, PostponeList, personPostponements } from "../components/PostponeForm";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { disciplineStats, unpaidPenalties } from "../lib/attendance";
 import { challengeDayISO, weekdayFromISO } from "../lib/dates";
-import { deletePenalty, logPenalty, markPenaltyPaid, saveOrgNote, type FeedActor } from "../lib/firestore";
+import { deletePenalty, logPenalty, markPenaltyPaid, cancelPostponement, type FeedActor } from "../lib/firestore";
 import { formatDateLong, formatDateShort, formatMoney } from "../lib/format";
 import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
-import type { ChallengeData, Participant, Penalty } from "../types";
+import type { ChallengeData, Participant, Penalty, PostponementRequest } from "../types";
 
 export function ParticipantProfile() {
   const { uid } = useParams<{ uid: string }>();
   const navigate = useNavigate();
-  const { challenge, loading, postponements, orgNotes, meParticipant } = useAppContext();
+  const { challenge, loading, postponements, meParticipant } = useAppContext();
   const { currentUser } = useAuthContext();
   const participant = challenge?.participants.find(p => p.uid === uid);
   useDocumentTitle(participant?.name);
@@ -29,6 +28,8 @@ export function ParticipantProfile() {
   const [payingId, setPayingId] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Penalty | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [ppBusy, setPpBusy] = useState<string | null>(null);
+  const [editPp, setEditPp] = useState<PostponementRequest | null>(null);
 
   const back = () => (window.history.length > 1 ? navigate(-1) : navigate("/app/day"));
 
@@ -96,11 +97,50 @@ export function ParticipantProfile() {
         </section>
 
         {isRosterMember && (
-          <Section title="Дни" description="Отметки меняются на экранах «День» и «Таблица»." grouped={false}>
+          <Section title="Дни" grouped={false}>
             <div className="rounded-xl border border-border bg-card p-4">
               <DayCalendar p={participant} challenge={challenge} postponements={postponements} />
             </div>
             <DayLegend className="mt-3" />
+          </Section>
+        )}
+
+        {isRosterMember && (
+          <Section title="Переносы" grouped={false}>
+            <div className="space-y-3">
+              <PostponeList
+                items={personPostponements(postponements, participant.uid)}
+                busyId={ppBusy}
+                editingId={editPp?.id}
+                onEdit={setEditPp}
+                onCancel={async id => {
+                  if (editPp?.id === id) setEditPp(null);
+                  setPpBusy(id);
+                  try {
+                    await cancelPostponement(challenge.id, id);
+                    notify.success("Перенос отменён");
+                  } catch (err) {
+                    console.error("[ParticipantProfile] cancelPostponement failed:", err);
+                    notify.error("Не удалось отменить перенос.");
+                  } finally {
+                    setPpBusy(null);
+                  }
+                }}
+              />
+              <div className="rounded-xl border border-border bg-card p-4">
+                <PostponeForm
+                  challengeId={challenge.id}
+                  participant={participant}
+                  startDate={challenge.startDate}
+                  endDate={challenge.endDate || challengeDayISO(challenge.startDate, challenge.duration)}
+                  runSchedule={challenge.settings.runSchedule}
+                  postponements={postponements}
+                  defaultFrom={challengeDayISO(challenge.startDate, challenge.currentDay || 1)}
+                  editing={editPp}
+                  onCancelEdit={() => setEditPp(null)}
+                />
+              </div>
+            </div>
           </Section>
         )}
 
@@ -125,8 +165,6 @@ export function ParticipantProfile() {
             />
           ))}
         </Section>
-
-        <NoteSection challengeId={challenge.id} uid={participant.uid} note={orgNotes[participant.uid] ?? ""} />
       </div>
 
       <ConfirmDialog
@@ -265,47 +303,6 @@ function PenaltyRow({ pen, currency, paying, onMarkPaid, onDelete }: {
         </IconButton>
       )}
     </div>
-  );
-}
-
-function NoteSection({ challengeId, uid, note }: { challengeId: string; uid: string; note: string }) {
-  const [draft, setDraft] = useState(note);
-  const [saving, setSaving] = useState(false);
-  useEffect(() => { setDraft(note); }, [note]);
-  const changed = draft.trim() !== note.trim();
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      await saveOrgNote(challengeId, uid, draft.trim());
-      notify.success("Договорённость сохранена");
-    } catch (err) {
-      console.error("[ParticipantProfile] saveOrgNote failed:", err);
-      notify.error("Не удалось сохранить договорённость.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Section title="Договорённость" description="Видна организаторам на экране «День»." grouped={false}>
-      <form onSubmit={save} className="space-y-3">
-        <Textarea
-          aria-label="Договорённость"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder="Например: бегает по субботам вместо воскресенья"
-          rows={3}
-        />
-        {changed && (
-          <div className="flex justify-end gap-2">
-            <Button size="sm" variant="ghost" onClick={() => setDraft(note)} disabled={saving}>Отменить</Button>
-            <Button size="sm" variant="primary" type="submit" loading={saving}>Сохранить</Button>
-          </div>
-        )}
-      </form>
-    </Section>
   );
 }
 

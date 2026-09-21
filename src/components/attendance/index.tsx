@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Check, Clock, MoveRight, X } from "lucide-react";
 import { cn } from "../../lib/cn";
 import { expectedRun, expectedTask, postponementAway } from "../../lib/attendance";
@@ -26,11 +27,12 @@ export function dayKind(
   issuedTaskDays: Record<string, IssuedTaskDay> | undefined,
   postponements: PostponementRequest[],
 ): DayKind {
-  const away = postponementAway(postponements, p.uid, iso, "running") || postponementAway(postponements, p.uid, iso, "task");
+  const runAway = !!postponementAway(postponements, p.uid, iso, "running");
+  const taskAway = !!postponementAway(postponements, p.uid, iso, "task");
   const needRun = expectedRun(iso, p.uid, runSchedule, postponements);
   const needTask = expectedTask(iso, p.uid, issuedTaskDays, postponements);
-  if (away) return "postponed";
-  if (!needRun && !needTask) return "none";
+  if (runAway) return "postponed";
+  if (!needRun && !needTask) return taskAway ? "postponed" : "none";
 
   const statuses = [needRun && p.days?.[iso]?.run, needTask && p.days?.[iso]?.task].filter(s => s !== false) as AttendanceStatus[];
   if (statuses.includes("missed")) return "missed";
@@ -91,58 +93,111 @@ export function DayLegend({ className }: { className?: string }) {
   );
 }
 
-// ── Mark button (Day screen) ─────────────────────────────────────────────────
+// ── Mark group (Day screen) ──────────────────────────────────────────────────
 
-const STATUS_TEXT = { done: "пришёл", late: "опоздал", missed: "не был" } as const;
+const RUN_MARKS: { status: AttendanceStatus; label: string; Icon: typeof Check }[] = [
+  { status: "done", label: "пришёл", Icon: Check },
+  { status: "late", label: "опоздал", Icon: Clock },
+  { status: "missed", label: "не был", Icon: X },
+];
 
-interface MarkButtonProps {
+const TASK_MARKS: { status: AttendanceStatus; label: string; Icon: typeof Check }[] = [
+  { status: "done", label: "выполнил", Icon: Check },
+  { status: "late", label: "опоздал", Icon: Clock },
+  { status: "missed", label: "не сдал", Icon: X },
+];
+
+const MARK_ON: Record<AttendanceStatus, string> = {
+  done: "border-success bg-success text-white",
+  late: "border-warning bg-warning text-white",
+  missed: "border-danger bg-danger text-white",
+};
+
+interface MarkGroupProps {
   status?: AttendanceStatus;
-  onClick: () => void;
-  /** e.g. "Айдар, пробежка" — announced together with the state. */
+  onChange: (next?: AttendanceStatus) => void;
+  /** e.g. "Айдар, пробежка" */
   label: string;
+  kind?: "run" | "task";
+  /** Stretch across the parent — used when marks sit on their own row. */
+  fill?: boolean;
 }
 
-export function MarkButton({ status, onClick, label }: MarkButtonProps) {
-  const state = status ? STATUS_TEXT[status] : "не отмечено";
+export function MarkGroup({ status, onChange, label, kind = "run", fill = false }: MarkGroupProps) {
+  const marks = kind === "task" ? TASK_MARKS : RUN_MARKS;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`${label}: ${state}`}
-      title={`${label}: ${state}`}
+    <div
+      role="group"
+      aria-label={label}
       className={cn(
-        "pressable relative inline-flex size-10 items-center justify-center rounded-[10px] border-[1.5px]",
-        "after:absolute after:-inset-1 after:content-['']",
-        status === "done" && "border-success bg-success text-white",
-        status === "late" && "border-warning bg-warning text-white",
-        status === "missed" && "border-danger bg-danger text-white",
-        !status && "border-control-border text-transparent hover:bg-hover",
+        "inline-flex rounded-[10px] border border-border bg-card p-0.5",
+        fill && "flex w-full sm:inline-flex sm:w-auto",
       )}
     >
-      {status === "missed"
-        ? <X size={20} strokeWidth={2.75} aria-hidden />
-        : status === "late"
-          ? <Clock size={20} strokeWidth={2.5} aria-hidden />
-          : <Check size={20} strokeWidth={2.75} aria-hidden className={cn(!status && "opacity-0")} />}
-    </button>
+      {marks.map(({ status: value, label: state, Icon }) => {
+        const on = status === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            aria-pressed={on}
+            aria-label={`${label}: ${state}`}
+            title={state}
+            onClick={() => onChange(on ? undefined : value)}
+            className={cn(
+              "pressable relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border-[1.5px]",
+              fill ? "flex-1 sm:size-8 sm:min-h-8 sm:min-w-8 sm:flex-none" : "size-11 sm:size-8 sm:min-h-8 sm:min-w-8",
+              on ? MARK_ON[value] : "border-transparent text-muted-foreground hover:bg-hover hover:text-foreground",
+            )}
+          >
+            <Icon size={18} strokeWidth={2.6} aria-hidden />
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Caption + mark control. Caption is for the stacked phone row, where header columns are hidden. */
+export function MarkField({ caption, showCaption, children }: {
+  caption: string;
+  showCaption: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-w-0">
+      {showCaption && (
+        <p className="mb-1 text-center text-[12px] font-medium text-muted-foreground sm:hidden">{caption}</p>
+      )}
+      {children}
+    </div>
   );
 }
 
 /** Placeholder for a column that doesn't apply to this person today. */
-export function MarkPlaceholder({ postponedTo }: { postponedTo?: string }) {
-  if (postponedTo) {
+export function MarkPlaceholder({ postponedTo, fill = false }: { postponedTo?: string; fill?: boolean }) {
+  if (postponedTo !== undefined) {
+    const label = postponedTo ? `Перенесено на ${postponedTo}` : "Перенос";
     return (
       <span
-        className="inline-flex size-10 items-center justify-center rounded-[10px] bg-postpone-subtle text-postpone-text"
-        title={`Перенесено на ${postponedTo}`}
+        className={cn(
+          "inline-flex items-center justify-center rounded-[10px] bg-postpone-subtle text-postpone-text",
+          fill ? "min-h-11 w-full sm:h-8 sm:w-[7.25rem]" : "h-11 w-[7.25rem] sm:h-8",
+        )}
+        title={label}
       >
         <MoveRight size={18} strokeWidth={2.5} aria-hidden />
-        <span className="sr-only">Перенесено на {postponedTo}</span>
+        <span className="sr-only">{label}</span>
       </span>
     );
   }
   return (
-    <span className="inline-flex size-10 items-center justify-center text-subtle-foreground">
+    <span
+      className={cn(
+        "inline-flex items-center justify-center text-subtle-foreground",
+        fill ? "min-h-11 w-full sm:h-8 sm:w-[7.25rem]" : "h-11 w-[7.25rem] sm:h-8",
+      )}
+    >
       <span aria-hidden>—</span>
       <span className="sr-only">Не требуется</span>
     </span>

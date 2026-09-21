@@ -104,6 +104,20 @@ export function weekdayFromISO(iso: string): string {
   return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dt.getUTCDay()] ?? "Mon";
 }
 
+/** Inclusive ISO dates from fromISO through toISO. */
+export function datesInRange(fromISO: string, toISO: string): string[] {
+  if (!fromISO || !toISO || fromISO > toISO) return [];
+  const out: string[] = [];
+  let cur = fromISO;
+  while (cur <= toISO) {
+    out.push(cur);
+    const next = addDaysISO(cur, 1);
+    if (next === cur) break;
+    cur = next;
+  }
+  return out;
+}
+
 /** ISO date of challenge day number (1-based) from startDate. */
 export function challengeDayISO(startDate: string, dayNumber: number): string {
   if (!startDate) return "";

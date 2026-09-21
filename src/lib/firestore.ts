@@ -1489,6 +1489,26 @@ export async function recordPostponement(
   return ref.id;
 }
 
+export async function updatePostponement(
+  challengeId: string,
+  postponementId: string,
+  payload: {
+    type: "task" | "running";
+    dateISO: string;
+    targetDateISO: string;
+    reason: string;
+  },
+): Promise<void> {
+  await updateDoc(postponementRef(challengeId, postponementId), {
+    type:          payload.type,
+    taskId:        null,
+    taskTitle:     payload.type === "running" ? "Пробежка" : "Задание",
+    dateISO:       payload.dateISO,
+    targetDateISO: payload.targetDateISO,
+    reason:        payload.reason,
+  });
+}
+
 export async function addParticipantByName(
   challengeId: string,
   name: string,
