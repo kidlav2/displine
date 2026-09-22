@@ -140,7 +140,7 @@ export function OperatorSettingsScreen() {
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Сумма за отсутствие" hint="Списывается, когда отмечаете «не был». Опоздание без штрафа.">
+              <Field label="Сумма за отсутствие" hint="За «не был» и за опоздание больше 20 минут.">
                 {({ id, describedBy }) => (
                   <Input
                     id={id} type="number" inputMode="numeric" min={0}
@@ -151,10 +151,11 @@ export function OperatorSettingsScreen() {
                   />
                 )}
               </Field>
-              <Field label="Или бёрпи">
-                {({ id }) => (
+              <Field label="Или бёрпи" hint="За «не был» и за опоздание. Больше 20 минут — вместе с деньгами.">
+                {({ id, describedBy }) => (
                   <Input
                     id={id} type="number" inputMode="numeric" min={0}
+                    aria-describedby={describedBy}
                     value={s.burpees}
                     onChange={e => setSettings({ burpees: parseInt(e.target.value, 10) || 0 })}
                     suffix="раз"

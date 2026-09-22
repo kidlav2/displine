@@ -5,7 +5,7 @@ import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, El
 import {
   Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Sheet, Switch, Textarea,
 } from "../components/atoms";
-import { MarkField, MarkGroup, MarkPlaceholder } from "../components/attendance";
+import { LateRunDialog, MarkField, MarkGroup, MarkPlaceholder } from "../components/attendance";
 import { PostponeForm, PostponeList, personPostponements } from "../components/PostponeForm";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -15,7 +15,8 @@ import {
 } from "../lib/firestore";
 import {
   expectedRun, expectedTask, isAttendanceComplete, isScheduledRunDay,
-  postponementAway, postponementOnto, rosterParticipants, unpaidPenalties,
+  lateRunPenalty, lateTierOf, postponementAway, postponementOnto, rosterParticipants, unpaidPenalties,
+  type LateTier,
 } from "../lib/attendance";
 import { challengeDayISO, challengePhase, durationFromDates, weekdayFromISO } from "../lib/dates";
 import { formatDateLong, formatDateShort, formatMoney, formatWeekdayDate, localISODate, plural } from "../lib/format";
@@ -36,6 +37,7 @@ export function DayScreen() {
   const [optimistic, setOptimistic] = useState<Record<string, AttendanceStatus | null>>({});
   const [issuedOverride, setIssuedOverride] = useState<{ iso: string; value: boolean } | null>(null);
   const [sheetUid, setSheetUid] = useState<string | null>(null);
+  const [lateAsk, setLateAsk] = useState<Participant | null>(null);
 
   useDocumentTitle(`День ${dayNum}`);
 
@@ -88,13 +90,24 @@ export function DayScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roster, iso, challenge.settings.runSchedule, issuedDays, postponements, optimistic]);
 
-  const setMark = async (p: Participant, kind: Kind, next?: AttendanceStatus) => {
+  const setMark = async (
+    p: Participant,
+    kind: Kind,
+    next?: AttendanceStatus,
+    late?: ReturnType<typeof lateRunPenalty>,
+  ) => {
     const key = `${p.uid}|${iso}|${kind}`;
     setOptimistic(o => ({ ...o, [key]: next ?? null }));
+    const burpees = Number(challenge.settings.burpees) > 0 ? Number(challenge.settings.burpees) : undefined;
     try {
-      await markAttendance(challenge.id, p.uid, iso, kind, next, {
+      await markAttendance(challenge.id, p.uid, iso, kind, next, late ? {
+        ...late,
+        loggedBy: currentUser?.uid ?? "",
+        actor,
+        targetName: p.name,
+      } : {
         amount: Number(challenge.settings.penaltyAmount) || 0,
-        burpees: Number(challenge.settings.burpees) > 0 ? Number(challenge.settings.burpees) : undefined,
+        burpees,
         loggedBy: currentUser?.uid ?? "",
         actor,
         targetName: p.name,
@@ -274,6 +287,7 @@ export function DayScreen() {
                   run={statusOf(p, "run")}
                   task={statusOf(p, "task")}
                   onMark={(kind, next) => setMark(p, kind, next)}
+                  onLate={() => setLateAsk(p)}
                   onMore={() => setSheetUid(p.uid)}
                 />
               ))}
@@ -298,6 +312,27 @@ export function DayScreen() {
           onClose={() => setSheetUid(null)}
         />
       )}
+
+      <LateRunDialog
+        open={!!lateAsk}
+        name={lateAsk?.name ?? ""}
+        burpees={Number(challenge.settings.burpees) || 0}
+        amount={Number(challenge.settings.penaltyAmount) || 0}
+        currency={challenge.settings.currency}
+        current={lateAsk ? lateTierOf(lateAsk.penalties, iso) : null}
+        onOpenChange={o => { if (!o) setLateAsk(null); }}
+        onPick={(tier: LateTier) => {
+          const p = lateAsk;
+          if (!p) return;
+          setLateAsk(null);
+          void setMark(p, "run", "late", lateRunPenalty(tier, challenge.settings));
+        }}
+        onClear={lateAsk && statusOf(lateAsk, "run") === "late" ? () => {
+          const p = lateAsk;
+          setLateAsk(null);
+          if (p) void setMark(p, "run", undefined);
+        } : undefined}
+      />
     </Page>
   );
 }
@@ -457,7 +492,7 @@ function SummaryRow({ icon, title, meta, value, trailing }: {
   );
 }
 
-function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, showTask, note, run, task, onMark, onMore }: {
+function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, showTask, note, run, task, onMark, onLate, onMore }: {
   p: Participant;
   iso: string;
   challenge: ChallengeData;
@@ -469,6 +504,7 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
   run?: AttendanceStatus;
   task?: AttendanceStatus;
   onMark: (kind: Kind, next?: AttendanceStatus) => void;
+  onLate: () => void;
   onMore: () => void;
 }) {
   const needRun = expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements);
@@ -497,7 +533,10 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
               {!p.active && <Badge tone="danger">Выбыл</Badge>}
               {unpaid.length > 0 && (
                 <span className="text-[13px] font-medium text-warning-text" title="Есть неоплаченный штраф">
-                  {unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : `${unpaidBurpees} бёрпи`}
+                  {[
+                    unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : null,
+                    unpaidBurpees > 0 ? `${unpaidBurpees} бёрпи` : null,
+                  ].filter(Boolean).join(" · ")}
                 </span>
               )}
               {movedHere && <Badge tone="postpone">Перенос</Badge>}
@@ -519,7 +558,7 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
           {showRun && (
             <MarkField caption="Бег" showCaption>
               {needRun
-                ? <MarkGroup fill status={run} kind="run" onChange={next => onMark("run", next)} label={`${firstName}, пробежка`} />
+                ? <MarkGroup fill status={run} kind="run" onLatePick={onLate} onChange={next => onMark("run", next)} label={`${firstName}, пробежка`} />
                 : <MarkPlaceholder fill postponedTo={runAway ? formatDateShort(runAway.targetDateISO) : undefined} />}
             </MarkField>
           )}

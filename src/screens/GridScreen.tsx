@@ -3,19 +3,20 @@ import type React from "react";
 import { Link, useNavigate } from "react-router";
 import { UserRound } from "lucide-react";
 import { Button, EmptyState, Page, PageHeader } from "../components/atoms";
-import { DAY_KIND_LABEL, DayCellVisual, DayLegend, dayKind } from "../components/attendance";
+import { DAY_KIND_LABEL, DayCellVisual, DayLegend, LateRunDialog, dayKind } from "../components/attendance";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { markAttendance } from "../lib/firestore";
 import {
-  expectedRun, expectedTask, isScheduledRunDay, nextAttendanceStatus, postponementAway, rosterParticipants,
+  expectedRun, expectedTask, isScheduledRunDay, lateRunPenalty, lateTierOf, nextAttendanceStatus, postponementAway, rosterParticipants,
+  type LateTier,
 } from "../lib/attendance";
 import { challengeDayISO } from "../lib/dates";
 import { formatDateLong, formatDateShort, formatWeekdayShort } from "../lib/format";
 import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
 import { useDocumentTitle } from "../lib/useDocumentTitle";
-import type { DayAttendance, Participant } from "../types";
+import type { AttendanceStatus, DayAttendance, Participant } from "../types";
 
 const CELL = 26;
 const COL = 34;
@@ -34,6 +35,7 @@ export function GridScreen() {
   const roster = useMemo(() => rosterParticipants(challenge.participants), [challenge.participants]);
   const todayIso = challengeDayISO(challenge.startDate, challenge.currentDay || 1);
   const [overrides, setOverrides] = useState<Record<string, DayAttendance>>({});
+  const [lateAsk, setLateAsk] = useState<{ p: Participant; iso: string; taskToo: boolean } | null>(null);
   const [focus, setFocus] = useState<[number, number]>([0, Math.max(0, (challenge.currentDay || 1) - 1)]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
@@ -58,32 +60,38 @@ export function GridScreen() {
   const dayOf = (p: Participant, iso: string): DayAttendance | undefined =>
     overrides[`${p.uid}|${iso}`] ?? p.days?.[iso];
 
-  const cycle = async (p: Participant, iso: string) => {
-    const needRun = expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements);
-    const needTask = expectedTask(iso, p.uid, challenge.issuedTaskDays, postponements);
-    if (!needRun && !needTask) return;
+  const actor = currentUser && meParticipant
+    ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
+    : undefined;
 
+  const saveMarks = async (
+    p: Participant,
+    iso: string,
+    next: AttendanceStatus | undefined,
+    needRun: boolean,
+    needTask: boolean,
+    late?: ReturnType<typeof lateRunPenalty>,
+  ) => {
     const current = dayOf(p, iso) ?? {};
-    // When both are expected, one tap moves both together (done → late → missed → clear).
-    const next = nextAttendanceStatus(needRun ? current.run : current.task);
     const updated: DayAttendance = { ...current };
     if (needRun) updated.run = next;
     if (needTask) updated.task = next;
     const key = `${p.uid}|${iso}`;
     setOverrides(o => ({ ...o, [key]: updated }));
 
+    const common = {
+      loggedBy: currentUser?.uid ?? "",
+      actor,
+      targetName: p.name,
+    };
+    const absence = {
+      amount: Number(challenge.settings.penaltyAmount) || 0,
+      burpees: Number(challenge.settings.burpees) > 0 ? Number(challenge.settings.burpees) : undefined,
+      ...common,
+    };
     try {
-      const penalty = {
-        amount: Number(challenge.settings.penaltyAmount) || 0,
-        burpees: Number(challenge.settings.burpees) > 0 ? Number(challenge.settings.burpees) : undefined,
-        loggedBy: currentUser?.uid ?? "",
-        actor: currentUser && meParticipant
-          ? { uid: currentUser.uid, name: meParticipant.name, ini: meParticipant.ini, isAdmin: meParticipant.isAdmin }
-          : undefined,
-        targetName: p.name,
-      };
-      if (needRun) await markAttendance(challenge.id, p.uid, iso, "run", next, penalty);
-      if (needTask) await markAttendance(challenge.id, p.uid, iso, "task", next, penalty);
+      if (needRun) await markAttendance(challenge.id, p.uid, iso, "run", next, late ? { ...late, ...common } : absence);
+      if (needTask) await markAttendance(challenge.id, p.uid, iso, "task", next, absence);
     } catch (err) {
       console.error("[GridScreen] markAttendance failed:", err);
       notify.error("Не удалось сохранить отметку. Проверьте подключение.");
@@ -95,6 +103,28 @@ export function GridScreen() {
         return rest;
       });
     }
+  };
+
+  const cycle = async (p: Participant, iso: string) => {
+    const needRun = expectedRun(iso, p.uid, challenge.settings.runSchedule, postponements);
+    const needTask = expectedTask(iso, p.uid, challenge.issuedTaskDays, postponements);
+    if (!needRun && !needTask) return;
+
+    const current = dayOf(p, iso) ?? {};
+    // When both are expected, one tap moves both together (done → late → missed → clear).
+    const next = nextAttendanceStatus(needRun ? current.run : current.task);
+    if (next === "late" && needRun) {
+      setLateAsk({ p, iso, taskToo: needTask });
+      return;
+    }
+    await saveMarks(p, iso, next, needRun, needTask);
+  };
+
+  const pickLate = (tier: LateTier) => {
+    const ask = lateAsk;
+    if (!ask) return;
+    setLateAsk(null);
+    void saveMarks(ask.p, ask.iso, "late", true, ask.taskToo, lateRunPenalty(tier, challenge.settings));
   };
 
   // Roving focus: one tab stop for the whole grid, arrow keys move between cells.
@@ -252,6 +282,17 @@ export function GridScreen() {
         <span className="size-1 rounded-full bg-muted-foreground" aria-hidden />
         точка под датой — день пробежки по расписанию
       </p>
+
+      <LateRunDialog
+        open={!!lateAsk}
+        name={lateAsk?.p.name ?? ""}
+        burpees={Number(challenge.settings.burpees) || 0}
+        amount={Number(challenge.settings.penaltyAmount) || 0}
+        currency={challenge.settings.currency}
+        current={lateAsk ? lateTierOf(lateAsk.p.penalties, lateAsk.iso) : null}
+        onOpenChange={o => { if (!o) setLateAsk(null); }}
+        onPick={pickLate}
+      />
     </Page>
   );
 }

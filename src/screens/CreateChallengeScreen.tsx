@@ -188,7 +188,7 @@ export function CreateChallengeScreen() {
               />
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Сумма за отсутствие" hint="Списывается с отметки «не был». Опоздание без штрафа — сумму можно поменять потом в настройках.">
+              <Field label="Сумма за отсутствие" hint="За «не был» и за опоздание больше 20 минут — вместе с бёрпи. До 20 минут — только бёрпи.">
                 {({ id, describedBy }) => (
                   <Input id={id} type="number" inputMode="numeric" min={0} value={penaltyAmount} onChange={e => setPenaltyAmount(e.target.value)} suffix={currencySymbol} aria-describedby={describedBy} />
                 )}

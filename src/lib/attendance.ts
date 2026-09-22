@@ -41,6 +41,48 @@ export function absenceReason(kind: "run" | "task"): string {
   return kind === "run" ? "Пропуск пробежки" : "Задание не сдано";
 }
 
+/** Morning-run lateness. Up to 20 minutes is burpees only; past that is money and burpees. */
+export type LateTier = "short" | "long";
+
+export function lateRunReason(tier: LateTier): string {
+  return tier === "short" ? "Опоздание до 20 минут" : "Опоздание больше 20 минут";
+}
+
+/** What to write when a run is marked late. No life either way — a life goes only for an absence. */
+export function lateRunPenalty(
+  tier: LateTier,
+  settings: { penaltyAmount: number; burpees: number },
+): { amount: number; burpees?: number; livesLost: number; reason: string; penalizeStatus: "late" } {
+  if (tier === "short") {
+    const burpees = Number(settings.burpees) || 0;
+    return {
+      penalizeStatus: "late",
+      livesLost: 0,
+      amount: 0,
+      burpees: burpees > 0 ? burpees : undefined,
+      reason: lateRunReason("short"),
+    };
+  }
+  const burpees = Number(settings.burpees) || 0;
+  return {
+    penalizeStatus: "late",
+    livesLost: 0,
+    amount: Number(settings.penaltyAmount) || 0,
+    burpees: burpees > 0 ? burpees : undefined,
+    reason: lateRunReason("long"),
+  };
+}
+
+export function lateTierOf(
+  penalties: { source?: string; reason?: string }[] | undefined,
+  iso: string,
+): LateTier | null {
+  const reason = penalties?.find(p => p.source === attendancePenaltySource("run", iso))?.reason;
+  if (reason === lateRunReason("short")) return "short";
+  if (reason === lateRunReason("long")) return "long";
+  return null;
+}
+
 export function approvedPostponements(list: PostponementRequest[]): PostponementRequest[] {
   return list.filter(p => p.status === "approved");
 }

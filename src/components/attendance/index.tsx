@@ -79,6 +79,8 @@ export function DayCellVisual({ kind, size = 26, icons = "status", className }: 
   );
 }
 
+export { LateRunDialog } from "./LateRunDialog";
+
 export function DayLegend({ className }: { className?: string }) {
   const items: DayKind[] = ["done", "late", "partial", "missed", "postponed", "pending", "none"];
   return (
@@ -121,9 +123,11 @@ interface MarkGroupProps {
   kind?: "run" | "task";
   /** Stretch across the parent — used when marks sit on their own row. */
   fill?: boolean;
+  /** Run only: "опоздал" asks how late, instead of toggling the mark off. */
+  onLatePick?: () => void;
 }
 
-export function MarkGroup({ status, onChange, label, kind = "run", fill = false }: MarkGroupProps) {
+export function MarkGroup({ status, onChange, label, kind = "run", fill = false, onLatePick }: MarkGroupProps) {
   const marks = kind === "task" ? TASK_MARKS : RUN_MARKS;
   return (
     <div
@@ -143,7 +147,10 @@ export function MarkGroup({ status, onChange, label, kind = "run", fill = false 
             aria-pressed={on}
             aria-label={`${label}: ${state}`}
             title={state}
-            onClick={() => onChange(on ? undefined : value)}
+            onClick={() => {
+              if (value === "late" && onLatePick) onLatePick();
+              else onChange(on ? undefined : value);
+            }}
             className={cn(
               "pressable relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border-[1.5px]",
               fill ? "flex-1 sm:size-8 sm:min-h-8 sm:min-w-8 sm:flex-none" : "size-11 sm:size-8 sm:min-h-8 sm:min-w-8",

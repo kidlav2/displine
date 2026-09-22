@@ -1563,6 +1563,12 @@ export async function setAttendanceField(
 export interface AttendancePenaltyOpts {
   amount: number;
   burpees?: number;
+  /** Defaults to 1. Late marks pass 0 — a life is only for an absence. */
+  livesLost?: number;
+  /** Defaults to the absence reason for this kind. */
+  reason?: string;
+  /** Which mark writes this penalty. Defaults to "missed". */
+  penalizeStatus?: AttendanceStatus;
   loggedBy: string;
   actor?: FeedActor;
   targetName?: string;
@@ -1582,12 +1588,15 @@ export async function markAttendance(
 ): Promise<void> {
   const pRef = participantRef(challengeId, uid);
   const source = attendancePenaltySource(kind, dateISO);
-  const reason = absenceReason(kind);
+  const penalizeStatus = penalty.penalizeStatus ?? "missed";
+  const reason = penalty.reason ?? absenceReason(kind);
   const penaltyDocRef = doc(penaltiesCol(challengeId));
   const newPenaltyId = penaltyDocRef.id;
-  const livesLost = 1;
+  const livesLost = penalty.livesLost ?? 1;
   const amount = Number(penalty.amount) || 0;
   const burpees = penalty.burpees == null ? undefined : (Number(penalty.burpees) || 0);
+  const shouldPenalize = status === penalizeStatus;
+  const hasConsequence = livesLost > 0 || amount > 0 || (burpees ?? 0) > 0;
 
   let added: Record<string, unknown> | null = null;
   let removed: Record<string, unknown> | null = null;
@@ -1598,18 +1607,35 @@ export async function markAttendance(
     const current = snap.data();
     const penalties = (current.penalties ?? []) as Array<Record<string, unknown>>;
     const auto = penalties.find(p => p.source === source);
-    const alreadySameReason = penalties.some(p =>
-      p.source === source ||
-      (!p.paid && p.date === dateISO && p.reason === reason),
+    const same = !!auto
+      && String(auto.reason ?? "") === reason
+      && Number(auto.amount ?? 0) === amount
+      && Number(auto.burpees ?? 0) === (burpees ?? 0)
+      && Number(auto.livesLost ?? 0) === livesLost
+      && !auto.paid;
+    const manualSame = penalties.some(p =>
+      p.source !== source && !p.paid && p.date === dateISO && p.reason === reason,
     );
+    // Keep the existing auto-penalty only when this mark still calls for the same one.
+    const keep = shouldPenalize && hasConsequence && same;
+    const writePenalty = shouldPenalize && hasConsequence && !same && !manualSame;
+    const dropPenalty = !!auto && !keep;
 
     const patch: Record<string, unknown> = {
       [`days.${dateISO}.${kind}`]: status === undefined ? deleteField() : status,
     };
 
-    if (status === "missed") {
-      if (!alreadySameReason) {
-        const lives = Math.max(0, (current.lives ?? 1) - livesLost);
+    if (writePenalty || dropPenalty) {
+      let lives = Number(current.lives ?? 0);
+      let treasuryDelta = 0;
+      let list = penalties.filter(p => p.source !== source);
+      if (dropPenalty && auto) {
+        removed = auto;
+        lives += Number(auto.livesLost ?? 0);
+        treasuryDelta -= Number(auto.amount ?? 0);
+      }
+      if (writePenalty) {
+        lives = Math.max(0, lives - livesLost);
         added = {
           date: dateISO,
           reason,
@@ -1620,19 +1646,13 @@ export async function markAttendance(
           source,
         };
         if (burpees !== undefined && burpees > 0) added.burpees = burpees;
-        patch.lives = lives;
-        patch.active = lives > 0;
-        patch.penalties = arrayUnion(added);
-        tx.update(challengeRef(challengeId), { totalTreasury: increment(amount) });
+        list = [...list, added];
+        treasuryDelta += amount;
       }
-    } else if (auto) {
-      removed = auto;
-      const restored = (current.lives ?? 0) + Number(auto.livesLost ?? 0);
-      patch.lives = restored;
-      patch.active = restored > 0;
-      patch.penalties = penalties.filter(p => p.source !== source);
-      const refund = Number(auto.amount ?? 0);
-      if (refund) tx.update(challengeRef(challengeId), { totalTreasury: increment(-refund) });
+      patch.lives = Math.max(0, lives);
+      patch.active = (patch.lives as number) > 0;
+      patch.penalties = list;
+      if (treasuryDelta) tx.update(challengeRef(challengeId), { totalTreasury: increment(treasuryDelta) });
     }
 
     tx.update(pRef, patch);
@@ -1656,14 +1676,17 @@ export async function markAttendance(
     catch (e) { console.warn("[markAttendance] penalty doc write failed:", e); }
 
     if (penalty.actor && penalty.targetName) {
-      const amountStr = amount > 0 ? `, ${amount.toLocaleString("ru")} ₸` : "";
-      const burpStr = (burpees ?? 0) > 0 ? ` + ${burpees} бёрпи` : "";
+      const detail = [
+        livesLost > 0 ? `−${livesLost} ❤️` : null,
+        amount > 0 ? `${amount.toLocaleString("ru")} ₸` : null,
+        (burpees ?? 0) > 0 ? `${burpees} бёрпи` : null,
+      ].filter(Boolean).join(", ");
       try {
         await writeFeedSystemEvent(
           challengeId,
           penalty.actor,
           "system:penalty",
-          `оштрафовал ${penalty.targetName}: ${reason} −1 ❤️${amountStr}${burpStr}`,
+          `оштрафовал ${penalty.targetName}: ${reason}${detail ? ` · ${detail}` : ""}`,
         );
       } catch (e) { console.warn("[markAttendance] feed event failed:", e); }
     }
