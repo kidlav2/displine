@@ -79,11 +79,11 @@ export function OperatorSettingsScreen() {
   };
 
   return (
-    <Page width="sm">
+    <Page width="lg">
       <PageHeader title="Настройки" description={`${challenge.emoji} ${challenge.name}`} />
 
       <div className="space-y-8">
-        <Section id="challenge" title="Челлендж" grouped={false}>
+        <Section id="challenge" title="Челлендж" grouped={false} className="max-w-[560px]">
           <div className="space-y-5 rounded-xl border border-border bg-card p-4">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Старт">
@@ -127,7 +127,7 @@ export function OperatorSettingsScreen() {
 
         <RunScheduleSection value={s.runSchedule} onChange={runSchedule => setSettings({ runSchedule })} />
 
-        <Section id="penalties" title="Штрафы" grouped={false}>
+        <Section id="penalties" title="Штрафы" grouped={false} className="max-w-[560px]">
           <div className="space-y-5 rounded-xl border border-border bg-card p-4">
             <div>
               <p className="mb-2 text-[13px] font-medium text-muted-foreground">Валюта</p>

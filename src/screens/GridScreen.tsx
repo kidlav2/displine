@@ -131,7 +131,7 @@ export function GridScreen() {
   }
 
   return (
-    <Page width="full">
+    <Page width="lg">
       <PageHeader
         title="Таблица"
         description={`${roster.length} участников · ${challenge.duration} дней`}
