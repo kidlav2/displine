@@ -80,6 +80,8 @@ export interface Participant {
   tz: string;
   role: UserRole;
   days: Record<string, DayAttendance>;
+  /** What the person sent for that morning, keyed by ISO date. */
+  goals?: Record<string, string>;
 }
 
 export interface FeedItem {

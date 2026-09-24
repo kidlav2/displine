@@ -237,7 +237,7 @@ export function GridScreen() {
                       const status = away
                         ? [away.reason, `перенос на ${formatDateShort(away.targetDateISO)}`].filter(Boolean).join(" · ")
                         : DAY_KIND_LABEL[kind];
-                      const label = `${p.name}, день ${d.n}, ${formatDateLong(d.iso)}: ${status}`;
+                      const label = `${p.name}, день ${d.n}, ${formatDateLong(d.iso)}: ${status}${p.goals?.[d.iso] ? `. Цель: ${p.goals[d.iso]}` : ""}`;
                       const tabIndex = focus[0] === r && focus[1] === c ? 0 : -1;
                       return (
                         <td key={d.n} className={cn("h-9 p-0 text-center", today && "bg-brand-subtle/60")}>

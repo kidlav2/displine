@@ -6,6 +6,7 @@ import {
   Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Sheet, Switch, Textarea,
 } from "../components/atoms";
 import { LateRunDialog, MarkField, MarkGroup, MarkPlaceholder } from "../components/attendance";
+import { DayGoalEditor } from "../components/DayGoal";
 import { PostponeForm, PostponeList, personPostponements } from "../components/PostponeForm";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -520,37 +521,53 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
 
   return (
     <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
-      <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Link
-          to={`/participants/${p.uid}`}
-          className="-my-1 -ms-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 ps-1.5 transition-colors duration-150 hover:bg-hover"
-        >
-          <Av ini={p.ini} photoUrl={p.photoUrl} sz="md" className="shrink-0" />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-medium">{p.name}</span>
-            <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-              <Lives n={p.lives} />
-              {!p.active && <Badge tone="danger">Выбыл</Badge>}
-              {unpaid.length > 0 && (
-                <span className="text-[13px] font-medium text-warning-text" title="Есть неоплаченный штраф">
-                  {[
-                    unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : null,
-                    unpaidBurpees > 0 ? `${unpaidBurpees} бёрпи` : null,
-                  ].filter(Boolean).join(" · ")}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <Link
+            to={`/participants/${p.uid}`}
+            className="-my-1 -ms-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 ps-1.5 transition-colors duration-150 hover:bg-hover"
+          >
+            <Av ini={p.ini} photoUrl={p.photoUrl} sz="md" className="shrink-0" />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[15px] font-medium">{p.name}</span>
+              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <Lives n={p.lives} />
+                {!p.active && <Badge tone="danger">Выбыл</Badge>}
+                {unpaid.length > 0 && (
+                  <span className="text-[13px] font-medium text-warning-text" title="Есть неоплаченный штраф">
+                    {[
+                      unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : null,
+                      unpaidBurpees > 0 ? `${unpaidBurpees} бёрпи` : null,
+                    ].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+                {movedHere && <Badge tone="postpone">Перенос</Badge>}
+              </span>
+              {(runAway?.reason || taskAway?.reason || (note && needRun)) && (
+                <span className="mt-1 block truncate text-[13px] text-subtle-foreground">
+                  {runAway?.reason || taskAway?.reason || note}
                 </span>
               )}
-              {movedHere && <Badge tone="postpone">Перенос</Badge>}
             </span>
-            {(runAway?.reason || taskAway?.reason || (note && needRun)) && (
-              <span className="mt-1 block truncate text-[13px] text-subtle-foreground">
-                {runAway?.reason || taskAway?.reason || note}
-              </span>
-            )}
-          </span>
-        </Link>
-        <IconButton label={`Штраф или перенос: ${p.name}`} size="sm" onClick={onMore} className="shrink-0">
-          <Ellipsis />
-        </IconButton>
+          </Link>
+          <IconButton label={`Цель, штраф или перенос: ${p.name}`} size="sm" onClick={onMore} className="shrink-0">
+            <Ellipsis />
+          </IconButton>
+        </div>
+        <button
+          type="button"
+          onClick={onMore}
+          className={cn(
+            "pressable rounded-lg border px-3 py-2 text-left text-[13px] text-pretty transition-colors duration-150 hover:bg-hover",
+            p.goals?.[iso]
+              ? "border-border text-muted-foreground"
+              : "border-dashed border-control-border text-subtle-foreground",
+          )}
+        >
+          {p.goals?.[iso]
+            ? <span className="line-clamp-2">{p.goals[iso]}</span>
+            : <span>Записать цель</span>}
+        </button>
       </div>
 
       {(showRun || showTask) && (
@@ -665,26 +682,39 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         {note && <p className="min-w-0 truncate text-[13px] text-muted-foreground">{note}</p>}
       </div>
 
+      <div className="mt-6">
+        <DayGoalEditor challengeId={challenge.id} uid={p.uid} iso={iso} text={p.goals?.[iso] ?? ""} />
+      </div>
+
       <form onSubmit={submitPenalty} className="mt-6">
         <h3 className="text-[15px] font-semibold">Штраф за {formatDateLong(iso)}</h3>
         <p className="mt-0.5 text-[13px] text-muted-foreground">{penaltyParts}</p>
         <div className="mt-3 flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Записать штраф по причине">
-            {QUICK_REASONS.map(r => (
-              <button
-                key={r}
-                type="button"
-                disabled={savingPenalty}
-                onClick={() => savePenalty(r)}
-                className="pressable h-8 rounded-full border border-border-strong px-3 text-[13px] transition-colors duration-150 hover:bg-hover disabled:opacity-50"
-              >
-                {r}
-              </button>
-            ))}
-          </div>
           <Field label="Причина">
             {({ id }) => (
-              <Input id={id} value={reason} onChange={e => setReason(e.target.value)} placeholder="Или напишите свою" autoComplete="off" />
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Готовая причина">
+                  {QUICK_REASONS.map(r => {
+                    const selected = reason === r;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        aria-pressed={selected}
+                        disabled={savingPenalty}
+                        onClick={() => setReason(selected ? "" : r)}
+                        className={cn(
+                          "pressable h-8 rounded-full border px-3 text-[13px] transition-colors duration-150 disabled:opacity-50",
+                          selected ? "border-foreground bg-foreground text-background" : "border-border-strong hover:bg-hover",
+                        )}
+                      >
+                        {r}
+                      </button>
+                    );
+                  })}
+                </div>
+                <Input id={id} value={reason} onChange={e => setReason(e.target.value)} autoComplete="off" />
+              </div>
             )}
           </Field>
           <Button type="submit" variant="secondary" block loading={savingPenalty} disabled={!reason.trim()}>

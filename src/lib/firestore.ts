@@ -72,6 +72,15 @@ function tsToString(ts: Timestamp | string | undefined): string {
   return ts.toDate().toLocaleDateString("ru-RU", { day: "numeric", month: "short", year: "numeric" });
 }
 
+function goalsFrom(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const goals: Record<string, string> = {};
+  for (const [iso, text] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof text === "string" && text.trim()) goals[iso] = text;
+  }
+  return Object.keys(goals).length ? goals : undefined;
+}
+
 export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Participant {
   const d = snap.data();
   return {
@@ -88,6 +97,7 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
     tz:       d.tz       ?? "UTC",
     results:  (d.results ?? []) as DayResult[],
     days:     (d.days ?? {}) as Record<string, DayAttendance>,
+    goals:    goalsFrom(d.goals),
     penalties: (d.penalties ?? []).map((p: DocumentData) => ({
       date:      p.date instanceof Timestamp ? p.date.toDate().toISOString().slice(0, 10) : (p.date ?? ""),
       reason:    p.reason    ?? "",
@@ -1710,6 +1720,14 @@ export async function setTaskIssued(
   await updateDoc(challengeRef(challengeId), {
     [`${path}.issued`]: issued,
     ...(issued && deadline ? { [`${path}.deadline`]: deadline } : {}),
+  });
+}
+
+/** The goal a person sent for one morning. Empty text removes that day. */
+export async function setDayGoal(challengeId: string, uid: string, dateISO: string, text: string): Promise<void> {
+  const trimmed = text.trim();
+  await updateDoc(participantRef(challengeId, uid), {
+    [`goals.${dateISO}`]: trimmed ? trimmed : deleteField(),
   });
 }
 
