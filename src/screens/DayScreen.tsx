@@ -1,12 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { Link, useNavigate } from "react-router";
-import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, Plus, Trash2, UserRound } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronDown, ChevronLeft, ChevronRight, Ellipsis, Flag, Footprints, ListChecks, Plus, Search, Trash2, UserRound, X } from "lucide-react";
 import {
   Av, Badge, Button, ConfirmDialog, EmptyState, Field, IconButton, Input, Lives, Page, ProgressBar, Sheet, Switch, Textarea,
 } from "../components/atoms";
 import { LateRunDialog, MarkField, MarkGroup, MarkPlaceholder } from "../components/attendance";
-import { DayGoalEditor } from "../components/DayGoal";
 import { PostponeForm, PostponeList, personPostponements } from "../components/PostponeForm";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -48,6 +47,11 @@ export function DayScreen() {
   // the finish the day number is clamped, so it must not be labelled as today.
   const isToday = phase === "active" && dayNum === today;
   const roster = useMemo(() => rosterParticipants(challenge.participants), [challenge.participants]);
+  const [query, setQuery] = useState("");
+  const shownRoster = useMemo(() => {
+    const q = normalizeName(query);
+    return q ? roster.filter(p => normalizeName(p.name).includes(q)) : roster;
+  }, [roster, query]);
   const runDay = isScheduledRunDay(iso, challenge.settings.runSchedule);
   const runDeadline = runDay ? challenge.settings.runSchedule[weekdayFromISO(iso)] : undefined;
   const taskIssued = issuedOverride?.iso === iso ? issuedOverride.value : !!challenge.issuedTaskDays?.[iso]?.issued;
@@ -261,20 +265,32 @@ export function DayScreen() {
       ) : (
         <section aria-labelledby="roster-title" className="mt-8 xl:order-1 xl:mt-0">
           <div className="rounded-xl border border-border bg-card">
-            <div className="sticky top-0 z-10 flex h-11 items-center gap-3 rounded-t-xl border-b border-border bg-card px-4">
-              <h2 id="roster-title" className="min-w-0 flex-1 text-[15px] font-semibold">
-                Участники <span className="font-normal text-subtle-foreground tabular">{roster.length}</span>
-              </h2>
+            <div className="sticky top-0 z-10 rounded-t-xl border-b border-border bg-card px-4 pb-2 pt-3 sm:flex sm:h-12 sm:items-center sm:gap-3 sm:py-0">
+              <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+                <h2 id="roster-title" className="shrink-0 text-[15px] font-semibold">
+                  Участники <span className="font-normal text-subtle-foreground tabular">{roster.length}</span>
+                </h2>
+                {roster.length > 5 && <RosterSearch value={query} onChange={setQuery} />}
+              </div>
               {(showRun || showTask) && (
-                <div className="hidden gap-3 text-xs font-medium text-muted-foreground sm:flex" aria-hidden>
-                  {showRun && <span className="w-[7.25rem] text-center">Бег</span>}
-                  {showTask && <span className="w-[7.25rem] text-center">Задание</span>}
+                <div
+                  className={cn(
+                    "mt-2 grid gap-3 text-center text-xs font-medium text-muted-foreground sm:mt-0 sm:flex",
+                    showRun && showTask ? "grid-cols-2" : "grid-cols-1",
+                  )}
+                  aria-hidden
+                >
+                  {showRun && <span className="sm:w-[7.25rem]">Бег</span>}
+                  {showTask && <span className="sm:w-[7.25rem]">Задание</span>}
                 </div>
               )}
               <span className="hidden w-8 sm:block" aria-hidden />
             </div>
+            {shownRoster.length === 0 && (
+              <p className="px-4 py-6 text-center text-sm text-muted-foreground">Никого с именем «{query.trim()}»</p>
+            )}
             <ul className="divide-y divide-border">
-              {roster.map(p => (
+              {shownRoster.map(p => (
                 <RosterRow
                   key={p.uid}
                   p={p}
@@ -430,10 +446,10 @@ function TaskText({ challengeId, iso, text }: { challengeId: string; iso: string
         <button
           type="button"
           onClick={() => { setDraft(""); setEditing(true); }}
-          className="pressable flex w-full items-center gap-2 rounded-lg border border-dashed border-control-border px-3 py-2.5 text-left text-sm text-subtle-foreground transition-colors duration-150 hover:bg-hover hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
+          className="pressable flex w-full items-center gap-2 rounded-lg border border-dashed border-control-border px-3 py-2 text-left text-sm text-subtle-foreground transition-colors duration-150 hover:bg-hover hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25"
         >
           <Plus className="size-4 shrink-0" aria-hidden />
-          <span className="min-w-0 flex-1">Записать задание — например: 50 приседаний и планка 2 минуты</span>
+          <span className="min-w-0 flex-1">Записать текст задания</span>
         </button>
       </div>
     );
@@ -518,23 +534,26 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
   const unpaidBurpees = unpaid.reduce((sum, x) => sum + (x.burpees ?? 0), 0);
   const firstName = p.name.split(" ")[0];
   const both = showRun && showTask;
+  const detail = runAway?.reason || taskAway?.reason || (needRun ? note : undefined);
 
   return (
-    <li className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <Link
-            to={`/participants/${p.uid}`}
-            className="-my-1 -ms-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 ps-1.5 transition-colors duration-150 hover:bg-hover"
-          >
-            <Av ini={p.ini} photoUrl={p.photoUrl} sz="md" className="shrink-0" />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[15px] font-medium">{p.name}</span>
-              <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
-                <Lives n={p.lives} />
+    <li className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3 sm:py-3">
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        <Link
+          to={`/participants/${p.uid}`}
+          className="-my-1 -ms-1.5 flex min-w-0 flex-1 items-center gap-3 rounded-lg py-1 ps-1.5 transition-colors duration-150 hover:bg-hover"
+        >
+          <Av ini={p.ini} photoUrl={p.photoUrl} sz="md" className="hidden shrink-0 sm:inline-flex" />
+          <span className="min-w-0 flex-1">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-base font-semibold sm:text-[15px] sm:font-medium">{p.name}</span>
+              <Lives n={p.lives} className="shrink-0" />
+            </span>
+            {(!p.active || unpaid.length > 0 || movedHere || detail) && (
+              <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
                 {!p.active && <Badge tone="danger">Выбыл</Badge>}
                 {unpaid.length > 0 && (
-                  <span className="text-[13px] font-medium text-warning-text" title="Есть неоплаченный штраф">
+                  <span className="font-medium text-warning-text" title="Есть неоплаченный штраф">
                     {[
                       unpaidAmount > 0 ? `штраф ${formatMoney(unpaidAmount, challenge.settings.currency)}` : null,
                       unpaidBurpees > 0 ? `${unpaidBurpees} бёрпи` : null,
@@ -542,45 +561,27 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
                   </span>
                 )}
                 {movedHere && <Badge tone="postpone">Перенос</Badge>}
+                {detail && <span className="min-w-0 truncate text-subtle-foreground">{detail}</span>}
               </span>
-              {(runAway?.reason || taskAway?.reason || (note && needRun)) && (
-                <span className="mt-1 block truncate text-[13px] text-subtle-foreground">
-                  {runAway?.reason || taskAway?.reason || note}
-                </span>
-              )}
-            </span>
-          </Link>
-          <IconButton label={`Цель, штраф или перенос: ${p.name}`} size="sm" onClick={onMore} className="shrink-0">
-            <Ellipsis />
-          </IconButton>
-        </div>
-        <button
-          type="button"
-          onClick={onMore}
-          className={cn(
-            "pressable rounded-lg border px-3 py-2 text-left text-[13px] text-pretty transition-colors duration-150 hover:bg-hover",
-            p.goals?.[iso]
-              ? "border-border text-muted-foreground"
-              : "border-dashed border-control-border text-subtle-foreground",
-          )}
-        >
-          {p.goals?.[iso]
-            ? <span className="line-clamp-2">{p.goals[iso]}</span>
-            : <span>Записать цель</span>}
-        </button>
+            )}
+          </span>
+        </Link>
+        <IconButton label={`Штраф или перенос: ${p.name}`} size="sm" onClick={onMore} className="shrink-0">
+          <Ellipsis />
+        </IconButton>
       </div>
 
       {(showRun || showTask) && (
         <div className={cn("flex gap-3 sm:shrink-0", both && "grid grid-cols-2 sm:flex")}>
           {showRun && (
-            <MarkField caption="Бег" showCaption>
+            <MarkField caption="Бег" showCaption={false}>
               {needRun
                 ? <MarkGroup fill status={run} kind="run" onLatePick={onLate} onChange={next => onMark("run", next)} label={`${firstName}, пробежка`} />
                 : <MarkPlaceholder fill postponedTo={runAway ? formatDateShort(runAway.targetDateISO) : undefined} />}
             </MarkField>
           )}
           {showTask && (
-            <MarkField caption="Задание" showCaption>
+            <MarkField caption="Задание" showCaption={false}>
               {needTask
                 ? <MarkGroup fill status={task} kind="task" onChange={next => onMark("task", next)} label={`${firstName}, задание`} />
                 : <MarkPlaceholder fill postponedTo={taskAway ? formatDateShort(taskAway.targetDateISO) : undefined} />}
@@ -680,10 +681,6 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
       <div className="flex items-center gap-3">
         <Lives n={p.lives} total={challenge.settings.startingLives} />
         {note && <p className="min-w-0 truncate text-[13px] text-muted-foreground">{note}</p>}
-      </div>
-
-      <div className="mt-6">
-        <DayGoalEditor challengeId={challenge.id} uid={p.uid} iso={iso} text={p.goals?.[iso] ?? ""} />
       </div>
 
       <form onSubmit={submitPenalty} className="mt-6">
@@ -805,5 +802,39 @@ function ParticipantDaySheet({ p, iso, dayNum, challenge, postponements, note, a
         }}
       />
     </Sheet>
+  );
+}
+
+/** Case- and ё-insensitive, so «артем» finds «Артём». */
+function normalizeName(s: string): string {
+  return s.trim().toLocaleLowerCase("ru").replace(/ё/g, "е");
+}
+
+function RosterSearch({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative min-w-0 flex-1 sm:max-w-[240px]">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-subtle-foreground" aria-hidden />
+      <input
+        type="search"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => { if (e.key === "Escape") onChange(""); }}
+        placeholder="Найти по имени"
+        aria-label="Найти участника по имени"
+        autoComplete="off"
+        enterKeyHint="search"
+        className="h-9 w-full rounded-lg border border-input bg-input-background pl-8 pr-8 text-base text-foreground placeholder:text-subtle-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/25 sm:h-8 sm:text-sm [&::-webkit-search-cancel-button]:hidden"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Очистить поиск"
+          className="absolute right-1 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-md text-subtle-foreground hover:bg-hover hover:text-foreground"
+        >
+          <X className="size-4" aria-hidden />
+        </button>
+      )}
+    </div>
   );
 }

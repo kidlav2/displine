@@ -4,7 +4,6 @@ import { useNavigate, useParams } from "react-router";
 import { Check, Plus, Trash2, UserX } from "lucide-react";
 import { Badge, Button, ConfirmDialog, EmptyState, Field, Hearts, IconButton, Input, Page, PageHeader, PageSpinner, RoleBadge, Section, Sheet } from "../components/atoms";
 import { DayLegend, DAY_KIND_LABEL, dayKind, type DayKind } from "../components/attendance";
-import { DayGoalEditor, GoalHistory } from "../components/DayGoal";
 import { PostponeForm, PostponeList, personPostponements } from "../components/PostponeForm";
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
@@ -107,17 +106,6 @@ export function ParticipantProfile() {
         )}
 
         {isRosterMember && (
-          <GoalsSection
-            challengeId={challenge.id}
-            uid={participant.uid}
-            goals={participant.goals}
-            startDate={challenge.startDate}
-            endDate={challenge.endDate || challengeDayISO(challenge.startDate, challenge.duration)}
-            initialIso={challengeDayISO(challenge.startDate, challenge.currentDay || 1)}
-          />
-        )}
-
-        {isRosterMember && (
           <Section title="Переносы" grouped={false}>
             <div className="space-y-3">
               <PostponeList
@@ -215,32 +203,6 @@ export function ParticipantProfile() {
   );
 }
 
-function GoalsSection({ challengeId, uid, goals, startDate, endDate, initialIso }: {
-  challengeId: string;
-  uid: string;
-  goals: Record<string, string> | undefined;
-  startDate: string;
-  endDate: string;
-  initialIso: string;
-}) {
-  const [iso, setIso] = useState(initialIso && initialIso >= startDate && initialIso <= endDate ? initialIso : startDate);
-  return (
-    <Section title="Цели" grouped={false}>
-      <div className="rounded-xl border border-border bg-card p-4">
-        <Field label="День">
-          {({ id }) => (
-            <Input id={id} type="date" min={startDate} max={endDate} value={iso} onChange={e => e.target.value && setIso(e.target.value)} />
-          )}
-        </Field>
-        <div className="mt-4">
-          <DayGoalEditor key={iso} challengeId={challengeId} uid={uid} iso={iso} text={goals?.[iso] ?? ""} />
-        </div>
-      </div>
-      <GoalHistory goals={goals} selected={iso} onSelect={setIso} />
-    </Section>
-  );
-}
-
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint: string; tone?: "warning" }) {
   return (
     <div className="px-4 py-3">
@@ -331,7 +293,7 @@ function PenaltyRow({ pen, currency, paying, onMarkPaid, onDelete }: {
       {pen.paid ? (
         <Badge tone="success" icon={<Check />}>Оплачен</Badge>
       ) : onMarkPaid ? (
-        <Button size="sm" variant="secondary" onClick={onMarkPaid} loading={paying}>Отметить оплату</Button>
+        <Button size="sm" variant="secondary" onClick={onMarkPaid} loading={paying} aria-label={`Оплатил: ${pen.reason}`}><Check /> Оплатил</Button>
       ) : (
         <Badge tone="warning">Не оплачен</Badge>
       )}

@@ -194,7 +194,9 @@ export function MarkPlaceholder({ postponedTo, fill = false }: { postponedTo?: s
         title={label}
       >
         <MoveRight size={18} strokeWidth={2.5} aria-hidden />
-        <span className="sr-only">{label}</span>
+        {postponedTo
+          ? <span className="ms-1.5 text-[13px] font-medium"><span className="sr-only">Перенесено на </span>{postponedTo}</span>
+          : <span className="sr-only">{label}</span>}
       </span>
     );
   }
