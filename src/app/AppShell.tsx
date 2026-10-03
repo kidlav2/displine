@@ -1,4 +1,4 @@
-import { Outlet, ScrollRestoration, useNavigate } from "react-router";
+import { Navigate, Outlet, ScrollRestoration, useNavigate } from "react-router";
 import { Link2Off, Lock, UserX } from "lucide-react";
 import { DesktopNav } from "../components/nav/DesktopNav";
 import { TabBar } from "../components/nav/TabBar";
@@ -56,7 +56,13 @@ export function AppShell({ variant = "tabs" }: { variant?: "tabs" | "detail" }) 
       (!challenge && !!currentUser && !!userProfile && roleCount > 0 && challenges.length === 0)
     );
 
+  // Linked participants have their own screen; operator pages are not for them.
+  const roles = Object.entries(userProfile?.challengeRoles ?? {});
+  const selfId = roles.find(([, r]) => r === "participant")?.[0];
+  const isOperator = roles.some(([, r]) => r === "owner" || r === "helper");
+
   const inner = (() => {
+    if (!isOperator && selfId) return <Navigate to={`/me/${selfId}`} replace />;
     if (loading) return <PageSpinner />;
     if (showNoChallengeState) return <NoAccessState />;
     if (showRemovedState) return <RemovedState challengeName={challenge?.name} />;

@@ -9,7 +9,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { disciplineStats, unpaidPenalties } from "../lib/attendance";
 import { challengeDayISO, weekdayFromISO } from "../lib/dates";
-import { deletePenalty, logPenalty, markPenaltyPaid, cancelPostponement, type FeedActor } from "../lib/firestore";
+import { deletePenalty, logPenalty, markPenaltyPaid, cancelPostponement, unlinkParticipant, type FeedActor } from "../lib/firestore";
 import { formatDateLong, formatDateShort, formatMoney } from "../lib/format";
 import { cn } from "../lib/cn";
 import { notify } from "../lib/notify";
@@ -84,6 +84,9 @@ export function ParticipantProfile() {
             </p>
             {!participant.active && <Badge tone="danger" className="ml-auto">Выбыл</Badge>}
           </div>
+          {participant.linkedUid && (
+            <LinkedAccount challengeId={challenge.id} participant={participant} />
+          )}
           <dl className="grid grid-cols-3 divide-x divide-border">
             <Stat label="Пробежки" value={stats.runTotal ? `${stats.runPct}%` : "—"} hint={`${stats.runDone} из ${stats.runTotal}`} />
             <Stat label="Задания" value={stats.taskTotal ? `${stats.taskPct}%` : "—"} hint={`${stats.taskDone} из ${stats.taskTotal}`} />
@@ -362,5 +365,40 @@ function PenaltySheet({ challenge, participant, actor, loggedBy, onClose }: {
         </Button>
       </form>
     </Sheet>
+  );
+}
+
+/** The person marks themselves through this Telegram account; unlink if it was linked by mistake. */
+function LinkedAccount({ challengeId, participant }: { challengeId: string; participant: Participant }) {
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+      <p className="min-w-0 flex-1 text-[13px] text-muted-foreground">
+        Отмечается сам{participant.telegramUsername ? <> · <span className="text-foreground">@{participant.telegramUsername}</span></> : null}
+      </p>
+      <Button size="sm" variant="ghost" className="-mr-2" onClick={() => setConfirm(true)}>Отвязать</Button>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={o => { if (!busy) setConfirm(o); }}
+        title="Отвязать аккаунт?"
+        description={`${participant.name} больше не сможет отмечаться сам. Отметки и штрафы останутся.`}
+        confirmLabel="Отвязать"
+        loading={busy}
+        onConfirm={async () => {
+          setBusy(true);
+          try {
+            await unlinkParticipant(challengeId, participant.uid);
+            notify.success("Аккаунт отвязан");
+            setConfirm(false);
+          } catch (err) {
+            console.error("[ParticipantProfile] unlink failed:", err);
+            notify.error("Не удалось отвязать.");
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+    </div>
   );
 }

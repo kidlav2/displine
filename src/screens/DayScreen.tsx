@@ -10,7 +10,7 @@ import { PostponeForm, PostponeList, personPostponements } from "../components/P
 import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import {
-  cancelPostponement, deletePenalty, logPenalty, markAttendance, markPenaltyPaid, setTaskIssued, setTaskText,
+  cancelPostponement, deletePenalty, resolvePostponement, logPenalty, markAttendance, markPenaltyPaid, setTaskIssued, setTaskText,
   type FeedActor,
 } from "../lib/firestore";
 import {
@@ -28,7 +28,7 @@ import type { AttendanceStatus, ChallengeData, Participant, Penalty, Postponemen
 type Kind = "run" | "task";
 
 export function DayScreen() {
-  const { challenge, challenges, postponements, orgNotes, meParticipant } = useAppContext();
+  const { challenge, challenges, postponements, postponementQueue, joinRequests, orgNotes, meParticipant } = useAppContext();
   const { currentUser } = useAuthContext();
   const navigate = useNavigate();
 
@@ -217,6 +217,7 @@ export function DayScreen() {
       </header>
 
       {phase !== "active" && <PhaseBanner challenge={challenge} phase={phase} />}
+      <PendingDecisions challengeId={challenge.id} joinCount={joinRequests.length} requests={postponementQueue} />
 
       <div className="xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start xl:gap-8">
       <section aria-label="Итоги дня" className="rounded-xl border border-border bg-card xl:sticky xl:top-10 xl:order-2">
@@ -535,6 +536,7 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
   const firstName = p.name.split(" ")[0];
   const both = showRun && showTask;
   const detail = runAway?.reason || taskAway?.reason || (needRun ? note : undefined);
+  const selfMarked = p.days?.[iso]?.runBy === "self" || p.days?.[iso]?.taskBy === "self";
 
   return (
     <li className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3 sm:py-3">
@@ -549,7 +551,7 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
               <span className="truncate text-base font-semibold sm:text-[15px] sm:font-medium">{p.name}</span>
               <Lives n={p.lives} className="shrink-0" />
             </span>
-            {(!p.active || unpaid.length > 0 || movedHere || detail) && (
+            {(!p.active || unpaid.length > 0 || movedHere || detail || selfMarked) && (
               <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px]">
                 {!p.active && <Badge tone="danger">Выбыл</Badge>}
                 {unpaid.length > 0 && (
@@ -561,6 +563,7 @@ function RosterRow({ p, iso, challenge, postponements, issuedDays, showRun, show
                   </span>
                 )}
                 {movedHere && <Badge tone="postpone">Перенос</Badge>}
+                {selfMarked && <span className="font-medium text-success-text">отметился сам</span>}
                 {detail && <span className="min-w-0 truncate text-subtle-foreground">{detail}</span>}
               </span>
             )}
@@ -836,5 +839,61 @@ function RosterSearch({ value, onChange }: { value: string; onChange: (v: string
         </button>
       )}
     </div>
+  );
+}
+
+/** Requests from people who mark themselves: join requests and postponements. */
+function PendingDecisions({ challengeId, joinCount, requests }: {
+  challengeId: string;
+  joinCount: number;
+  requests: PostponementRequest[];
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  if (joinCount === 0 && requests.length === 0) return null;
+
+  const decide = async (r: PostponementRequest, decision: "approved" | "rejected") => {
+    setBusy(r.id);
+    try {
+      await resolvePostponement(challengeId, r.id, decision);
+      notify.success(decision === "approved" ? "Перенос одобрен" : "Перенос отклонён");
+    } catch (err) {
+      console.error("[DayScreen] resolvePostponement failed:", err);
+      notify.error("Не удалось сохранить решение.");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <section aria-labelledby="pending-title" className="mb-6 rounded-xl border border-warning/40 bg-card">
+      <h2 id="pending-title" className="px-4 pb-1 pt-3 text-[15px] font-semibold">Ждут решения</h2>
+      <ul className="divide-y divide-border">
+        {joinCount > 0 && (
+          <li>
+            <Link to="/app/settings#self" className="flex min-h-12 items-center gap-3 px-4 py-2.5 transition-colors duration-150 hover:bg-hover">
+              <UserRound className="size-5 shrink-0 text-muted-foreground" aria-hidden />
+              <span className="min-w-0 flex-1 text-sm">
+                {joinCount} {plural(joinCount, ["заявка", "заявки", "заявок"])} на вход — привязать к именам
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-subtle-foreground" aria-hidden />
+            </Link>
+          </li>
+        )}
+        {requests.map(r => (
+          <li key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">
+                {r.participantName} · {r.type === "running" ? "пробежка" : "задание"} {formatDateShort(r.dateISO)} → {formatDateShort(r.targetDateISO)}
+              </p>
+              {r.reason && <p className="truncate text-[13px] text-muted-foreground">{r.reason}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Button size="sm" variant="secondary" onClick={() => decide(r, "rejected")} disabled={busy === r.id}>Отклонить</Button>
+              <Button size="sm" variant="primary" onClick={() => decide(r, "approved")} loading={busy === r.id}>Одобрить</Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

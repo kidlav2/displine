@@ -13,6 +13,7 @@ import { useAppContext } from "../contexts/AppContext";
 import { useAuthContext } from "../contexts/AuthContext";
 import { auth } from "../lib/firebase";
 import { StravaRow } from "../components/StravaRow";
+import { SelfJoinSection } from "../components/SelfJoinSection";
 import { addParticipantByName, removeParticipantFromChallenge, saveOrgNote, updateChallengeDoc } from "../lib/firestore";
 import { addDaysISO, durationFromDates } from "../lib/dates";
 import { rosterParticipants, unpaidPenalties } from "../lib/attendance";
@@ -29,7 +30,7 @@ interface FormState {
 }
 
 export function OperatorSettingsScreen() {
-  const { challenge, orgNotes, isOwner, userRole, meParticipant } = useAppContext();
+  const { challenge, orgNotes, isOwner, userRole, meParticipant, joinRequests } = useAppContext();
   const { currentUser, userProfile } = useAuthContext();
   const navigate = useNavigate();
   const location = useLocation();
@@ -174,6 +175,13 @@ export function OperatorSettingsScreen() {
           </div>
         )}
 
+        <SelfJoinSection
+          challengeId={challenge.id}
+          inviteCode={challenge.inviteCode}
+          roster={rosterParticipants(challenge.participants)}
+          requests={joinRequests}
+        />
+
         <ParticipantsSection
           challengeId={challenge.id}
           roster={rosterParticipants(challenge.participants)}
@@ -260,7 +268,7 @@ function ParticipantsSection({ challengeId, roster, startingLives, orgNotes }: {
     <Section
       id="participants"
       title={<>Участники <span className="font-normal text-subtle-foreground tabular">{roster.length}</span></>}
-      description="Участники не входят в приложение — их отмечают по имени. Договорённость видна на экране «День»."
+      description="Добавляйте людей по имени. «Сам» — человек подключился по ссылке и отмечается сам. Договорённость видна на экране «День»."
     >
       <form onSubmit={add} className="flex gap-2 p-3">
         <Input
@@ -328,6 +336,7 @@ function ParticipantRow({ p, challengeId, note, onRemove }: {
         <Link to={`/participants/${p.uid}`} className="min-w-0 flex-1 rounded-md hover:underline">
           <span className="block truncate text-[15px] font-medium sm:text-sm">{p.name}</span>
         </Link>
+        {p.linkedUid && <Badge tone="success" title={p.telegramUsername ? `@${p.telegramUsername}` : "Отмечается сам"}>Сам</Badge>}
         <Lives n={p.lives} />
         {unpaid > 0 && <Badge tone="warning">Штраф</Badge>}
         <IconButton label={`Удалить ${p.name}`} size="sm" onClick={onRemove} className="-mr-1.5 hover:text-danger-text">

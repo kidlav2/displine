@@ -841,3 +841,5 @@ export const syncStravaActivities = onSchedule(
     }
   }
 );
+
+export { submitJoinRequest, resolveJoinRequest, unlinkParticipant, selfMark, requestSelfPostponement } from "./selfService";

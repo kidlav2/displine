@@ -30,6 +30,8 @@ interface TelegramLoginScreenProps {
   challenge?: ChallengePreview;
   onAuth: (payload: { id_token: string; nonce: string }) => Promise<void>;
   onGoogleAuth?: () => Promise<void>;
+  /** Overrides the heading and lead under the challenge card (participant sign-up). */
+  copy?: { eyebrow?: string; title: string; description: string };
 }
 
 // Minimal type for the new Telegram.Login SDK (telegram-login.js)
@@ -101,7 +103,7 @@ function consumeNonce(): string | null {
   }
 }
 
-export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth }: TelegramLoginScreenProps) {
+export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth, copy }: TelegramLoginScreenProps) {
   const [scriptReady, setScriptReady] = useState(false);
   const [loading, setLoading]         = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -209,7 +211,7 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth }: Telegra
     <div>
       {challenge && (
         <div className="mb-8">
-          <p className="text-[13px] font-medium text-muted-foreground">Приглашение в команду</p>
+          <p className="text-[13px] font-medium text-muted-foreground">{copy?.eyebrow ?? "Приглашение в команду"}</p>
           <div className="mt-2 flex items-center gap-3 rounded-xl border border-border bg-card p-3 sm:bg-muted sm:border-transparent">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted text-xl sm:bg-card" aria-hidden>
               {challenge.emoji}
@@ -223,12 +225,12 @@ export function TelegramLoginScreen({ challenge, onAuth, onGoogleAuth }: Telegra
       )}
 
       <h1 className="text-[26px] font-semibold leading-tight tracking-[-0.02em]">
-        {challenge ? "Войдите, чтобы присоединиться" : "Вход в Displine"}
+        {copy?.title ?? (challenge ? "Войдите, чтобы присоединиться" : "Вход в Displine")}
       </h1>
       <p className="mt-2 text-[15px] text-muted-foreground text-pretty">
-        {challenge
+        {copy?.description ?? (challenge
           ? "После входа вы станете частью команды и сможете отмечать участников."
-          : "Трекер дисциплины для организаторов и помощников челленджей."}
+          : "Трекер дисциплины для организаторов и помощников челленджей.")}
       </p>
 
       <div className="mt-8 flex flex-col gap-3">

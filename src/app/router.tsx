@@ -25,6 +25,8 @@ import { OrgLoginScreen } from "../screens/OrgLoginScreen";
 import { TelegramLoginScreen } from "../screens/TelegramLoginScreen";
 import { ProfileSetupScreen } from "../screens/ProfileSetupScreen";
 import { StravaCallbackScreen } from "../screens/StravaCallbackScreen";
+import { SelfJoinScreen } from "../screens/SelfJoinScreen";
+import { MyDayScreen } from "../screens/MyDayScreen";
 
 import { useAppContext } from "../contexts/AppContext";
 import { Av, Button, Logo, Spinner } from "../components/atoms";
@@ -126,7 +128,11 @@ function RootLayout() {
 
     const roles = userProfile.challengeRoles ?? {};
     const ids = operatorIds(roles);
-    if (ids.length === 0) {
+    // A linked participant (joined through the common link) goes to their own day.
+    const selfId = Object.entries(roles).find(([, r]) => r === "participant")?.[0];
+    if (ids.length === 0 && selfId) {
+      navigate(`/me/${selfId}`, { replace: true });
+    } else if (ids.length === 0) {
       setStep(Object.keys(roles).length > 0 ? "no-access" : "no-challenges");
     } else if (ids.length === 1) {
       setSelectedId(ids[0]);
@@ -593,6 +599,10 @@ export const router = createBrowserRouter([
 
   // Error states
   { path: "/error/:variant", element: <ErrorLayout /> },
+
+  // Participant self-registration (common link) and their own day
+  { path: "/r/:code", element: <SelfJoinScreen /> },
+  { path: "/me/:challengeId", element: <RequireAuth><MyDayScreen /></RequireAuth> },
 
   // Owner challenge list (auth required)
   {

@@ -10,6 +10,21 @@ export type AttendanceStatus = "done" | "late" | "missed";
 export interface DayAttendance {
   run?: AttendanceStatus;
   task?: AttendanceStatus;
+  /** "self" when the person marked it themselves; an organizer's mark clears it. */
+  runBy?: "self";
+  taskBy?: "self";
+}
+
+/** Someone who opened the common link and is waiting to be linked to a roster name. */
+export interface JoinRequest {
+  uid: string;
+  name: string;
+  phone: string;
+  telegramUsername: string | null;
+  photoUrl: string | null;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  participantId?: string;
 }
 
 export interface IssuedTaskDay {
@@ -80,6 +95,9 @@ export interface Participant {
   tz: string;
   role: UserRole;
   days: Record<string, DayAttendance>;
+  /** Telegram account linked to this roster name — the person can mark themselves. */
+  linkedUid?: string;
+  telegramUsername?: string | null;
 }
 
 export interface FeedItem {

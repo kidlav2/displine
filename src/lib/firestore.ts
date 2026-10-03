@@ -17,6 +17,7 @@ import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
 import { httpsCallable } from "firebase/functions";
 import { db, storage, functions } from "./firebase";
 import { todayISO, todayISOInTz } from "./dates";
+import type { JoinRequest } from "../types";
 import type {
   AttendanceStatus, ChallengeData, DayAttendance, DayResult,
   FeedItem, Participant, Penalty, PostponementRequest, ReviewItem,
@@ -88,6 +89,8 @@ export function snapToParticipant(snap: QueryDocumentSnapshot<DocumentData>): Pa
     tz:       d.tz       ?? "UTC",
     results:  (d.results ?? []) as DayResult[],
     days:     (d.days ?? {}) as Record<string, DayAttendance>,
+    linkedUid: d.linkedUid ?? undefined,
+    telegramUsername: d.telegramUsername ?? null,
     penalties: (d.penalties ?? []).map((p: DocumentData) => ({
       date:      p.date instanceof Timestamp ? p.date.toDate().toISOString().slice(0, 10) : (p.date ?? ""),
       reason:    p.reason    ?? "",
@@ -1557,6 +1560,8 @@ export async function setAttendanceField(
 ): Promise<void> {
   await updateDoc(participantRef(challengeId, uid), {
     [`days.${dateISO}.${kind}`]: status === undefined ? deleteField() : status,
+    // An organizer's mark is final: the person can no longer change it.
+    [`days.${dateISO}.${kind}By`]: deleteField(),
   });
 }
 
@@ -1623,6 +1628,7 @@ export async function markAttendance(
 
     const patch: Record<string, unknown> = {
       [`days.${dateISO}.${kind}`]: status === undefined ? deleteField() : status,
+      [`days.${dateISO}.${kind}By`]: deleteField(),
     };
 
     if (writePenalty || dropPenalty) {
@@ -1761,4 +1767,96 @@ export async function deleteTask(challengeId: string, taskId: string): Promise<v
 /** Delete a challenge document. Subcollections are left as orphans (cleanup via Cloud Function). */
 export async function deleteChallenge(challengeId: string): Promise<void> {
   await deleteDoc(challengeRef(challengeId));
+}
+
+// ── Self-registration and self marks ───────────────────────────────────────
+// Writes go through Cloud Functions so the "today only" window and the
+// "organizer's mark wins" rule hold on the server.
+
+function joinRequestsCol(challengeId: string) {
+  return collection(db, "challenges", challengeId, "joinRequests");
+}
+
+function snapToJoinRequest(id: string, d: DocumentData): JoinRequest {
+  return {
+    uid: d.uid ?? id,
+    name: d.name ?? "",
+    phone: d.phone ?? "",
+    telegramUsername: d.telegramUsername ?? null,
+    photoUrl: d.photoUrl ?? null,
+    status: d.status ?? "pending",
+    createdAt: d.createdAt instanceof Timestamp ? d.createdAt.toDate().toISOString() : "",
+    participantId: d.participantId ?? undefined,
+  };
+}
+
+/** Organizers: requests waiting for a decision, oldest first. */
+export function subscribeToJoinRequests(challengeId: string, cb: (items: JoinRequest[]) => void): Unsubscribe {
+  return onSnapshot(
+    query(joinRequestsCol(challengeId), where("status", "==", "pending")),
+    snap => cb(snap.docs.map(d => snapToJoinRequest(d.id, d.data())).sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
+    () => cb([]),
+  );
+}
+
+/** The signed-in person's own request for one challenge (null when none). */
+export function subscribeToMyJoinRequest(challengeId: string, uid: string, cb: (r: JoinRequest | null) => void): Unsubscribe {
+  return onSnapshot(
+    doc(db, "challenges", challengeId, "joinRequests", uid),
+    snap => cb(snap.exists() ? snapToJoinRequest(snap.id, snap.data()) : null),
+    () => cb(null),
+  );
+}
+
+/** Roster id this account is linked to, or null. */
+export function subscribeToMyLink(challengeId: string, uid: string, cb: (participantId: string | null) => void): Unsubscribe {
+  return onSnapshot(
+    doc(db, "challenges", challengeId, "links", uid),
+    snap => cb(snap.exists() ? (snap.data().participantId as string) : null),
+    () => cb(null),
+  );
+}
+
+export function subscribeToParticipant(challengeId: string, participantId: string, cb: (p: Participant | null) => void): Unsubscribe {
+  return onSnapshot(
+    participantRef(challengeId, participantId),
+    snap => cb(snap.exists() ? snapToParticipant(snap as QueryDocumentSnapshot<DocumentData>) : null),
+    () => cb(null),
+  );
+}
+
+export async function submitJoinRequest(payload: { code: string; firstName: string; lastName: string; phone: string }) {
+  const fn = httpsCallable<typeof payload, { challengeId: string; status: "pending" | "approved" }>(functions, "submitJoinRequest");
+  return (await fn(payload)).data;
+}
+
+export async function resolveJoinRequest(payload: {
+  challengeId: string; uid: string; decision: "approve" | "reject"; participantId?: string;
+}) {
+  const fn = httpsCallable<typeof payload, { ok: boolean; participantId?: string }>(functions, "resolveJoinRequest");
+  return (await fn(payload)).data;
+}
+
+export async function unlinkParticipant(challengeId: string, participantId: string) {
+  const fn = httpsCallable<{ challengeId: string; participantId: string }, { ok: boolean }>(functions, "unlinkParticipant");
+  await fn({ challengeId, participantId });
+}
+
+export async function selfMark(payload: {
+  challengeId: string; kind: "run" | "task"; status: "done" | "late" | null; tier?: "short" | "long";
+}) {
+  const fn = httpsCallable<typeof payload, { ok: boolean; date: string }>(functions, "selfMark");
+  return (await fn(payload)).data;
+}
+
+export async function requestSelfPostponement(payload: {
+  challengeId: string; type: "running" | "task"; dateISO: string; targetDateISO: string; reason: string;
+}) {
+  const fn = httpsCallable<typeof payload, { ok: boolean }>(functions, "requestSelfPostponement");
+  await fn(payload);
+}
+
+/** Raw challenge doc for a linked participant's own screen. */
+export function subscribeToChallengeDoc(challengeId: string, cb: (d: DocumentData | null) => void): Unsubscribe {
+  return onSnapshot(challengeRef(challengeId), snap => cb(snap.exists() ? snap.data() : null), () => cb(null));
 }

@@ -26,6 +26,18 @@ service cloud.firestore {
          participantData(challengeId).role in ["owner", "helper"]);
     }
 
+    // A person who joined through the common link and was linked by an
+    // organizer to a roster name. They read only their own data; every write
+    // they make goes through Cloud Functions.
+    function isLinked(challengeId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/challenges/$(challengeId)/links/$(request.auth.uid));
+    }
+
+    function linkedPid(challengeId) {
+      return get(/databases/$(database)/documents/challenges/$(challengeId)/links/$(request.auth.uid)).data.participantId;
+    }
+
     function isParticipant(challengeId) {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/challenges/$(challengeId)/participants/$(request.auth.uid));
@@ -77,7 +89,7 @@ service cloud.firestore {
     // -- Challenges ---------------------------------------------------------
 
     match /challenges/{challengeId} {
-      allow read:   if isParticipant(challengeId);
+      allow read:   if isParticipant(challengeId) || isLinked(challengeId);
       allow create: if isSignedIn();
       allow update: if isOrganizer(challengeId);
       allow delete: if isOwner(challengeId);
@@ -86,7 +98,8 @@ service cloud.firestore {
         // Members may read the roster; additionally, any signed-in user may read
         // their OWN participant doc (existent or not) — the join flow needs to
         // probe it before membership exists, and it only ever exposes own data.
-        allow read:  if isParticipant(challengeId) || (isSignedIn() && request.auth.uid == uid);
+        allow read:  if isParticipant(challengeId) || (isSignedIn() && request.auth.uid == uid) ||
+          (isLinked(challengeId) && linkedPid(challengeId) == uid);
 
         // Self-service: a participant may edit ONLY presentation fields on their
         // own doc (name/avatar/timezone). Never role, isAdmin, lives, km,
@@ -271,12 +284,25 @@ service cloud.firestore {
         allow write: if isOrganizer(challengeId);
       }
 
+      // Self-registration. Written only by Cloud Functions.
+      match /joinRequests/{authUid} {
+        allow read: if isOrganizer(challengeId) || (isSignedIn() && request.auth.uid == authUid);
+        allow write: if false;
+      }
+
+      match /links/{authUid} {
+        allow read: if isOrganizer(challengeId) || (isSignedIn() && request.auth.uid == authUid);
+        allow write: if false;
+      }
+
       match /orgNotes/{participantUid} {
         allow read, write: if isOrganizer(challengeId);
       }
 
       match /postponements/{postponementId} {
         allow read: if isOrganizer(challengeId) ||
+          (resource != null && isLinked(challengeId) &&
+           resource.data.participantUid == linkedPid(challengeId)) ||
           (resource == null && isParticipant(challengeId)) ||
           (resource != null && isParticipant(challengeId) &&
            resource.data.participantUid == request.auth.uid);
