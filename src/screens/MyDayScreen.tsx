@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { Navigate, useParams } from "react-router";
+import { Navigate, useNavigate, useParams } from "react-router";
 import { signOut } from "firebase/auth";
 import { Check, Clock, Footprints, ListChecks, LogOut, MoveRight } from "lucide-react";
 import { auth } from "../lib/firebase";
@@ -47,6 +47,7 @@ export function MyDayScreen() {
   const { challengeId = "" } = useParams();
   const { currentUser } = useAuthContext();
   const uid = currentUser?.uid ?? "";
+  const navigate = useNavigate();
   useDocumentTitle("Мой день");
 
   const [pid, setPid] = useState<string | null | undefined>(undefined);
@@ -90,6 +91,7 @@ export function MyDayScreen() {
           title="Заявка ещё не подтверждена"
           description="Когда организатор привяжет ваш аккаунт к имени в списке, здесь появятся отметки на сегодня."
         >
+          <Button variant="secondary" size="lg" block onClick={() => navigate("/challenges/create")}>Создать свой челлендж</Button>
           <Button variant="ghost" size="lg" block onClick={() => signOut(auth)}>Выйти из аккаунта</Button>
         </AuthMessage>
       </AuthLayout>

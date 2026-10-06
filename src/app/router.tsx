@@ -86,12 +86,14 @@ function NoChallengesStep({ navigate }: { navigate: ReturnType<typeof useNavigat
 }
 
 function NoAccessStep() {
+  const navigate = useNavigate();
   return (
     <AuthMessage
       icon={<Lock />}
       title="Нет доступа"
       description="Трекером пользуются организаторы и помощники. Участников отмечают по имени — отдельный вход им не нужен."
     >
+      <Button variant="secondary" size="lg" block onClick={() => navigate("/challenges/create")}>Создать свой челлендж</Button>
       <SignOutButton />
     </AuthMessage>
   );
